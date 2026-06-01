@@ -16,27 +16,18 @@ const firstReplies = [
 
 function AiSphere() {
   return (
-    <div className="relative flex h-56 w-56 items-center justify-center">
-      {/* Outer glow */}
-      <div className="absolute h-56 w-56 animate-pulse rounded-full bg-[#FDDD00]/10 blur-3xl" />
+    <div className="relative flex h-64 w-64 items-center justify-center">
+      <div className="absolute h-64 w-64 rounded-full bg-[#FDDD00]/10 blur-3xl animate-pulse" />
 
-      {/* Ring 1 */}
-      <div className="absolute h-44 w-44 ai-spin rounded-full border border-[#FDDD00]/20" />
+      <div className="absolute h-32 w-32 rounded-full bg-[#FDDD00]/20 blur-xl ai-breathe" />
 
-      {/* Ring 2 */}
-      <div className="absolute h-36 w-36 ai-spin-reverse rounded-full border border-[#FDDD00]/30" />
-
-      {/* Main orb */}
-      <div className="relative h-28 w-28 ai-breathe rounded-full bg-gradient-to-br from-white via-[#FDDD00] to-[#c9a800] shadow-[0_0_80px_rgba(253,221,0,0.45)]">
-        <div className="absolute left-4 top-4 h-8 w-8 rounded-full bg-white/80 blur-sm" />
-        <div className="absolute bottom-4 right-4 h-8 w-8 rounded-full bg-black/10 blur-md" />
+      <div className="relative h-28 w-28 overflow-hidden rounded-full bg-black shadow-[0_0_80px_rgba(253,221,0,0.8)]">
+        <div className="absolute inset-0 bg-[#FDDD00]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,white,transparent_35%)] opacity-80" />
+        <div className="absolute left-[-20%] top-[35%] h-10 w-[140%] rotate-[-18deg] rounded-full bg-white/35 blur-sm ai-wave" />
+        <div className="absolute left-[-20%] top-[52%] h-8 w-[140%] rotate-[15deg] rounded-full bg-black/20 blur-sm ai-wave-reverse" />
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.45),transparent)] ai-shine" />
       </div>
-
-      {/* Floating particles */}
-      <div className="absolute left-10 top-12 h-2 w-2 animate-bounce rounded-full bg-[#FDDD00]" />
-      <div className="absolute right-10 top-16 h-3 w-3 animate-pulse rounded-full bg-[#FDDD00]/70" />
-      <div className="absolute bottom-12 left-14 h-2 w-2 animate-bounce rounded-full bg-[#FDDD00]/80" />
-      <div className="absolute bottom-14 right-12 h-2 w-2 animate-pulse rounded-full bg-[#FDDD00]/60" />
     </div>
   );
 }
@@ -340,6 +331,39 @@ and Joseph will review your project personally.`;
                 Send
               </button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="work" className="px-6 py-24">
+        <div className="mx-auto max-w-6xl">
+          <p className="mb-4 text-sm uppercase tracking-[0.3em] text-black/40">
+            Experience
+          </p>
+
+          <h2 className="max-w-4xl text-5xl font-black leading-tight">
+            12+ years creating brands, events and campaigns across government,
+            healthcare, retail, education and sport.
+          </h2>
+
+          <div className="mt-16 grid gap-6 md:grid-cols-4">
+            {[
+              "Sheikh Mansour Bin Zayed Football Cup",
+              "Reem League",
+              "Dubai Airport Freezone",
+              "Jabbour Restaurant",
+            ].map((project) => (
+              <div
+                key={project}
+                className="group cursor-pointer rounded-[2rem] border border-black/10 bg-white p-6 transition hover:-translate-y-1 hover:shadow-xl"
+              >
+                <div className="mb-16 h-40 rounded-2xl bg-[#f4f4f4]" />
+
+                <h3 className="text-xl font-bold">{project}</h3>
+
+                <p className="mt-3 text-sm text-black/50">View project</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
