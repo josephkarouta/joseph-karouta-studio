@@ -30,6 +30,7 @@ function AiSphere() {
 export default function Home() {
   const [message, setMessage] = useState("");
   const [quickReplies, setQuickReplies] = useState(firstReplies);
+  const [isTyping, setIsTyping] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([
   {
@@ -174,19 +175,30 @@ and Joseph will review your project personally.`;
 };
 
   const sendMessage = (text?: string) => {
-    const finalMessage = text || message;
-    if (!finalMessage.trim()) return;
+  const finalMessage = text || message;
 
-    const aiText = generateResponse(finalMessage);
+  if (!finalMessage.trim()) return;
 
+  setMessages((prev) => [
+    ...prev,
+    { sender: "user", text: finalMessage },
+  ]);
+
+  setMessage("");
+
+  setIsTyping(true);
+
+  const aiText = generateResponse(finalMessage);
+
+  setTimeout(() => {
     setMessages((prev) => [
       ...prev,
-      { sender: "user", text: finalMessage },
       { sender: "ai", text: aiText },
     ]);
 
-    setMessage("");
-  };
+    setIsTyping(false);
+  }, 1200);
+};
 
   return (
     <main className="min-h-screen bg-white text-black">
@@ -255,6 +267,23 @@ and Joseph will review your project personally.`;
     </div>
   </div>
 ))}
+
+{isTyping && (
+  <div>
+    <div
+      style={{
+        backgroundColor: "#FFF4B8",
+        color: "#000",
+        padding: "12px 16px",
+        borderRadius: "16px",
+        maxWidth: "180px",
+      }}
+    >
+      Joseph AI is thinking...
+    </div>
+  </div>
+)}
+
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
