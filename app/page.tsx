@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Message = {
   sender: "ai" | "user";
@@ -31,6 +31,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [quickReplies, setQuickReplies] = useState(firstReplies);
   const [isTyping, setIsTyping] = useState(false);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([
   {
@@ -38,6 +39,13 @@ export default function Home() {
     text: "👋 Hi, I'm Joseph AI Creative Director. What are you looking to create today?",
   },
 ]);
+
+useEffect(() => {
+  if (chatContainerRef.current) {
+    chatContainerRef.current.scrollTop =
+      chatContainerRef.current.scrollHeight;
+  }
+}, [messages, isTyping]);
 
 const generateResponse = (input: string) => {
   const lower = input.toLowerCase();
@@ -247,7 +255,10 @@ and Joseph will review your project personally.`;
               </div>
             </div>
 
-            <div className="flex max-h-80 flex-col gap-3 overflow-y-auto rounded-2xl bg-[#fafafa] p-4">
+            <div
+  ref={chatContainerRef}
+  className="flex max-h-80 flex-col gap-3 overflow-y-auto rounded-2xl bg-[#fafafa] p-4"
+>
               {messages.map((msg, index) => (
   <div key={index}>
     <div
