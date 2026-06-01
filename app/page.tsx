@@ -16,13 +16,27 @@ const firstReplies = [
 
 function AiSphere() {
   return (
-    <div className="relative flex h-44 w-44 items-center justify-center">
-      <div className="absolute h-44 w-44 animate-pulse rounded-full bg-[#FDDD00]/20 blur-3xl" />
-      <div className="absolute h-32 w-32 animate-ping rounded-full bg-[#FDDD00]/10" />
-      <div className="relative h-28 w-28 rounded-full bg-gradient-to-br from-white via-[#FDDD00] to-[#d8b900] shadow-2xl shadow-[#FDDD00]/40">
-        <div className="absolute left-5 top-5 h-9 w-9 rounded-full bg-white/80 blur-sm" />
-        <div className="absolute bottom-4 right-5 h-10 w-10 rounded-full bg-black/10 blur-md" />
+    <div className="relative flex h-56 w-56 items-center justify-center">
+      {/* Outer glow */}
+      <div className="absolute h-56 w-56 animate-pulse rounded-full bg-[#FDDD00]/10 blur-3xl" />
+
+      {/* Ring 1 */}
+      <div className="absolute h-44 w-44 ai-spin rounded-full border border-[#FDDD00]/20" />
+
+      {/* Ring 2 */}
+      <div className="absolute h-36 w-36 ai-spin-reverse rounded-full border border-[#FDDD00]/30" />
+
+      {/* Main orb */}
+      <div className="relative h-28 w-28 ai-breathe rounded-full bg-gradient-to-br from-white via-[#FDDD00] to-[#c9a800] shadow-[0_0_80px_rgba(253,221,0,0.45)]">
+        <div className="absolute left-4 top-4 h-8 w-8 rounded-full bg-white/80 blur-sm" />
+        <div className="absolute bottom-4 right-4 h-8 w-8 rounded-full bg-black/10 blur-md" />
       </div>
+
+      {/* Floating particles */}
+      <div className="absolute left-10 top-12 h-2 w-2 animate-bounce rounded-full bg-[#FDDD00]" />
+      <div className="absolute right-10 top-16 h-3 w-3 animate-pulse rounded-full bg-[#FDDD00]/70" />
+      <div className="absolute bottom-12 left-14 h-2 w-2 animate-bounce rounded-full bg-[#FDDD00]/80" />
+      <div className="absolute bottom-14 right-12 h-2 w-2 animate-pulse rounded-full bg-[#FDDD00]/60" />
     </div>
   );
 }
