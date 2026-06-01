@@ -228,7 +228,7 @@ and Joseph will review your project personally.`;
         </nav>
       </header>
 
-      <section className="flex min-h-screen flex-col items-center justify-center px-6 pb-20 pt-32">
+      <section className="flex flex-col items-center px-6 pb-20 pt-32">
         <AiSphere />
 
         <h1 className="mt-8 max-w-4xl text-5xl font-black leading-[0.95] tracking-tight md:text-7xl">
@@ -347,26 +347,188 @@ and Joseph will review your project personally.`;
           </h2>
 
           <div className="mt-16 grid gap-6 md:grid-cols-4">
-            {[
-              "Sheikh Mansour Bin Zayed Football Cup",
-              "Reem League",
-              "Dubai Airport Freezone",
-              "Jabbour Restaurant",
-            ].map((project) => (
-              <div
-                key={project}
-                className="group cursor-pointer rounded-[2rem] border border-black/10 bg-white p-6 transition hover:-translate-y-1 hover:shadow-xl"
-              >
-                <div className="mb-16 h-40 rounded-2xl bg-[#f4f4f4]" />
+  <div className="rounded-[2rem] border border-black/10 bg-white p-8">
+    <p className="text-5xl font-black">12+</p>
+    <p className="mt-2 text-black/60">Years Experience</p>
+  </div>
 
-                <h3 className="text-xl font-bold">{project}</h3>
+  <div className="rounded-[2rem] border border-black/10 bg-white p-8">
+    <p className="text-5xl font-black">150+</p>
+    <p className="mt-2 text-black/60">Projects Delivered</p>
+  </div>
 
-                <p className="mt-3 text-sm text-black/50">View project</p>
-              </div>
-            ))}
-          </div>
+  <div className="rounded-[2rem] border border-black/10 bg-white p-8">
+    <p className="text-5xl font-black">20+</p>
+    <p className="mt-2 text-black/60">Industries Served</p>
+  </div>
+
+  <div className="rounded-[2rem] border border-black/10 bg-white p-8">
+    <p className="text-5xl font-black">3</p>
+    <p className="mt-2 text-black/60">Countries</p>
+  </div>
+</div>
         </div>
       </section>
+      <section className="px-6 py-24">
+  <div className="mx-auto max-w-6xl">
+    <p className="mb-4 text-sm uppercase tracking-[0.3em] text-black/40">
+      Featured Projects
+    </p>
+
+    <h2 className="max-w-4xl text-5xl font-black leading-tight">
+      Selected work across brands, events and campaigns.
+    </h2>
+
+    <div className="mt-16 space-y-10">
+      {[
+        "Sheikh Mansour Bin Zayed Football Cup",
+        "Reem League",
+        "Dubai Airport Freezone",
+        "Jabbour Restaurant",
+      ].map((project) => (
+        <div
+          key={project}
+          className="overflow-hidden rounded-[2rem] border border-black/10 bg-white"
+        >
+          <div className="h-[250px] bg-[#f3f3f3]" />
+
+          <div className="p-8">
+            <h3 className="text-3xl font-black">{project}</h3>
+
+            <p className="mt-3 max-w-2xl text-black/60">
+              Project case study coming soon.
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+<section id="services" className="px-6 py-24">
+  <div className="mx-auto max-w-6xl">
+    <p className="mb-4 text-sm uppercase tracking-[0.3em] text-black/40">
+      Services
+    </p>
+
+    <h2 className="max-w-4xl text-5xl font-black leading-tight">
+      Creative services designed to turn ideas into brands, campaigns and experiences.
+    </h2>
+
+    <div className="mt-16 grid gap-6 md:grid-cols-3">
+
+      {[
+        {
+          title: "Creative Direction",
+          description:
+            "Strategic creative thinking, concepts and visual direction for brands and campaigns.",
+        },
+        {
+          title: "Brand Identity",
+          description:
+            "Logos, visual systems, brand guidelines and complete identity design.",
+        },
+        {
+          title: "Event Branding",
+          description:
+            "Key visuals, venue branding, wayfinding, signage and event experiences.",
+        },
+        {
+          title: "Campaign Design",
+          description:
+            "Integrated campaigns across print, digital, social and outdoor media.",
+        },
+        {
+          title: "Presentation Design",
+          description:
+            "Corporate presentations, pitch decks and executive communication materials.",
+        },
+        {
+          title: "AI Creative Systems",
+          description:
+            "Combining AI workflows with design thinking to accelerate creative production.",
+        },
+      ].map((service) => (
+        <div
+          key={service.title}
+          className="rounded-[2rem] border border-black/10 bg-white p-8 transition hover:-translate-y-1 hover:shadow-xl"
+        >
+          <h3 className="text-2xl font-black">
+            {service.title}
+          </h3>
+
+          <p className="mt-4 text-black/60 leading-7">
+            {service.description}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+<section id="about" className="bg-black px-6 py-24 text-white">
+  <div className="mx-auto grid max-w-6xl gap-12 md:grid-cols-2">
+    <div>
+      <p className="mb-4 text-sm uppercase tracking-[0.3em] text-white/40">
+        About
+      </p>
+
+      <h2 className="text-5xl font-black leading-tight">
+        Creative direction, design thinking and AI-powered workflows.
+      </h2>
+    </div>
+
+    <div className="space-y-6 text-lg leading-8 text-white/70">
+      <p>
+        Joseph Karouta is a multidisciplinary creative designer with 12+ years
+        of experience creating branding, campaigns, event identities and visual
+        communication systems.
+      </p>
+
+      <p>
+        His work spans government, healthcare, sport, retail, education,
+        hospitality and real estate, combining strategic thinking with clean,
+        effective and memorable design.
+      </p>
+
+      <p>
+        Joseph Karouta Studio brings together human creative direction and
+        emerging AI workflows to help clients shape ideas, define scope and
+        create stronger brand experiences.
+      </p>
+    </div>
+  </div>
+</section>
+<section className="px-6 py-24">
+  <div className="mx-auto max-w-6xl rounded-[3rem] bg-[#FDDD00] p-10 md:p-16">
+    <p className="mb-4 text-sm uppercase tracking-[0.3em] text-black/50">
+      Start a Project
+    </p>
+
+    <h2 className="max-w-4xl text-5xl font-black leading-tight">
+      Have a project in mind? Start with Joseph AI Creative Director.
+    </h2>
+
+    <p className="mt-6 max-w-2xl text-lg leading-8 text-black/70">
+      Describe what you are trying to create and Joseph AI Creative Director
+      will help shape your brief before Joseph reviews it personally.
+    </p>
+
+    <div className="mt-10 flex flex-wrap gap-4">
+      <a
+        href="#"
+        className="rounded-full bg-black px-7 py-4 text-sm font-bold text-white transition hover:bg-white hover:text-black"
+      >
+        Start Conversation
+      </a>
+
+      <a
+        href="mailto:forever.doodleau@gmail.com"
+        className="rounded-full border border-black/20 px-7 py-4 text-sm font-bold text-black transition hover:bg-black hover:text-white"
+      >
+        Email Joseph
+      </a>
+    </div>
+  </div>
+</section>
     </main>
   );
 }
