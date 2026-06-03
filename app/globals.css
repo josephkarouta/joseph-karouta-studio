@@ -115,3 +115,111 @@ body {
 .ai-shine { animation: ai-shine 3s ease-in-out infinite; }
 .ai-float { animation: ai-float 3s ease-in-out infinite; }
 .ai-float-delay { animation: ai-float 3s ease-in-out infinite; animation-delay: 1s; }
+@keyframes ai-spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ai-spin-slow {
+  animation: ai-spin-slow 28s linear infinite;
+}
+
+@keyframes ai-wave-left {
+  0%, 100% { transform: translateX(0) scaleY(0.9); opacity: 0.25; }
+  50% { transform: translateX(-18px) scaleY(1.25); opacity: 1; }
+}
+
+@keyframes ai-wave-right {
+  0%, 100% { transform: translateX(0) scaleY(0.9); opacity: 0.25; }
+  50% { transform: translateX(18px) scaleY(1.25); opacity: 1; }
+}
+
+@keyframes ai-pulse-bar {
+  0%, 100% { transform: scaleX(0.7) rotate(-10deg); opacity: 0.25; }
+  50% { transform: scaleX(1.15) rotate(8deg); opacity: 0.85; }
+}
+
+.ai-wave-left { animation: ai-wave-left 1.8s ease-in-out infinite; }
+.ai-wave-left-delay { animation: ai-wave-left 2.4s ease-in-out infinite; animation-delay: 0.25s; }
+.ai-wave-right { animation: ai-wave-right 1.8s ease-in-out infinite; }
+.ai-wave-right-delay { animation: ai-wave-right 2.4s ease-in-out infinite; animation-delay: 0.25s; }
+.ai-pulse-bar { animation: ai-pulse-bar 1.6s ease-in-out infinite; }
+
+.orb-core {
+  position: relative;
+  width: 190px;
+  height: 190px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #fddd00 22%, #b89a00 55%, #080808 100%);
+  box-shadow: 0 0 90px rgba(253, 221, 0, 0.75);
+  animation: orb-breathe 4s ease-in-out infinite;
+}
+
+.orb-layer {
+  position: absolute;
+  inset: -35%;
+  border-radius: 45%;
+  mix-blend-mode: screen;
+  opacity: 0.45;
+}
+
+.orb-layer-one {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent);
+  animation: orb-flow-one 5s ease-in-out infinite;
+}
+
+.orb-layer-two {
+  background: linear-gradient(120deg, transparent, rgba(253,221,0,0.9), transparent);
+  animation: orb-flow-two 6s ease-in-out infinite;
+}
+
+.orb-layer-three {
+  background: repeating-radial-gradient(circle, rgba(255,255,255,0.55) 0 1px, transparent 2px 8px);
+  animation: orb-spin 18s linear infinite;
+}
+
+.orb-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent, rgba(255,255,255,0.7), transparent);
+  animation: orb-shine 3s ease-in-out infinite;
+}
+
+.orb-thinking {
+  animation: orb-thinking 1.4s ease-in-out infinite;
+}
+
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+@keyframes orb-thinking {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 90px rgba(253,221,0,0.75); }
+  50% { transform: scale(1.12); box-shadow: 0 0 130px rgba(253,221,0,1); }
+}
+
+@keyframes orb-flow-one {
+  0%, 100% { transform: translateX(-25%) rotate(0deg); }
+  50% { transform: translateX(25%) rotate(25deg); }
+}
+
+@keyframes orb-flow-two {
+  0%, 100% { transform: translateY(-20%) rotate(35deg); }
+  50% { transform: translateY(25%) rotate(-25deg); }
+}
+
+@keyframes orb-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orb-shine {
+  0% { transform: translateX(-140%); }
+  100% { transform: translateX(140%); }
+}
