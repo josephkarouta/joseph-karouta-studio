@@ -58,6 +58,13 @@ export default function Home() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [name, setName] = useState("");
+const [email, setEmail] = useState("");
+const [phone, setPhone] = useState("");
+const [company, setCompany] = useState("");
+const [notes, setNotes] = useState("");
+const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+  
 
 useEffect(() => {
   if (chatContainerRef.current) {
@@ -384,6 +391,76 @@ setMessages((prev) => [
   setIsTyping(false);
 };
 
+const submitLead = async () => {
+  if (!name.trim() || !email.trim() || !phone.trim()) {
+    setMessages((prev) => [
+      ...prev,
+      {
+        sender: "ai",
+        text: "Please add your name, email and phone number before sending.",
+      },
+    ]);
+    return;
+  }
+
+  try {
+    setIsSubmittingLead(true);
+
+    const response = await fetch("/api/lead", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name,
+        email,
+        phone,
+        company,
+        notes,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: "✅ Thank you. Your project brief has been received. Our team will review your project and get back to you shortly.",
+        },
+      ]);
+
+      setName("");
+      setEmail("");
+      setPhone("");
+      setCompany("");
+      setNotes("");
+      setShowContactForm(false);
+    } else {
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: "Something went wrong while sending your project. Please try again.",
+        },
+      ]);
+    }
+  } catch (error) {
+    console.error(error);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        sender: "ai",
+        text: "Something went wrong while sending your project. Please try again.",
+      },
+    ]);
+  } finally {
+    setIsSubmittingLead(false);
+  }
+};
+
   return (
     <main className="min-h-screen bg-black text-white">
       <header className="fixed left-0 top-0 z-50 flex w-full items-center justify-between bg-black/30 border-b border-white/5 px-6 py-5 backdrop-blur-md md:px-12">
@@ -446,9 +523,9 @@ setMessages((prev) => [
   msg.options &&
   msg.options.length > 0 && (
     <div className="mt-3 flex flex-wrap gap-2">
-      {msg.options.map((option) => (
+      {msg.options.map((option, index) => (
         <button
-          key={option}
+          key={`${option}-${index}`}
           onClick={() => sendMessage(option)}
           className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white hover:bg-white hover:text-black"
         >
@@ -484,33 +561,47 @@ setMessages((prev) => [
 
     <div className="grid gap-3 md:grid-cols-2">
       <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
         placeholder="Full Name"
-        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none"
       />
 
       <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
         placeholder="Email Address"
-        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none"
       />
 
       <input
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
         placeholder="Phone Number"
-        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none"
       />
 
       <input
+        value={company}
+        onChange={(e) => setCompany(e.target.value)}
         placeholder="Company / Brand (optional)"
-        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+        className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none"
       />
     </div>
 
     <textarea
+      value={notes}
+      onChange={(e) => setNotes(e.target.value)}
       placeholder="Anything else Joseph should know?"
-      className="mt-3 min-h-28 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+      className="mt-3 min-h-28 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none"
     />
 
-    <button className="mt-4 rounded-full bg-white px-6 py-3 text-sm font-bold text-black transition hover:bg-[#8B5CF6] hover:text-white">
-      Send Project
+    <button
+      onClick={submitLead}
+      disabled={isSubmittingLead}
+      className="mt-4 rounded-full bg-white px-6 py-3 text-sm font-bold text-black transition hover:bg-[#8B5CF6] hover:text-white disabled:opacity-50"
+    >
+      {isSubmittingLead ? "Sending..." : "Send Project"}
     </button>
   </div>
 )}
