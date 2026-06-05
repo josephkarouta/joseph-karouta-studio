@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type Message = {
   sender: "ai" | "user";
@@ -10,10 +11,10 @@ type Message = {
 };
 
 const firstReplies = [
-  "Event Branding",
-  "Restaurant Launch",
-  "Campaign Design",
-  "Presentation Design",
+  "Branding & Identity",
+  "Website & Digital",
+  "Architecture",
+  "Interior Design",
 ];
 
 function AiSphere({ isThinking = false }: { isThinking?: boolean }) {
@@ -64,6 +65,9 @@ const [phone, setPhone] = useState("");
 const [company, setCompany] = useState("");
 const [notes, setNotes] = useState("");
 const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+const [files, setFiles] = useState<File[]>([]);
+const MAX_FILE_SIZE_MB = 20;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
   
 
 useEffect(() => {
@@ -358,7 +362,7 @@ return "Tell me a little more about what you're trying to create and I'll point 
 
     const shouldShowContactForm =
   data.showContactForm ||
-  finalMessage.toLowerCase().includes("yes, contact me");
+  finalMessage.toLowerCase().trim() === "get expert review";
 
 if (shouldShowContactForm) {
   setShowContactForm(true);
@@ -370,7 +374,7 @@ setMessages((prev) => [
     sender: "ai",
     text:
       data.message ||
-      "Perfect. Please leave your details below and Joseph will review your project personally.",
+      "Perfect. Please leave your details below and a Heyy Studio expert will review your project.",
     options: data.options || [],
     showContactForm: shouldShowContactForm,
   },
@@ -405,6 +409,32 @@ const submitLead = async () => {
 
   try {
     setIsSubmittingLead(true);
+    const uploadedUrls: string[] = [];
+    for (const file of files) {
+  const safeName = file.name
+  .toLowerCase()
+  .replace(/[^a-z0-9.]/g, "-")
+  .replace(/-+/g, "-");
+
+const fileName = `${Date.now()}-${safeName}`;
+
+  const { error } = await supabase.storage
+    .from("project-files")
+    .upload(fileName, file);
+
+  if (error) {
+    console.error(error);
+    continue;
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage
+    .from("project-files")
+    .getPublicUrl(fileName);
+
+  uploadedUrls.push(publicUrl);
+}
 
     const response = await fetch("/api/lead", {
       method: "POST",
@@ -412,12 +442,13 @@ const submitLead = async () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        name,
-        email,
-        phone,
-        company,
-        notes,
-      }),
+      name,
+      email,
+      phone,
+      company,
+      notes,
+      attachments: uploadedUrls,
+    }),
     });
 
     const data = await response.json();
@@ -436,6 +467,7 @@ const submitLead = async () => {
       setPhone("");
       setCompany("");
       setNotes("");
+      setFiles([]);
       setShowContactForm(false);
     } else {
       setMessages((prev) => [
@@ -465,14 +497,17 @@ const submitLead = async () => {
     <main className="min-h-screen bg-black text-white">
       <header className="fixed left-0 top-0 z-50 flex w-full items-center justify-between bg-black/30 border-b border-white/5 px-6 py-5 backdrop-blur-md md:px-12">
         <div>
-          <p className="text-sm font-black tracking-[0.3em]">JOSEPH KAROUTA</p>
-          <p className="text-xs uppercase tracking-[0.4em] text-white/45">Studio</p>
+          <p className="text-sm font-black tracking-[0.3em]">HEYY STUDIO</p>
+          <p className="text-xs uppercase tracking-[0.4em] text-white/45">
+  AI + Experts
+          </p>
         </div>
 
         <nav className="hidden items-center gap-8 text-sm font-medium md:flex">
-          <a href="#work">Work</a>
+          <a href="#work">Projects</a>
+          <a href="#experts">Experts</a>
           <a href="#services">Services</a>
-          <a href="#about">About</a>
+          <a href="#pricing">Pricing</a>
         </nav>
       </header>
 
@@ -495,7 +530,7 @@ const submitLead = async () => {
     </h1>
 
     <p className="mt-6 max-w-xl text-center text-xl leading-8 text-white/60">
-  Describe your idea. Joseph AI will guide the rest.
+  Create ideas, concepts and project briefs with AI. Continue with AI tools or connect with expert professionals.
 </p>
 
     <div className="mt-6 w-full max-w-6xl">
@@ -556,7 +591,7 @@ const submitLead = async () => {
           {showContactForm && (
   <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-6 text-left">
     <p className="mb-4 text-sm text-white/60">
-      Leave your details and Joseph will get back to you.
+      Leave your details and a Heyy Studio expert will get back to you.
     </p>
 
     <div className="grid gap-3 md:grid-cols-2">
@@ -592,7 +627,7 @@ const submitLead = async () => {
     <textarea
       value={notes}
       onChange={(e) => setNotes(e.target.value)}
-      placeholder="Anything else Joseph should know?"
+      placeholder="Anything else our experts should know?"
       className="mt-3 min-h-28 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none"
     />
 
@@ -606,8 +641,69 @@ const submitLead = async () => {
   </div>
 )}
         </div>
+        {files.length > 0 && (
+  <p className="mx-auto mb-2 max-w-6xl text-xs text-white/50">
+    {files.length} file{files.length > 1 ? "s" : ""} selected
+  </p>
+)}
+{files.length > 0 && (
+  <div className="mx-auto mb-3 flex max-w-6xl flex-wrap gap-2">
+    {files.map((file, index) => (
+      <div
+        key={`${file.name}-${index}`}
+        className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/70"
+      >
+        <span>📎 {file.name}</span>
 
+        <button
+          type="button"
+          onClick={() => {
+            setFiles((prev) => prev.filter((_, i) => i !== index));
+          }}
+          className="text-white/40 transition hover:text-white"
+        >
+          ×
+        </button>
+      </div>
+    ))}
+  </div>
+)}
 <div className="mx-auto mt-6 flex max-w-6xl items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-3 shadow-xl shadow-black/40 backdrop-blur-xl">
+
+<label className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-white transition hover:bg-white hover:text-black">
+  📎
+  <input
+    type="file"
+    multiple
+    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip"
+    className="hidden"
+    onChange={(e) => {
+  if (!e.target.files) return;
+
+  const selectedFiles = Array.from(e.target.files);
+
+  const validFiles = selectedFiles.filter((file) => {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: `⚠️ ${file.name} is too large. Maximum file size is ${MAX_FILE_SIZE_MB}MB.`,
+        },
+      ]);
+
+      return false;
+    }
+
+    return true;
+  });
+
+  setFiles((prev) => [...prev, ...validFiles]);
+
+  e.target.value = "";
+}}
+  />
+</label>
           <input
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -615,7 +711,7 @@ const submitLead = async () => {
               if (e.key === "Enter") sendMessage();
             }}
             className="w-full bg-transparent text-base text-white outline-none"
-            placeholder="Describe your project, event, campaign or business idea..."
+            placeholder="Describe your brand, website, interior, architecture or creative idea..."
           />
           <button
   onClick={() => sendMessage()}
@@ -643,36 +739,94 @@ const submitLead = async () => {
   </div>
 </section>
 
+<section className="border-t border-white/10 px-6 py-24 text-white">
+  <div className="mx-auto max-w-6xl">
+
+    <p className="mb-4 text-sm uppercase tracking-[0.3em] text-white/35">
+      How It Works
+    </p>
+
+    <h2 className="max-w-4xl text-5xl font-black leading-tight">
+      Start with AI. Continue with experts when you need them.
+    </h2>
+
+    <div className="mt-16 grid gap-6 md:grid-cols-3">
+
+      <div className="rounded-[2rem] border border-white/15 bg-white/5 p-8">
+        <p className="text-sm uppercase tracking-[0.3em] text-white/40">
+          Step 01
+        </p>
+
+        <h3 className="mt-4 text-2xl font-black">
+          Describe Your Project
+        </h3>
+
+        <p className="mt-4 text-white/50 leading-7">
+          Tell Heyy Studio AI what you want to create, whether it's a brand, website, interior space, architectural concept or event.
+        </p>
+      </div>
+
+      <div className="rounded-[2rem] border border-white/15 bg-white/5 p-8">
+        <p className="text-sm uppercase tracking-[0.3em] text-white/40">
+          Step 02
+        </p>
+
+        <h3 className="mt-4 text-2xl font-black">
+          Build Your Brief
+        </h3>
+
+        <p className="mt-4 text-white/50 leading-7">
+          AI asks smart questions, shapes your requirements and generates a structured project brief with recommendations.
+        </p>
+      </div>
+
+      <div className="rounded-[2rem] border border-white/15 bg-white/5 p-8">
+        <p className="text-sm uppercase tracking-[0.3em] text-white/40">
+          Step 03
+        </p>
+
+        <h3 className="mt-4 text-2xl font-black">
+          Continue Your Way
+        </h3>
+
+        <p className="mt-4 text-white/50 leading-7">
+          Keep creating with AI tools and subscriptions or connect with a human expert for professional support.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
       <section id="work" className="border-t border-white/10 px-6 py-24 text-white">
         <div className="mx-auto max-w-6xl">
           <p className="mb-4 text-sm uppercase tracking-[0.3em] text-black/40">
-            Experience
+            Collective Experience
           </p>
 
           <h2 className="max-w-4xl text-5xl font-black leading-tight">
-            12+ years creating brands, events and campaigns across government,
-            healthcare, retail, education and sport.
+            10+ years of creative, architecture and interior design experience across brands, spaces and digital projects.
           </h2>
 
 <div className="mt-16 grid gap-6 md:grid-cols-4">
   <div className="rounded-[2rem] border border-white/15 bg-white/5 p-8">
-    <p className="text-5xl font-black">12+</p>
+    <p className="text-5xl font-black">10+</p>
     <p className="mt-2 text-white/50">Years Experience</p>
   </div>
 
   <div className="rounded-[2rem] border border-white/15 bg-white/5 p-8">
-    <p className="text-5xl font-black">150+</p>
+    <p className="text-5xl font-black">200+</p>
     <p className="mt-2 text-white/50">Projects Delivered</p>
   </div>
 
   <div className="rounded-[2rem] border border-white/15 bg-white/5 p-8">
-    <p className="text-5xl font-black">20+</p>
-    <p className="mt-2 text-white/50">Industries Served</p>
+    <p className="text-5xl font-black">3</p>
+    <p className="mt-2 text-white/50">Core Disciplines</p>
   </div>
 
   <div className="rounded-[2rem] border border-white/15 bg-white/5 p-8">
-    <p className="text-5xl font-black">3</p>
-    <p className="mt-2 text-white/50">Countries</p>
+    <p className="text-5xl font-black">AI</p>
+    <p className="mt-2 text-white/50">Powered Workflow</p>
   </div>
 </div>
 
@@ -685,7 +839,7 @@ const submitLead = async () => {
     </p>
 
     <h2 className="max-w-4xl text-5xl font-black leading-tight">
-      Selected work across brands, events and campaigns.
+      Selected work across creative, architecture and interior design.
     </h2>
 
     <div className="mt-12 space-y-14">
@@ -761,6 +915,54 @@ const submitLead = async () => {
     </div>
   </div>
 </section>
+
+<section id="experts" className="border-t border-white/10 px-6 py-24 text-white">
+  <div className="mx-auto max-w-6xl">
+    <p className="mb-4 text-sm uppercase tracking-[0.3em] text-white/35">
+      Experts
+    </p>
+
+    <h2 className="max-w-4xl text-5xl font-black leading-tight">
+      Continue with AI or connect with the right expert for your project.
+    </h2>
+
+    <div className="mt-16 grid gap-6 md:grid-cols-3">
+      {[
+        {
+          title: "Creative Expert",
+          description:
+            "Branding, identity systems, campaigns, websites, presentations and visual direction.",
+        },
+        {
+          title: "Architecture Expert",
+          description:
+            "Architectural concepts, spatial planning, residential, commercial and early-stage design support.",
+        },
+        {
+          title: "Interior Design Expert",
+          description:
+            "Interior concepts, material palettes, furniture direction, moodboards and space styling.",
+        },
+      ].map((expert) => (
+        <div
+          key={expert.title}
+          className="rounded-[2rem] border border-white/15 bg-white/5 p-8 transition hover:-translate-y-1 hover:border-white/30"
+        >
+          <h3 className="text-2xl font-black">{expert.title}</h3>
+
+          <p className="mt-4 leading-7 text-white/50">
+            {expert.description}
+          </p>
+
+          <button className="mt-8 rounded-full border border-white/15 px-5 py-3 text-sm font-bold transition hover:bg-white hover:text-black">
+            Get Expert Review
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
 <section id="services" className="border-t border-white/10 px-6 py-24 text-white">
   <div className="mx-auto max-w-6xl">
     <p className="mb-4 text-sm uppercase tracking-[0.3em] text-black/40">
@@ -768,42 +970,42 @@ const submitLead = async () => {
     </p>
 
     <h2 className="max-w-4xl text-5xl font-black leading-tight">
-      Creative services designed to turn ideas into brands, campaigns and experiences.
+      AI-powered creative and spatial services designed to turn ideas into brands, interiors, architecture and experiences.
     </h2>
 
     <div className="mt-16 grid gap-6 md:grid-cols-3">
 
       {[
-        {
-          title: "Creative Direction",
-          description:
-            "Strategic creative thinking, concepts and visual direction for brands and campaigns.",
-        },
-        {
-          title: "Brand Identity",
-          description:
-            "Logos, visual systems, brand guidelines and complete identity design.",
-        },
-        {
-          title: "Event Branding",
-          description:
-            "Key visuals, venue branding, wayfinding, signage and event experiences.",
-        },
-        {
-          title: "Campaign Design",
-          description:
-            "Integrated campaigns across print, digital, social and outdoor media.",
-        },
-        {
-          title: "Presentation Design",
-          description:
-            "Corporate presentations, pitch decks and executive communication materials.",
-        },
-        {
-          title: "AI Creative Systems",
-          description:
-            "Combining AI workflows with design thinking to accelerate creative production.",
-        },
+  {
+    title: "Branding & Identity",
+    description:
+      "Logo systems, visual identity, brand direction and complete creative foundations.",
+  },
+  {
+    title: "Website & Digital",
+    description:
+      "Website direction, landing pages, digital experiences and AI-assisted content structure.",
+  },
+  {
+    title: "Architecture Concepts",
+    description:
+      "Early-stage spatial thinking, concept development, planning ideas and visual references.",
+  },
+  {
+    title: "Interior Design",
+    description:
+      "Interior concepts, material palettes, furniture direction, moodboards and space styling.",
+  },
+  {
+    title: "Events & Experiences",
+    description:
+      "Event branding, activations, spatial graphics, wayfinding and campaign environments.",
+  },
+  {
+    title: "AI Creative Tools",
+    description:
+      "AI-assisted project discovery, idea generation, visual exploration and creative briefing.",
+  },
       ].map((service) => (
         <div
           key={service.title}
@@ -821,6 +1023,76 @@ const submitLead = async () => {
     </div>
   </div>
 </section>
+
+<section id="pricing" className="border-t border-white/10 px-6 py-24 text-white">
+  <div className="mx-auto max-w-6xl">
+
+    <p className="mb-4 text-sm uppercase tracking-[0.3em] text-white/35">
+      Choose Your Path
+    </p>
+
+    <h2 className="max-w-4xl text-5xl font-black leading-tight">
+      Start with AI or work directly with an expert.
+    </h2>
+
+    <div className="mt-16 grid gap-6 md:grid-cols-2">
+
+      <div className="rounded-[2rem] border border-[#8B5CF6]/30 bg-[#8B5CF6]/10 p-10">
+        <p className="text-sm uppercase tracking-[0.3em] text-[#A78BFA]">
+          AI Studio
+        </p>
+
+        <h3 className="mt-4 text-4xl font-black">
+          Monthly Subscription
+        </h3>
+
+        <p className="mt-4 text-white/60">
+          Generate ideas, project briefs, concepts, references and visual directions with AI.
+        </p>
+
+        <ul className="mt-8 space-y-3 text-white/80">
+          <li>✓ Unlimited AI conversations</li>
+          <li>✓ Creative guidance</li>
+          <li>✓ Architecture guidance</li>
+          <li>✓ Interior design guidance</li>
+          <li>✓ Future image generation</li>
+        </ul>
+
+        <button className="mt-8 rounded-full bg-white px-6 py-3 text-sm font-bold text-black">
+          Coming Soon
+        </button>
+      </div>
+
+      <div className="rounded-[2rem] border border-white/15 bg-white/5 p-10">
+        <p className="text-sm uppercase tracking-[0.3em] text-white/40">
+          Expert Services
+        </p>
+
+        <h3 className="mt-4 text-4xl font-black">
+          Custom Project Quote
+        </h3>
+
+        <p className="mt-4 text-white/60">
+          Work directly with a creative expert, architect or interior designer.
+        </p>
+
+        <ul className="mt-8 space-y-3 text-white/80">
+          <li>✓ Human expert review</li>
+          <li>✓ Custom proposal</li>
+          <li>✓ Project delivery</li>
+          <li>✓ Revisions & collaboration</li>
+          <li>✓ Tailored scope of work</li>
+        </ul>
+
+        <button className="mt-8 rounded-full border border-white/20 px-6 py-3 text-sm font-bold">
+          Request Quote
+        </button>
+      </div>
+
+    </div>
+  </div>
+</section>
+
 <section id="about" className="bg-black px-6 py-24 text-white">
   <div className="mx-auto grid max-w-6xl gap-12 md:grid-cols-2">
     <div>
@@ -835,22 +1107,16 @@ const submitLead = async () => {
 
     <div className="space-y-6 text-lg leading-8 text-white/70">
       <p>
-        Joseph Karouta is a multidisciplinary creative designer with 12+ years
-        of experience creating branding, campaigns, event identities and visual
-        communication systems.
-      </p>
+  Heyy Studio is an AI-powered creative and spatial platform built to help people shape ideas, generate directions and move projects forward.
+</p>
 
-      <p>
-        His work spans government, healthcare, sport, retail, education,
-        hospitality and real estate, combining strategic thinking with clean,
-        effective and memorable design.
-      </p>
+<p>
+  The studio connects AI discovery tools with expert support across branding, websites, architecture, interior design and experiences.
+</p>
 
-      <p>
-        Joseph Karouta Studio brings together human creative direction and
-        emerging AI workflows to help clients shape ideas, define scope and
-        create stronger brand experiences.
-      </p>
+<p>
+  Users can explore ideas with AI, generate concepts, build project briefs and choose to continue with AI tools or connect with a human expert.
+</p>
     </div>
   </div>
 </section>
@@ -861,12 +1127,11 @@ const submitLead = async () => {
     </p>
 
     <h2 className="max-w-4xl text-5xl font-black leading-tight">
-      Have a project in mind? Start with Joseph AI Creative Director.
+      Have an idea in mind? Start with Heyy Studio AI.
     </h2>
 
     <p className="mt-6 max-w-2xl text-lg leading-8 text-black/70">
-      Describe what you are trying to create and Joseph AI Creative Director
-      will help shape your brief before Joseph reviews it personally.
+      Describe what you are trying to create and Heyy Studio AI will help shape your brief before you choose to continue with AI or connect with an expert.
     </p>
 
     <div className="mt-10 flex flex-wrap gap-4">
@@ -874,14 +1139,14 @@ const submitLead = async () => {
         href="#"
         className="rounded-full bg-black px-7 py-4 text-sm font-bold text-white transition hover:bg-white hover:text-black"
       >
-        Start Conversation
+        Start with AI
       </a>
 
       <a
         href="mailto:forever.doodleau@gmail.com"
         className="rounded-full border border-black/20 px-7 py-4 text-sm font-bold text-black transition hover:bg-black hover:text-white"
       >
-        Email Joseph
+        Contact the Studio
       </a>
     </div>
   </div>

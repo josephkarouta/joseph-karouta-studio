@@ -1,9 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-console.log("URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-console.log("KEY EXISTS:", !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -19,6 +16,7 @@ export async function POST(req: Request) {
       phone: body.phone,
       company: body.company,
       notes: body.notes,
+      attachments: body.attachments || [],
     });
 
     if (error) {
