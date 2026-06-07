@@ -10,14 +10,20 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const { error } = await supabase.from("leads").insert({
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-      company: body.company,
-      notes: body.notes,
-      attachments: body.attachments || [],
-    });
+    const projectId = `HS-${Date.now()}`;
+
+const { error } = await supabase.from("leads").insert({
+  project_id: projectId,
+  status: "New",
+
+  name: body.name,
+  email: body.email,
+  phone: body.phone,
+  company: body.company,
+  notes: body.notes,
+  attachments: body.attachments,
+  project_brief: body.project_brief,
+});
 
     if (error) {
       throw error;

@@ -66,6 +66,14 @@ const [company, setCompany] = useState("");
 const [notes, setNotes] = useState("");
 const [isSubmittingLead, setIsSubmittingLead] = useState(false);
 const [files, setFiles] = useState<File[]>([]);
+const [projectBrief, setProjectBrief] = useState("");
+const [briefGenerated, setBriefGenerated] = useState(false);
+const [discoveryStarted, setDiscoveryStarted] = useState(false);
+const userMessageCount = messages.filter(
+  (msg) => msg.sender === "user"
+).length;
+
+const currentStep = Math.min(userMessageCount, 5);
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
   
@@ -331,6 +339,21 @@ return "Tell me a little more about what you're trying to create and I'll point 
   const finalMessage = text || message;
 
   if (!finalMessage.trim()) return;
+  if (finalMessage.toLowerCase().trim() === "start again") {
+  setMessages([]);
+  setFiles([]);
+  setMessage("");
+  setName("");
+  setEmail("");
+  setPhone("");
+  setCompany("");
+  setNotes("");
+  setShowContactForm(false);
+  setBriefGenerated(false);
+  setDiscoveryStarted(false);
+  return;
+}
+  setDiscoveryStarted(true);
 
   const userMessage: Message = {
     sender: "user",
@@ -339,6 +362,12 @@ return "Tell me a little more about what you're trying to create and I'll point 
 
   const updatedMessages = [...messages, userMessage];
   const recentMessages = updatedMessages.slice(-8);
+  const userMessageCount = updatedMessages.filter(
+  (msg) => msg.sender === "user"
+).length;
+
+const forceSummary = userMessageCount >= 6;
+const messagesToSend = forceSummary ? updatedMessages : recentMessages;
 
   setMessages(updatedMessages);
   setMessage("");
@@ -351,21 +380,30 @@ return "Tell me a little more about what you're trying to create and I'll point 
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        messages: recentMessages.map((msg) => ({
-          role: msg.sender === "user" ? "user" : "assistant",
-          content: msg.text,
-        })),
-      }),
+        messages: messagesToSend.map((msg) => ({
+        role: msg.sender === "user" ? "user" : "assistant",
+        content: msg.text,
+      })),
+      forceSummary,
+  }),
     });
 
     const data = await response.json();
+    if (data.message?.includes("PROJECT BRIEF")) {
+  setBriefGenerated(true);
+}
 
-    const shouldShowContactForm =
-  data.showContactForm ||
+    const clickedExpertReview =
   finalMessage.toLowerCase().trim() === "get expert review";
+
+const shouldShowContactForm = clickedExpertReview;
 
 if (shouldShowContactForm) {
   setShowContactForm(true);
+}
+
+if (forceSummary) {
+  setProjectBrief(data.message);
 }
 
 setMessages((prev) => [
@@ -373,8 +411,9 @@ setMessages((prev) => [
   {
     sender: "ai",
     text:
-      data.message ||
-      "Perfect. Please leave your details below and a Heyy Studio expert will review your project.",
+  clickedExpertReview
+    ? "Perfect. Please leave your details below and a Heyy Studio expert will review your project."
+    : data.message || "Something went wrong. Please try again.",
     options: data.options || [],
     showContactForm: shouldShowContactForm,
   },
@@ -442,16 +481,24 @@ const fileName = `${Date.now()}-${safeName}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-      name,
-      email,
-      phone,
-      company,
-      notes,
-      attachments: uploadedUrls,
-    }),
+  name,
+  email,
+  phone,
+  company,
+  notes,
+  attachments: uploadedUrls,
+  project_brief: messages
+    .filter((msg) => msg.text.includes("PROJECT BRIEF"))
+    .map((msg) => msg.text)
+    .join("\n"),
+}),
     });
 
     const data = await response.json();
+
+    if (data.message?.includes("PROJECT BRIEF")) {
+  setNotes(data.message);
+}
 
     if (data.success) {
       setMessages((prev) => [
@@ -533,6 +580,23 @@ const fileName = `${Date.now()}-${safeName}`;
   Create ideas, concepts and project briefs with AI. Continue with AI tools or connect with expert professionals.
 </p>
 
+{!briefGenerated && (
+<div className="mt-6 w-full max-w-md">
+  <div className="mb-2 flex items-center justify-between text-xs text-white/50">
+    <span>Project Discovery</span>
+    <span>Step {currentStep} of 5</span>
+  </div>
+
+  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+    <div
+      className="h-full rounded-full bg-[#8B5CF6] transition-all duration-500"
+      style={{
+        width: `${(currentStep / 5) * 100}%`,
+      }}
+    />
+  </div>
+</div>
+)}
     <div className="mt-6 w-full max-w-6xl">
   <div>
 
@@ -553,7 +617,28 @@ const fileName = `${Date.now()}-${safeName}`;
                   marginLeft: msg.sender === "user" ? "auto" : "0",
                 }}
               >
-                {msg.text}
+                <div className="whitespace-pre-line">
+  <div className="whitespace-pre-line text-left">
+  {msg.text.includes("PROJECT BRIEF") ? (
+  <div className="text-left">
+    <div className="mb-6 text-sm font-bold uppercase tracking-[0.3em] text-[#A78BFA]">
+      📋 Project Brief
+    </div>
+
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+  <div className="whitespace-pre-line text-sm leading-7 text-white/90">
+    {msg.text
+      .replace("📋 PROJECT BRIEF", "")
+      .replace("PROJECT BRIEF", "")
+      .trim()}
+  </div>
+</div>
+  </div>
+) : (
+  msg.text
+)}
+</div>
+</div>
                 {msg.sender === "ai" &&
   msg.options &&
   msg.options.length > 0 && (
@@ -575,17 +660,13 @@ const fileName = `${Date.now()}-${safeName}`;
 
           {isTyping && (
             <div>
-              <div
-                style={{
-                  backgroundColor: "#201A2E",
-                  color: "#fff",
-                  padding: "12px 16px",
-                  borderRadius: "16px",
-                  maxWidth: "180px",
-                }}
-              >
-                Joseph AI is thinking...
-              </div>
+              <div className="flex items-center gap-3">
+  <div className="h-3 w-3 animate-pulse rounded-full bg-[#8B5CF6]"></div>
+
+  <span className="text-sm text-white/60">
+    Analyzing project...
+  </span>
+</div>
             </div>
           )}
           {showContactForm && (
@@ -706,32 +787,40 @@ const fileName = `${Date.now()}-${safeName}`;
 </label>
           <input
             value={message}
+            disabled={briefGenerated}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") sendMessage();
             }}
             className="w-full bg-transparent text-base text-white outline-none"
-            placeholder="Describe your brand, website, interior, architecture or creative idea..."
+            placeholder={
+  briefGenerated
+    ? "Project brief completed. Choose an option above."
+    : "Describe your brand, website, interior, architecture or creative idea..."
+}
           />
           <button
   onClick={() => sendMessage()}
-  className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1f1f1f] text-xl text-white transition hover:bg-white hover:text-black hover:text-black"
+  disabled={briefGenerated}
+  className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1f1f1f] text-xl text-white transition hover:bg-white hover:text-black disabled:opacity-50"
 >
   ↑
 </button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          {quickReplies.map((reply) => (
-            <button
-              key={reply}
-              onClick={() => sendMessage(reply)}
-              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white transition hover:border-[#8B5CF6]/50 hover:bg-white hover:text-black hover:text-black"
-            >
-              {reply}
-            </button>
-          ))}
-        </div>
+        {!discoveryStarted && !briefGenerated && (
+  <div className="mt-4 grid gap-3 md:grid-cols-4">
+    {quickReplies.map((reply) => (
+      <button
+        key={reply}
+        onClick={() => sendMessage(reply)}
+        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white transition hover:border-[#8B5CF6]/50 hover:bg-white hover:text-black"
+      >
+        {reply}
+      </button>
+    ))}
+  </div>
+)}
 
         
       </div>

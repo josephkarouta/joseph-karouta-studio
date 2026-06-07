@@ -9,61 +9,25 @@ const systemPrompt = `
 You are Heyy Studio AI.
 
 Heyy Studio is an AI-powered creative and spatial platform.
-You help visitors create a short project brief before they choose what to do next.
+You help users discover, define and structure creative, architecture, interior design, website and event projects.
 
-Main categories:
-- Branding & Identity
-- Website & Digital
-- Architecture
-- Interior Design
-- Events & Experiences
-- Other
-
-Your goal:
-Ask a maximum of 5 discovery questions.
-After the 5th useful user answer, stop asking questions and summarize the project.
-
-Conversation rules:
+Rules:
 - Keep replies short.
-- Maximum 2 sentences.
-- Ask only ONE question at a time.
-- Always provide 3 to 4 answer options.
-- Include "Something Else" when useful.
-- Do not ask endless questions.
+- Ask only one question at a time.
+- Always provide 3 to 4 options.
 - Do not ask about budget.
 - Do not mention Joseph.
-- Do not mention a specific person.
 - Speak as Heyy Studio AI.
+- Return JSON only.
 
-Question strategy:
+Discovery flow:
 Question 1: Identify project category.
 Question 2: Understand project type or space type.
 Question 3: Understand goal or objective.
-Question 4: Understand style or direction.
+Question 4: Understand style, mood or direction.
 Question 5: Understand deliverables or support needed.
 
-After enough information:
-Return a short summary using bullet points inside the message.
-Then ask:
-"What would you like to do next?"
-
-Final options must be exactly:
-["Continue with AI", "Get Expert Review", "Start again"]
-
-If the user selects "Get Expert Review":
-Return a short message asking them to leave their details in the form.
-Options must be [].
-
-If the user selects "Continue with AI":
-Explain briefly that AI Studio access will be available through subscription.
-Options must be ["View Plans", "Get Expert Review", "Start again"].
-
-If the user selects "Start again":
-Ask what they would like to create today.
-Options must be:
-["Branding & Identity", "Website & Digital", "Architecture", "Interior Design"]
-
-Return only valid JSON in this shape:
+Return JSON only with:
 {
   "message": "short reply here",
   "options": ["Option 1", "Option 2", "Option 3", "Something Else"]
@@ -72,13 +36,56 @@ Return only valid JSON in this shape:
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { messages, forceSummary } = await req.json();
+
+    if (forceSummary) {
+      const userAnswers = messages
+        .filter((msg: any) => msg.role === "user")
+        .map((msg: any) => msg.content);
+
+      const cleanMessage = `
+📋 PROJECT BRIEF
+
+PROJECT OVERVIEW
+
+The client is looking to develop a ${userAnswers[0] || "creative"} project with a focus on ${
+        userAnswers[2] || "clear project direction"
+      }.
+
+OBJECTIVES
+
+• Define a clear creative direction
+• Support the project goal: ${userAnswers[2] || "Not specified"}
+• Create a strong foundation for the next stage
+
+STYLE / DIRECTION
+
+${userAnswers[3] || "Not specified"}
+
+KEY DELIVERABLES
+
+${userAnswers.slice(4).join(", ") || "Not specified"}
+
+RECOMMENDED STRATEGY
+
+Develop a structured direction that aligns the project category, objective, visual style and required deliverables.
+
+NEXT STEPS
+
+What would you like to do next?
+`;
+
+      return NextResponse.json({
+        message: cleanMessage,
+        options: ["Continue with AI", "Get Expert Review", "Start again"],
+      });
+    }
 
     const startTime = Date.now();
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-nano",
-      max_tokens: 180,
+      max_tokens: 250,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -97,12 +104,12 @@ export async function POST(req: Request) {
       const parsed = JSON.parse(content);
 
       return NextResponse.json({
-        message: parsed.message,
+        message: parsed.message || "Tell me more about your project.",
         options: parsed.options || [],
       });
     } catch {
       return NextResponse.json({
-        message: content,
+        message: content || "Tell me more about your project.",
         options: [],
       });
     }
