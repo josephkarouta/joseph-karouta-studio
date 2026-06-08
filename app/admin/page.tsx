@@ -1,5 +1,6 @@
 import KanbanBoard from "./KanbanBoard";
 import AdminProjectsTable from "./AdminProjectsTable";
+import LeadsChart from "./LeadsChart";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -132,6 +133,8 @@ const averageQuote =
 
 </div>
         
+        <LeadsChart leads={leads || []} />
+
         <AdminProjectsTable leads={leads || []} />
       </div>
     </main>

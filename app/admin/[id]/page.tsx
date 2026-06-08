@@ -1,6 +1,7 @@
 import ActivityTimeline from "./ActivityTimeline";
 import QuoteValue from "./QuoteValue";
 import StatusButtons from "./StatusButtons";
+import ProjectTag from "./ProjectTag";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -52,6 +53,11 @@ const { data: activities } = await supabase
   currentStatus={lead.status || "New"}
 />
 
+<ProjectTag
+  id={lead.id}
+  currentTag={lead.project_tag || ""}
+/>
+
 <QuoteValue
   id={lead.id}
   initialValue={lead.quote_value}
@@ -68,11 +74,32 @@ const { data: activities } = await supabase
 
           <div className="mt-10 grid gap-6 md:grid-cols-2">
   <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-    <h2 className="mb-4 text-xl font-bold">Client Details</h2>
-    <p className="text-white/60">Email: {lead.email}</p>
-    <p className="text-white/60">Phone: {lead.phone}</p>
-    <p className="text-white/60">Company: {lead.company || "—"}</p>
+  <h2 className="mb-4 text-xl font-bold">Client Details</h2>
+
+  <p className="text-white/60">Email: {lead.email}</p>
+  <p className="text-white/60">Phone: {lead.phone}</p>
+  <p className="text-white/60">Company: {lead.company || "—"}</p>
+
+  <div className="mt-6 flex flex-wrap gap-3">
+    {lead.email && (
+      <a
+        href={`mailto:${lead.email}`}
+        className="rounded-full bg-white px-5 py-2 text-sm font-bold text-black hover:bg-white/80"
+      >
+        Email Client
+      </a>
+    )}
+
+    {lead.phone && (
+      <a
+        href={`tel:${lead.phone}`}
+        className="rounded-full border border-white/15 px-5 py-2 text-sm font-bold text-white hover:bg-white/10"
+      >
+        Call Client
+      </a>
+    )}
   </div>
+</div>
 
   <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
     <h2 className="mb-4 text-xl font-bold">Files</h2>

@@ -5,8 +5,10 @@ import { useState } from "react";
 export default function AdminProjectsTable({ leads }: { leads: any[] }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [tagFilter, setTagFilter] = useState("All");
 
   const statuses = ["All", "New", "Reviewing", "Quoted", "Won", "Lost"];
+  const tags = ["All", "Branding", "Website", "Architecture", "Interior", "Events"];
 
   const filteredLeads = leads.filter((lead) => {
     const searchText = `${lead.project_id} ${lead.name} ${lead.email} ${lead.company}`
@@ -17,7 +19,10 @@ export default function AdminProjectsTable({ leads }: { leads: any[] }) {
     const matchesStatus =
       statusFilter === "All" || lead.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
+    const matchesTag =
+      tagFilter === "All" || lead.project_tag === tagFilter;
+
+    return matchesSearch && matchesStatus && matchesTag;
   });
 
   return (
@@ -30,21 +35,39 @@ export default function AdminProjectsTable({ leads }: { leads: any[] }) {
           className="w-full rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm text-white outline-none placeholder:text-white/35 md:max-w-md"
         />
 
-        <div className="flex flex-wrap gap-2">
-          {statuses.map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`rounded-full px-4 py-2 text-xs font-bold transition ${
-                statusFilter === status
-                  ? "bg-white text-black"
-                  : "border border-white/15 text-white hover:bg-white hover:text-black"
-              }`}
-            >
-              {status}
-            </button>
-          ))}
-        </div>
+        <div className="flex flex-col gap-3 md:items-end">
+  <div className="flex flex-wrap gap-2">
+    {statuses.map((status) => (
+      <button
+        key={status}
+        onClick={() => setStatusFilter(status)}
+        className={`rounded-full px-4 py-2 text-xs font-bold transition ${
+          statusFilter === status
+            ? "bg-white text-black"
+            : "border border-white/15 text-white hover:bg-white hover:text-black"
+        }`}
+      >
+        {status}
+      </button>
+    ))}
+  </div>
+
+  <div className="flex flex-wrap gap-2">
+    {tags.map((tag) => (
+      <button
+        key={tag}
+        onClick={() => setTagFilter(tag)}
+        className={`rounded-full px-4 py-2 text-xs font-bold transition ${
+          tagFilter === tag
+            ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+            : "border border-white/15 text-white hover:bg-white hover:text-black"
+        }`}
+      >
+        {tag}
+      </button>
+    ))}
+  </div>
+</div>
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-white/10">
@@ -57,6 +80,7 @@ export default function AdminProjectsTable({ leads }: { leads: any[] }) {
               <th className="p-4">Name</th>
               <th className="p-4">Email</th>
               <th className="p-4">Company</th>
+              <th className="p-4">Tag</th>
               <th className="p-4">Files</th>
             </tr>
           </thead>
@@ -105,10 +129,23 @@ export default function AdminProjectsTable({ leads }: { leads: any[] }) {
 
                 <td className="p-4">{lead.name}</td>
                 <td className="p-4 text-white/60">{lead.email}</td>
-                <td className="p-4 text-white/60">{lead.company || "—"}</td>
                 <td className="p-4 text-white/60">
-                  {lead.attachments?.length || 0}
-                </td>
+  {lead.company || "—"}
+</td>
+
+<td className="p-4">
+  {lead.project_tag ? (
+    <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-bold text-purple-300">
+      {lead.project_tag}
+    </span>
+  ) : (
+    <span className="text-white/30">—</span>
+  )}
+</td>
+
+<td className="p-4 text-white/60">
+  {lead.attachments?.length || 0}
+</td>
               </tr>
             ))}
           </tbody>

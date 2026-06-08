@@ -12,35 +12,34 @@ export async function POST(req: Request) {
 
     const id = Number(body.id);
     const status = body.status;
+    const project_tag = body.project_tag;
 
-    console.log("Updating project:", id, status);
+    const updateData: any = {};
 
-    if (!id || !status) {
+    if (status) updateData.status = status;
+    if (project_tag) updateData.project_tag = project_tag;
+
+    if (!id || Object.keys(updateData).length === 0) {
       return NextResponse.json(
-        { success: false, error: "Missing id or status" },
+        { success: false, error: "Missing id or update data" },
         { status: 400 }
       );
     }
 
     const { data, error } = await supabase
       .from("leads")
-      .update({ status })
+      .update(updateData)
       .eq("id", id)
       .select();
 
-    if (error) {
-      console.error("Supabase update error:", error);
-      throw error;
-    }
-
-    console.log("Updated row:", data);
+    if (error) throw error;
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    console.error("Project status API error:", error);
+    console.error("Project update API error:", error);
 
     return NextResponse.json(
-      { success: false, error: "Could not update status" },
+      { success: false, error: "Could not update project" },
       { status: 500 }
     );
   }
