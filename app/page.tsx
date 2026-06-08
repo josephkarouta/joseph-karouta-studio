@@ -59,6 +59,7 @@ export default function Home() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [questionStep, setQuestionStep] = useState(0);
   const [name, setName] = useState("");
 const [email, setEmail] = useState("");
 const [phone, setPhone] = useState("");
@@ -69,6 +70,8 @@ const [files, setFiles] = useState<File[]>([]);
 const [projectBrief, setProjectBrief] = useState("");
 const [briefGenerated, setBriefGenerated] = useState(false);
 const [discoveryStarted, setDiscoveryStarted] = useState(false);
+const [waitingForCustomAnswer, setWaitingForCustomAnswer] = useState(false);
+const [customAnswerMessageIndex, setCustomAnswerMessageIndex] = useState<number | null>(null);
 const userMessageCount = messages.filter(
   (msg) => msg.sender === "user"
 ).length;
@@ -339,6 +342,21 @@ return "Tell me a little more about what you're trying to create and I'll point 
   const finalMessage = text || message;
 
   if (!finalMessage.trim()) return;
+  if (
+  finalMessage.toLowerCase().trim() === "something else" ||
+  finalMessage.toLowerCase().trim() === "other"
+) {
+  setWaitingForCustomAnswer(true);
+
+  const lastAiIndex = messages
+    .map((msg, index) => ({ msg, index }))
+    .filter((item) => item.msg.sender === "ai")
+    .at(-1)?.index;
+
+  setCustomAnswerMessageIndex(lastAiIndex ?? null);
+  setMessage("");
+  return;
+}
   if (finalMessage.toLowerCase().trim() === "start again") {
   setMessages([]);
   setFiles([]);
@@ -355,6 +373,11 @@ return "Tell me a little more about what you're trying to create and I'll point 
 }
   setDiscoveryStarted(true);
 
+  if (waitingForCustomAnswer) {
+  setWaitingForCustomAnswer(false);
+  setCustomAnswerMessageIndex(null);
+}
+
   const userMessage: Message = {
     sender: "user",
     text: finalMessage,
@@ -365,6 +388,7 @@ return "Tell me a little more about what you're trying to create and I'll point 
   const userMessageCount = updatedMessages.filter(
   (msg) => msg.sender === "user"
 ).length;
+setQuestionStep(Math.min(Math.max(userMessageCount - 1, 0), 5));
 
 const forceSummary = userMessageCount >= 6;
 const messagesToSend = forceSummary ? updatedMessages : recentMessages;
@@ -581,17 +605,17 @@ const fileName = `${Date.now()}-${safeName}`;
 </p>
 
 {!briefGenerated && (
-<div className="mt-6 w-full max-w-md">
-  <div className="mb-2 flex items-center justify-between text-xs text-white/50">
+<div className="mx-auto mt-4 max-w-md">
+  <div className="mb-2 flex justify-between text-xs text-white/40">
     <span>Project Discovery</span>
-    <span>Step {currentStep} of 5</span>
+    <span>{Math.min(Math.max(questionStep, 0), 5)}/5</span>
   </div>
 
   <div className="h-2 overflow-hidden rounded-full bg-white/10">
     <div
       className="h-full rounded-full bg-[#8B5CF6] transition-all duration-500"
       style={{
-        width: `${(currentStep / 5) * 100}%`,
+        width: `${(Math.min(Math.max(questionStep, 0), 5) / 5) * 100}%`,
       }}
     />
   </div>
@@ -641,17 +665,34 @@ const fileName = `${Date.now()}-${safeName}`;
 </div>
                 {msg.sender === "ai" &&
   msg.options &&
-  msg.options.length > 0 && (
+  msg.options.length > 0 &&
+  index === messages.length - 1 && (
     <div className="mt-3 flex flex-wrap gap-2">
-      {msg.options.map((option, index) => (
-        <button
-          key={`${option}-${index}`}
-          onClick={() => sendMessage(option)}
-          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white hover:bg-white hover:text-black"
-        >
-          {option}
-        </button>
-      ))}
+      {msg.options.map((option, optionIndex) => {
+  const isCustomOption =
+    option.toLowerCase() === "something else" ||
+    option.toLowerCase() === "other";
+
+  const isSelectedCustomOption =
+    waitingForCustomAnswer &&
+    customAnswerMessageIndex === index &&
+    isCustomOption;
+
+  return (
+    <button
+      key={`${option}-${optionIndex}`}
+      onClick={() => sendMessage(option)}
+      disabled={isSelectedCustomOption}
+      className={`rounded-full border px-3 py-1 text-xs transition ${
+        isSelectedCustomOption
+          ? "border-[#8B5CF6] bg-[#8B5CF6] text-white"
+          : "border-white/15 bg-white/5 text-white hover:bg-white hover:text-black"
+      }`}
+    >
+      {isSelectedCustomOption ? "Type your answer below ↓" : option}
+    </button>
+  );
+})}
     </div>
 )}
               </div>
@@ -796,6 +837,8 @@ const fileName = `${Date.now()}-${safeName}`;
             placeholder={
   briefGenerated
     ? "Project brief completed. Choose an option above."
+    : waitingForCustomAnswer
+    ? "Type your custom answer..."
     : "Describe your brand, website, interior, architecture or creative idea..."
 }
           />
