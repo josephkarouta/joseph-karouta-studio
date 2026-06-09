@@ -2,6 +2,8 @@ import ActivityTimeline from "./ActivityTimeline";
 import QuoteValue from "./QuoteValue";
 import StatusButtons from "./StatusButtons";
 import ProjectTag from "./ProjectTag";
+import FileAttachments from "./FileAttachments";
+import FileUploader from "./FileUploader";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -104,22 +106,8 @@ const { data: activities } = await supabase
   <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
     <h2 className="mb-4 text-xl font-bold">Files</h2>
 
-    {lead.attachments?.length > 0 ? (
-      <div className="flex flex-wrap gap-3">
-        {lead.attachments.map((file: string, index: number) => (
-          <a
-            key={file}
-            href={file}
-            target="_blank"
-            className="block text-[#A78BFA] hover:underline"
-          >
-            Attachment {index + 1}
-          </a>
-        ))}
-      </div>
-    ) : (
-      <p className="text-white/50">No files uploaded.</p>
-    )}
+    <FileAttachments attachments={lead.attachments || []} />
+    <FileUploader leadId={lead.id} />
   </div>
 </div>
 

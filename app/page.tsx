@@ -1,5 +1,8 @@
 "use client";
 
+import AuthModal from "./AuthModal";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
+
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -51,6 +54,15 @@ function AiSphere({ isThinking = false }: { isThinking?: boolean }) {
 }
 
 export default function Home() {
+  const [showAuth, setShowAuth] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const supabaseClient = createSupabaseBrowserClient();
+
+  useEffect(() => {
+    supabaseClient.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+    });
+  }, []);
   const [message, setMessage] = useState("");
   const [quickReplies, setQuickReplies] = useState(firstReplies);
   const [isTyping, setIsTyping] = useState(false);
@@ -578,7 +590,8 @@ const fileName = `${Date.now()}-${safeName}`;
           <a href="#work">Projects</a>
           <a href="#experts">Experts</a>
           <a href="#services">Services</a>
-          <a href="#pricing">Pricing</a>
+          <a href="#pricing">Pricing</a>{user ? <a href="/dashboard" className="rounded-full border border-white/15 px-5 py-2 text-sm font-bold text-white hover:bg-white hover:text-black transition-all duration-200">Dashboard</a> : <button onClick={() => setShowAuth(true)} className="rounded-full border border-white/15 px-5 py-2 text-sm font-bold text-white hover:bg-white hover:text-black">Sign In</button>}
+          
         </nav>
       </header>
 
@@ -1283,6 +1296,7 @@ const fileName = `${Date.now()}-${safeName}`;
     </div>
   </div>
 </section>
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </main>
   );
 }
