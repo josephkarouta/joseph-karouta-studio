@@ -439,8 +439,24 @@ if (shouldShowContactForm) {
   setShowContactForm(true);
 }
 
-if (forceSummary) {
+if (forceSummary && data.message) {
   setProjectBrief(data.message);
+
+  const { data: userData } = await supabaseClient.auth.getUser();
+
+  if (userData.user) {
+    await fetch("/api/save-project", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: userData.user.id,
+        title: "AI Project Brief",
+        project_brief: data.message,
+      }),
+    });
+  }
 }
 
 setMessages((prev) => [
@@ -804,7 +820,10 @@ const fileName = `${Date.now()}-${safeName}`;
     ))}
   </div>
 )}
-<div className="mx-auto mt-6 flex max-w-6xl items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-3 shadow-xl shadow-black/40 backdrop-blur-xl">
+<div
+  id="start-project"
+  className="mx-auto mt-6 flex max-w-6xl items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-3 shadow-xl shadow-black/40 backdrop-blur-xl"
+>
 
 <label className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-white transition hover:bg-white hover:text-black">
   📎
