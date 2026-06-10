@@ -64,10 +64,39 @@ export default function DashboardPage() {
           <p className="mt-2 text-white/50">{user?.email}</p>
         </div>
 
-        <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-8">
-          <h2 className="text-xl font-bold">My Projects</h2>
-          <p className="mt-2 text-white/50">Your saved projects will appear here soon.</p>
-        </div>
+        <div className="mt-4 rounded-3xl border border-purple-500/20 bg-purple-500/10 p-8">
+  <p className="text-sm uppercase tracking-[0.3em] text-purple-300">
+    Subscription
+  </p>
+
+  <h2 className="mt-3 text-2xl font-black">AI Studio Plan</h2>
+
+  <p className="mt-2 text-white/60">
+    Your subscription status will appear here after checkout is connected to your account.
+  </p>
+
+  <div className="mt-6 flex flex-wrap gap-3">
+    <a
+      href="/#pricing"
+      className="rounded-full bg-white px-5 py-3 text-sm font-bold text-black hover:bg-white/90"
+    >
+      View Plans
+    </a>
+
+    <button
+      type="button"
+      className="rounded-full border border-white/15 px-5 py-3 text-sm font-bold text-white opacity-50"
+      disabled
+    >
+      Manage Subscription Soon
+    </button>
+  </div>
+</div>
+
+<div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-8">
+  <h2 className="text-xl font-bold">My Projects</h2>
+  <p className="mt-2 text-white/50">Your saved projects will appear here soon.</p>
+</div>
       </div>
     </main>
   );
