@@ -1,6 +1,7 @@
 "use client";
 
 import AuthModal from "./AuthModal";
+import PricingButtons from "./PricingButtons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 import { useEffect, useRef, useState } from "react";
@@ -1180,61 +1181,7 @@ const fileName = `${Date.now()}-${safeName}`;
       Start with AI or work directly with an expert.
     </h2>
 
-    <div className="mt-16 grid gap-6 md:grid-cols-2">
-
-      <div className="rounded-[2rem] border border-[#8B5CF6]/30 bg-[#8B5CF6]/10 p-10">
-        <p className="text-sm uppercase tracking-[0.3em] text-[#A78BFA]">
-          AI Studio
-        </p>
-
-        <h3 className="mt-4 text-4xl font-black">
-          Monthly Subscription
-        </h3>
-
-        <p className="mt-4 text-white/60">
-          Generate ideas, project briefs, concepts, references and visual directions with AI.
-        </p>
-
-        <ul className="mt-8 space-y-3 text-white/80">
-          <li>✓ Unlimited AI conversations</li>
-          <li>✓ Creative guidance</li>
-          <li>✓ Architecture guidance</li>
-          <li>✓ Interior design guidance</li>
-          <li>✓ Future image generation</li>
-        </ul>
-
-        <button className="mt-8 rounded-full bg-white px-6 py-3 text-sm font-bold text-black">
-          Coming Soon
-        </button>
-      </div>
-
-      <div className="rounded-[2rem] border border-white/15 bg-white/5 p-10">
-        <p className="text-sm uppercase tracking-[0.3em] text-white/40">
-          Expert Services
-        </p>
-
-        <h3 className="mt-4 text-4xl font-black">
-          Custom Project Quote
-        </h3>
-
-        <p className="mt-4 text-white/60">
-          Work directly with a creative expert, architect or interior designer.
-        </p>
-
-        <ul className="mt-8 space-y-3 text-white/80">
-          <li>✓ Human expert review</li>
-          <li>✓ Custom proposal</li>
-          <li>✓ Project delivery</li>
-          <li>✓ Revisions & collaboration</li>
-          <li>✓ Tailored scope of work</li>
-        </ul>
-
-        <button className="mt-8 rounded-full border border-white/20 px-6 py-3 text-sm font-bold">
-          Request Quote
-        </button>
-      </div>
-
-    </div>
+    <PricingButtons />
   </div>
 </section>
 
