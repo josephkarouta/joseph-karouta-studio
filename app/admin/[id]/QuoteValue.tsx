@@ -59,23 +59,23 @@ export default function QuoteValue({
           onChange={(e) => setValue(e.target.value)}
           placeholder="5000"
           type="number"
-          className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none"
+          className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-purple-400"
         />
 
         <button
           onClick={saveQuote}
           disabled={saving}
-          className="rounded-full bg-white px-6 py-3 text-sm font-bold text-black"
+          className="rounded-full bg-white px-6 py-3 text-sm font-bold text-black transition hover:bg-white/90 disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? "Adding..." : "Add"}
         </button>
       </div>
       <div className="mt-5 flex flex-wrap gap-3">
   {quoteHistory.map((item, index) => (
     <div
-      key={index}
-      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
-    >
+  key={index}
+  className="flex w-fit items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
+>
       <div className="flex flex-col">
         <span>${Number(item.amount).toLocaleString()}</span>
 
@@ -91,7 +91,7 @@ export default function QuoteValue({
       </div>
       <button
   onClick={() => deleteQuote(index)}
-  className="text-white/30 hover:text-red-400"
+  className="mt-0 rounded-full border border-red-500/30 px-2 text-xs font-bold text-red-300 hover:bg-red-500/20"
 >
   ×
 </button>

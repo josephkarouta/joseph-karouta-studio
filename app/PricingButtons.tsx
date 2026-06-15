@@ -29,10 +29,22 @@ export default function PricingButtons() {
       const { data } = await supabase.auth.getUser();
       const userEmail = data.user?.email || "";
 
+      const userId = data.user?.id || "";
+
+if (!userId) {
+  window.location.href = "/login";
+  return;
+}
+
       const res = await fetch("/api/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, userEmail }),
+        body: JSON.stringify({
+  priceId,
+  userEmail,
+  userId,
+  planName,
+}),
       });
 
       const json = await res.json();

@@ -80,6 +80,8 @@ const [company, setCompany] = useState("");
 const [notes, setNotes] = useState("");
 const [isSubmittingLead, setIsSubmittingLead] = useState(false);
 const [files, setFiles] = useState<File[]>([]);
+const [isDragging, setIsDragging] = useState(false);
+const [isInputFocused, setIsInputFocused] = useState(false);
 const [projectBrief, setProjectBrief] = useState("");
 const [briefGenerated, setBriefGenerated] = useState(false);
 const [discoveryStarted, setDiscoveryStarted] = useState(false);
@@ -486,7 +488,25 @@ setMessages((prev) => [
 
   setIsTyping(false);
 };
+const addFiles = (selectedFiles: File[]) => {
+  const validFiles = selectedFiles.filter((file) => {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: `⚠️ ${file.name} is too large. Maximum file size is ${MAX_FILE_SIZE_MB}MB.`,
+        },
+      ]);
 
+      return false;
+    }
+
+    return true;
+  });
+
+  setFiles((prev) => [...prev, ...validFiles]);
+};
 const submitLead = async () => {
   if (!name.trim() || !email.trim() || !phone.trim()) {
     setMessages((prev) => [
@@ -501,64 +521,67 @@ const submitLead = async () => {
 
   try {
     setIsSubmittingLead(true);
+
     const uploadedUrls: string[] = [];
+
     for (const file of files) {
-  const safeName = file.name
-  .toLowerCase()
-  .replace(/[^a-z0-9.]/g, "-")
-  .replace(/-+/g, "-");
+      const safeName = file.name
+        .toLowerCase()
+        .replace(/[^a-z0-9.]/g, "-")
+        .replace(/-+/g, "-");
 
-const fileName = `${Date.now()}-${safeName}`;
+      const fileName = `${Date.now()}-${safeName}`;
 
-  const { error } = await supabase.storage
-    .from("project-files")
-    .upload(fileName, file);
+      const { error } = await supabase.storage
+        .from("project-files")
+        .upload(fileName, file);
 
-  if (error) {
-    console.error(error);
-    continue;
-  }
+      if (error) {
+        console.error(error);
+        continue;
+      }
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage
-    .from("project-files")
-    .getPublicUrl(fileName);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("project-files").getPublicUrl(fileName);
 
-  uploadedUrls.push(publicUrl);
-}
+      uploadedUrls.push(publicUrl);
+    }
 
-    const response = await fetch("/api/lead", {
+    const currentBrief =
+      projectBrief ||
+      messages
+        .filter((msg) => msg.text.includes("PROJECT BRIEF"))
+        .map((msg) => msg.text)
+        .join("\n");
+
+    const { data: userData } = await supabaseClient.auth.getUser();
+
+    const response = await fetch("/api/expert-request", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-  name,
-  email,
-  phone,
-  company,
-  notes,
-  attachments: uploadedUrls,
-  project_brief: messages
-    .filter((msg) => msg.text.includes("PROJECT BRIEF"))
-    .map((msg) => msg.text)
-    .join("\n"),
-}),
+        user_id: userData.user?.id || null,
+        name,
+        email,
+        phone,
+        company,
+        notes,
+        attachments: uploadedUrls,
+        project_brief: currentBrief,
+      }),
     });
 
     const data = await response.json();
-
-    if (data.message?.includes("PROJECT BRIEF")) {
-  setNotes(data.message);
-}
 
     if (data.success) {
       setMessages((prev) => [
         ...prev,
         {
           sender: "ai",
-          text: "✅ Thank you. Your project brief has been received. Our team will review your project and get back to you shortly.",
+          text: "✅ Thank you. Your expert request has been received. Our team will review your brief and get back to you shortly.",
         },
       ]);
 
@@ -574,7 +597,7 @@ const fileName = `${Date.now()}-${safeName}`;
         ...prev,
         {
           sender: "ai",
-          text: "Something went wrong while sending your project. Please try again.",
+          text: "Something went wrong while sending your request. Please try again.",
         },
       ]);
     }
@@ -585,7 +608,7 @@ const fileName = `${Date.now()}-${safeName}`;
       ...prev,
       {
         sender: "ai",
-        text: "Something went wrong while sending your project. Please try again.",
+        text: "Something went wrong while sending your request. Please try again.",
       },
     ]);
   } finally {
@@ -822,7 +845,23 @@ const fileName = `${Date.now()}-${safeName}`;
 )}
 <div
   id="start-project"
-  className="mx-auto mt-6 flex max-w-6xl items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-3 shadow-xl shadow-black/40 backdrop-blur-xl"
+  onDragOver={(e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }}
+  onDragLeave={() => setIsDragging(false)}
+  onDrop={(e) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    addFiles(droppedFiles);
+  }}
+  className={`mx-auto mt-6 flex max-w-6xl items-center gap-3 rounded-full border px-4 py-3 shadow-xl shadow-black/40 backdrop-blur-xl transition ${
+    isDragging || isInputFocused
+  ? "border-purple-400 bg-purple-500/20"
+  : "border-white/10 bg-white/5"
+  }`}
 >
 
 <label className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl text-white transition hover:bg-white hover:text-black">
@@ -835,25 +874,7 @@ const fileName = `${Date.now()}-${safeName}`;
     onChange={(e) => {
   if (!e.target.files) return;
 
-  const selectedFiles = Array.from(e.target.files);
-
-  const validFiles = selectedFiles.filter((file) => {
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: "ai",
-          text: `⚠️ ${file.name} is too large. Maximum file size is ${MAX_FILE_SIZE_MB}MB.`,
-        },
-      ]);
-
-      return false;
-    }
-
-    return true;
-  });
-
-  setFiles((prev) => [...prev, ...validFiles]);
+  addFiles(Array.from(e.target.files));
 
   e.target.value = "";
 }}
@@ -863,6 +884,8 @@ const fileName = `${Date.now()}-${safeName}`;
             value={message}
             disabled={briefGenerated}
             onChange={(e) => setMessage(e.target.value)}
+            onFocus={() => setIsInputFocused(true)}
+            onBlur={() => setIsInputFocused(false)}
             onKeyDown={(e) => {
               if (e.key === "Enter") sendMessage();
             }}

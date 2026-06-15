@@ -59,7 +59,7 @@ const saveActivity = async () => {
         value={activity}
         onChange={(e) => setActivity(e.target.value)}
         placeholder="Add activity..."
-        className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none"
+        className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-5 py-3 text-white outline-none focus:border-purple-400"
       />
 
       <button
@@ -75,7 +75,7 @@ const saveActivity = async () => {
       {activities.map((item) => (
         <div
           key={item.id}
-          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+          className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
         >
           <div className="flex flex-col">
             <span>{item.content}</span>
@@ -93,7 +93,7 @@ const saveActivity = async () => {
 
           <button
             onClick={() => deleteActivity(item.id)}
-            className="self-start text-white/30 hover:text-red-400"
+            className="mt-0 rounded-full border border-red-500/30 px-2 text-xs font-bold text-red-300 hover:bg-red-500/20"
         >
           ×
         </button>
