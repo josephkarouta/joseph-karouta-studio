@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
-const STARTER_PRICE_ID = "price_1TgbX1FQVAkKlXnOIIZG68y1";
-const PRO_PRICE_ID = "price_1TgbXCFQVAkKlXnO5Tdvms2W";
+const STARTER_PRICE_ID = "price_1TiZ5gFBd3BNT6dKYnlggza2";
+const PRO_PRICE_ID = "price_1TiZ5fFBd3BNT6dK5TENq7pB";
 
 export default function PricingButtons() {
   const [loading, setLoading] = useState<string | null>(null);
