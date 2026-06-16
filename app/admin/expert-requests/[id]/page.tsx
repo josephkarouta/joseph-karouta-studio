@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import ExpertRequestStatus from "./ExpertRequestStatus";
 import ConvertButton from "./ConvertButton";
 import DeleteExpertRequestButton from "./DeleteExpertRequestButton";
+import BriefCard from "@/components/brief-card";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -129,13 +130,9 @@ export default async function ExpertRequestDetailPage({
           </div>
         )}
 
-        <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-6">
-          <h2 className="text-xl font-bold">Project Brief</h2>
-
-          <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/30 p-6 text-sm leading-7 text-white/80">
-            {request.project_brief || "No brief saved."}
-          </div>
-        </div>
+        <div className="mt-4">
+  <BriefCard text={request.project_brief || "No brief saved."} />
+</div>
       </div>
     </main>
   );

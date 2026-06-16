@@ -6,6 +6,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import BriefCard from "@/components/brief-card";
 
 type Message = {
   sender: "ai" | "user";
@@ -679,38 +680,32 @@ const submitLead = async () => {
 
         <div
           ref={chatContainerRef}
-          className="mx-auto flex max-h-72 max-w-4xl flex-col gap-3 overflow-y-auto p-4"
+          className={`mx-auto flex w-full flex-col gap-3 overflow-y-auto p-4 ${
+  briefGenerated ? "max-h-[620px] max-w-6xl" : "max-h-72 max-w-4xl"
+}`}
         >
           {messages.map((msg, index) => (
             <div key={index}>
               <div
                 style={{
-                  backgroundColor: msg.sender === "ai" ? "#201A2E" : "#1f1f1f",
-                  color: "#fff",
-                  padding: "12px 16px",
-                  borderRadius: "16px",
-                  marginBottom: "12px",
-                  maxWidth: "80%",
-                  marginLeft: msg.sender === "user" ? "auto" : "0",
-                }}
+  backgroundColor: msg.text.includes("PROJECT BRIEF")
+    ? "transparent"
+    : msg.sender === "ai"
+    ? "#201A2E"
+    : "#1f1f1f",
+  color: "#fff",
+  padding: msg.text.includes("PROJECT BRIEF") ? "0" : "12px 16px",
+  borderRadius: "16px",
+  marginBottom: "12px",
+  maxWidth: msg.text.includes("PROJECT BRIEF") ? "100%" : "80%",
+  marginLeft: msg.sender === "user" ? "auto" : "0",
+  width: msg.text.includes("PROJECT BRIEF") ? "100%" : "auto",
+}}
               >
                 <div className="whitespace-pre-line">
   <div className="whitespace-pre-line text-left">
   {msg.text.includes("PROJECT BRIEF") ? (
-  <div className="text-left">
-    <div className="mb-6 text-sm font-bold uppercase tracking-[0.3em] text-[#A78BFA]">
-      📋 Project Brief
-    </div>
-
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-  <div className="whitespace-pre-line text-sm leading-7 text-white/90">
-    {msg.text
-      .replace("📋 PROJECT BRIEF", "")
-      .replace("PROJECT BRIEF", "")
-      .trim()}
-  </div>
-</div>
-  </div>
+  <BriefCard text={msg.text} />
 ) : (
   msg.text
 )}

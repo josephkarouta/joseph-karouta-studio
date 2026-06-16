@@ -9,6 +9,7 @@ import InternalNotes from "./InternalNotes";
 import EmailTemplates from "./EmailTemplates";
 import DeleteLeadButton from "./DeleteLeadButton";
 import FollowUpDate from "./FollowUpDate";
+import BriefCard from "@/components/brief-card";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -230,12 +231,8 @@ const nextLead =
   </div>
 </div>
 
-<div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-8">
-  <h2 className="mb-6 text-xl font-bold">Project Brief</h2>
-
-  <div className="whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/30 p-6 text-sm leading-7 text-white/80">
-    {lead.project_brief || "No project brief saved."}
-  </div>
+<div className="mt-8">
+  <BriefCard text={lead.project_brief || "No project brief saved."} />
 </div>
 
       </div>

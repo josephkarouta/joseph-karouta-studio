@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import BriefCard from "@/components/brief-card";
 
 export default function ProjectDetailPage({
   params,
@@ -174,9 +175,9 @@ export default function ProjectDetailPage({
             {project.created_at ? formatDate(project.created_at) : "—"}
           </p>
 
-          <div className="mt-8 whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/30 p-6 text-sm leading-7 text-white/80">
-            {project.project_brief}
-          </div>
+          <div className="mt-8">
+  <BriefCard text={project.project_brief} />
+</div>
 
           <div className="mt-6 flex flex-wrap gap-3">
             <a
