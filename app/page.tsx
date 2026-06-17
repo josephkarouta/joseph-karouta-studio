@@ -420,12 +420,13 @@ const messagesToSend = forceSummary ? updatedMessages : recentMessages;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        messages: messagesToSend.map((msg) => ({
-        role: msg.sender === "user" ? "user" : "assistant",
-        content: msg.text,
-      })),
-      forceSummary,
-  }),
+  messages: messagesToSend.map((msg) => ({
+    role: msg.sender === "user" ? "user" : "assistant",
+    content: msg.text,
+  })),
+  forceSummary,
+  userId: user?.id || null,
+}),
     });
 
     const data = await response.json();

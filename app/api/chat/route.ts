@@ -1,9 +1,27 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+function getModelForPlan(plan?: string) {
+  if (plan === "pro") {
+    return process.env.PRO_MODEL || "gpt-5.5";
+  }
+
+  if (plan === "starter") {
+    return process.env.STARTER_MODEL || "gpt-4.1";
+  }
+
+  return process.env.FREE_MODEL || "gpt-4.1-nano";
+}
 
 const systemPrompt = `
 You are Heyy Studio AI.
@@ -132,7 +150,27 @@ This brief is an AI-generated project foundation designed to accelerate discover
 
 export async function POST(req: Request) {
   try {
-    const { messages, forceSummary } = await req.json();
+    const { messages, forceSummary, userId } = await req.json();
+
+let plan = "free";
+
+if (userId) {
+  const { data } = await supabase
+    .from("user_subscriptions")
+    .select("plan, status")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .single();
+
+  if (data?.plan) {
+    plan = data.plan;
+  }
+}
+
+const selectedModel = getModelForPlan(plan);
+
+console.log("Heyy Studio AI plan:", plan);
+console.log("Heyy Studio AI model:", selectedModel);
 
     if (forceSummary) {
       const userAnswers = messages
@@ -145,9 +183,10 @@ export async function POST(req: Request) {
       });
     }
 
+    console.error("OPENAI CALLED WITH:", selectedModel);
     const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
-      max_tokens: 350,
+      model: selectedModel,
+      max_completion_tokens: 350,
       response_format: { type: "json_object" },
       messages: [
         {
