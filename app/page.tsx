@@ -706,7 +706,39 @@ const submitLead = async () => {
                 <div className="whitespace-pre-line">
   <div className="whitespace-pre-line text-left">
   {msg.text.includes("PROJECT BRIEF") ? (
-  <BriefCard text={msg.text} />
+  user ? (
+    <BriefCard text={msg.text} />
+  ) : (
+    <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#120B1F] p-8 text-left">
+      <div className="pointer-events-none select-none blur-sm opacity-40">
+        <BriefCard text={msg.text} />
+      </div>
+
+      <div className="absolute inset-0 flex items-center justify-center bg-black/55 backdrop-blur-sm">
+        <div className="max-w-md rounded-[2rem] border border-white/10 bg-black/80 p-8 text-center shadow-2xl">
+          <p className="text-xs uppercase tracking-[0.35em] text-[#A78BFA]">
+            Brief Ready
+          </p>
+
+          <h3 className="mt-4 text-3xl font-black text-white">
+            Sign in to unlock your project brief.
+          </h3>
+
+          <p className="mt-4 text-sm leading-6 text-white/60">
+            Your AI-generated brief is ready. Sign in to view it, save it, continue with AI or request expert review.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setShowAuth(true)}
+            className="mt-6 rounded-full bg-white px-6 py-3 text-sm font-bold text-black transition hover:bg-[#8B5CF6] hover:text-white"
+          >
+            Sign in to unlock
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 ) : (
   msg.text
 )}
