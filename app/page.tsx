@@ -61,9 +61,45 @@ export default function Home() {
   const supabaseClient = createSupabaseBrowserClient();
 
   useEffect(() => {
-    supabaseClient.auth.getUser().then(({ data }) => {
-      setUser(data.user);
+    supabaseClient.auth.getUser().then(async ({ data }) => {
+  setUser(data.user);
+
+  const pendingBrief = localStorage.getItem("pendingProjectBrief");
+
+  if (data.user && pendingBrief) {
+    await fetch("/api/save-project", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: data.user.id,
+        title: "AI Project Brief",
+        project_brief: pendingBrief,
+      }),
     });
+
+    setProjectBrief(pendingBrief);
+    setBriefGenerated(true);
+
+    setMessages([
+      {
+        sender: "ai",
+        text: pendingBrief,
+        options: ["Continue with AI", "Get Expert Review", "Start again"],
+      },
+    ]);
+
+    setTimeout(() => {
+  chatContainerRef.current?.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+}, 400);
+
+    localStorage.removeItem("pendingProjectBrief");
+  }
+});
   }, []);
   const [message, setMessage] = useState("");
   const [quickReplies, setQuickReplies] = useState(firstReplies);
@@ -71,6 +107,7 @@ export default function Home() {
   const [showContactForm, setShowContactForm] = useState(false);
   const [chatTopic, setChatTopic] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const lockedBriefRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [questionStep, setQuestionStep] = useState(0);
@@ -102,7 +139,18 @@ useEffect(() => {
     chatContainerRef.current.scrollTop =
       chatContainerRef.current.scrollHeight;
   }
-}, [messages, isTyping]);
+}, [messages, isTyping, briefGenerated]);
+
+useEffect(() => {
+  if (briefGenerated && !user && lockedBriefRef.current) {
+    setTimeout(() => {
+      lockedBriefRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 300);
+  }
+}, [briefGenerated, user]);
 
 const generateResponse = (input: string) => {
   const lower = input.toLowerCase();
@@ -445,6 +493,7 @@ if (shouldShowContactForm) {
 
 if (forceSummary && data.message) {
   setProjectBrief(data.message);
+  localStorage.setItem("pendingProjectBrief", data.message);
 
   const { data: userData } = await supabaseClient.auth.getUser();
 
@@ -709,7 +758,10 @@ const submitLead = async () => {
   user ? (
     <BriefCard text={msg.text} />
   ) : (
-    <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#120B1F] p-8 text-left">
+    <div
+  ref={lockedBriefRef}
+  className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#120B1F] p-8 text-left"
+>
       <div className="pointer-events-none select-none blur-sm opacity-40">
         <BriefCard text={msg.text} />
       </div>
