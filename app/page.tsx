@@ -66,8 +66,8 @@ export default function Home() {
 
   const pendingBrief = localStorage.getItem("pendingProjectBrief");
 
-  if (data.user && pendingBrief) {
-    await fetch("/api/save-project", {
+if (data.user && pendingBrief) {
+    const saveResponse = await fetch("/api/save-project", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -78,6 +78,12 @@ export default function Home() {
         project_brief: pendingBrief,
       }),
     });
+
+    const saveData = await saveResponse.json();
+
+    if (saveData.project?.id) {
+      setSavedProjectId(saveData.project.id);
+    }
 
     setProjectBrief(pendingBrief);
     setBriefGenerated(true);
@@ -121,6 +127,7 @@ const [files, setFiles] = useState<File[]>([]);
 const [isDragging, setIsDragging] = useState(false);
 const [isInputFocused, setIsInputFocused] = useState(false);
 const [projectBrief, setProjectBrief] = useState("");
+const [savedProjectId, setSavedProjectId] = useState<number | null>(null);
 const [briefGenerated, setBriefGenerated] = useState(false);
 const [discoveryStarted, setDiscoveryStarted] = useState(false);
 const [waitingForCustomAnswer, setWaitingForCustomAnswer] = useState(false);
@@ -151,6 +158,20 @@ useEffect(() => {
     }, 300);
   }
 }, [briefGenerated, user]);
+
+async function getUserPlan(userId: string) {
+  const response = await fetch("/api/get-user-plan", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ user_id: userId }),
+  });
+
+  const data = await response.json();
+
+  return data.plan || "free";
+}
 
 const generateResponse = (input: string) => {
   const lower = input.toLowerCase();
@@ -421,6 +442,40 @@ return "Tell me a little more about what you're trying to create and I'll point 
   setMessage("");
   return;
 }
+
+if (finalMessage.toLowerCase().trim() === "continue with ai") {
+  if (!user) {
+    setShowAuth(true);
+    return;
+  }
+
+  const plan = await getUserPlan(user.id);
+
+  if (plan === "free") {
+  if (savedProjectId) {
+    localStorage.setItem(
+      "afterSubscribeRedirect",
+      `/dashboard/project/${savedProjectId}/ai`
+    );
+  }
+
+  document.getElementById("pricing")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+
+  return;
+}
+
+  if (savedProjectId) {
+    window.location.href = `/dashboard/project/${savedProjectId}/ai`;
+    return;
+  }
+
+  window.location.href = "/dashboard";
+  return;
+}
+
   if (finalMessage.toLowerCase().trim() === "start again") {
   setMessages([]);
   setFiles([]);
@@ -498,17 +553,23 @@ if (forceSummary && data.message) {
   const { data: userData } = await supabaseClient.auth.getUser();
 
   if (userData.user) {
-    await fetch("/api/save-project", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        user_id: userData.user.id,
-        title: "AI Project Brief",
-        project_brief: data.message,
-      }),
-    });
+    const saveResponse = await fetch("/api/save-project", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    user_id: userData.user.id,
+    title: "AI Project Brief",
+    project_brief: data.message,
+  }),
+});
+
+const saveData = await saveResponse.json();
+
+if (saveData.project?.id) {
+  setSavedProjectId(saveData.project.id);
+}
   }
 }
 

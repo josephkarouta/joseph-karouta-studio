@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
   ],
 
   success_url: `${
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-  }/dashboard?subscribed=true`,
+  process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+}/dashboard?subscribed=true&checkout_success=true`,
 
   cancel_url: `${
     process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"

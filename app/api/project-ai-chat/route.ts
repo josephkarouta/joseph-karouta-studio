@@ -11,6 +11,40 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+async function checkUsageLimit(userId: string, plan: string) {
+  if (plan === "pro") {
+    return { allowed: true };
+  }
+
+  const monthlyLimit = plan === "starter" ? 100 : 999999;
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const { count, error } = await supabase
+    .from("ai_usage")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("usage_type", "project_chat")
+    .gte("used_at", startOfMonth.toISOString());
+
+  if (error) {
+    console.error("Usage check error:", error);
+    return { allowed: true };
+  }
+
+  if ((count || 0) >= monthlyLimit) {
+    return {
+      allowed: false,
+      limit: monthlyLimit,
+      used: count || 0,
+    };
+  }
+
+  return { allowed: true, limit: monthlyLimit, used: count || 0 };
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -89,6 +123,23 @@ export async function POST(req: Request) {
     const systemPrompt = `
 You are Heyy Studio AI Studio.
 
+You must stay focused on the saved project and Heyy Studio services.
+
+Only help with:
+- branding
+- graphic design
+- websites
+- events
+- architecture
+- interior design
+- creative strategy
+- AI creative workflows
+
+If the user asks about unrelated topics, politely refuse and redirect back to the project.
+
+Use this response:
+"I’m here to help develop this creative project. I can help with branding, design directions, moodboards, websites, interiors, architecture, events or expert-ready next steps."
+
 You help users continue developing a saved creative, branding, website, architecture, interior or event project.
 
 Use the saved project brief as your source of truth.
@@ -107,14 +158,38 @@ const { data: subscription } = await supabase
   .eq("user_id", user_id)
   .single();
 
+  const plan = subscription?.plan || "free";
+
+if (plan === "free") {
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Upgrade required",
+    },
+    { status: 403 }
+  );
+}
+
 const model =
-  subscription?.plan === "pro"
-    ? "gpt-4.1"
-    : "gpt-4.1-nano";
+  plan === "pro"
+    ? "gpt-5.5"
+    : "gpt-4.1";
+
+    const usage = await checkUsageLimit(user_id, plan);
+
+if (!usage.allowed) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: `You've reached your monthly AI chat limit of ${usage.limit} messages. Upgrade your plan to continue.`,
+    },
+    { status: 403 }
+  );
+}
 
     const completion = await openai.chat.completions.create({
       model,
-      max_tokens: 700,
+      max_completion_tokens: 700,
       messages: [
         {
           role: "system",
@@ -146,6 +221,16 @@ const model =
       .single();
 
     if (assistantMessageError) throw assistantMessageError;
+
+    const { error: usageInsertError } = await supabase
+  .from("ai_usage")
+  .insert({
+    user_id,
+    plan,
+    usage_type: "project_chat",
+  });
+
+console.log("Project AI usage insert error:", usageInsertError);
 
     return NextResponse.json({
       success: true,

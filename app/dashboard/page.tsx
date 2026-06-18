@@ -11,6 +11,20 @@ export default function DashboardPage() {
   const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const checkoutSuccess = params.get("checkout_success");
+
+  if (checkoutSuccess === "true") {
+    const redirectUrl = localStorage.getItem("afterSubscribeRedirect");
+
+    if (redirectUrl) {
+      localStorage.removeItem("afterSubscribeRedirect");
+      window.location.href = redirectUrl;
+    }
+  }
+}, []);
+
+  useEffect(() => {
     async function getUserAndProjects() {
       const { data } = await supabase.auth.getUser();
 

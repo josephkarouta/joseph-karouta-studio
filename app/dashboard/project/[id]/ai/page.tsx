@@ -2,6 +2,110 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import BriefCard from "@/components/brief-card";
+
+function getProjectQuickActions(projectBrief: string) {
+  const brief = (projectBrief || "").toLowerCase();
+
+  const isInterior =
+    brief.includes("interior") ||
+    brief.includes("space design") ||
+    brief.includes("furniture") ||
+    brief.includes("material") ||
+    brief.includes("lighting") ||
+    brief.includes("fitout") ||
+    brief.includes("fit-out") ||
+    brief.includes("floor plan");
+
+  const isArchitecture =
+    brief.includes("architecture") ||
+    brief.includes("architectural") ||
+    brief.includes("facade") ||
+    brief.includes("massing") ||
+    brief.includes("building") ||
+    brief.includes("spatial planning");
+
+  const isEvent =
+    brief.includes("event") ||
+    brief.includes("activation") ||
+    brief.includes("exhibition") ||
+    brief.includes("festival") ||
+    brief.includes("booth") ||
+    brief.includes("stage");
+
+  const isWebsite =
+    brief.includes("website") ||
+    brief.includes("landing page") ||
+    brief.includes("web design") ||
+    brief.includes("ui") ||
+    brief.includes("ux") ||
+    brief.includes("digital product");
+
+  const isBranding =
+    brief.includes("brand") ||
+    brief.includes("branding") ||
+    brief.includes("identity") ||
+    brief.includes("logo") ||
+    brief.includes("visual identity") ||
+    brief.includes("packaging");
+
+  if (isInterior) {
+    return [
+      "Create interior moodboard",
+      "Suggest material palette",
+      "Develop furniture direction",
+      "Create lighting concept",
+      "Suggest layout improvements",
+    ];
+  }
+
+  if (isArchitecture) {
+    return [
+      "Create architecture concept",
+      "Suggest facade directions",
+      "Develop spatial planning ideas",
+      "Create massing concept",
+      "Prepare architecture next steps",
+    ];
+  }
+
+  if (isEvent) {
+    return [
+      "Create event key visual ideas",
+      "Suggest stage design directions",
+      "Develop signage concepts",
+      "Create social media asset ideas",
+      "Prepare event branding checklist",
+    ];
+  }
+
+  if (isWebsite) {
+    return [
+      "Suggest website structure",
+      "Create homepage section ideas",
+      "Write landing page copy direction",
+      "Suggest UI design direction",
+      "Prepare website next steps",
+    ];
+  }
+
+  if (isBranding) {
+    return [
+      "Generate logo concepts",
+      "Create brand identity directions",
+      "Suggest colour palette ideas",
+      "Write tagline options",
+      "Prepare brand guidelines outline",
+    ];
+  }
+
+  return [
+    "Give me 5 creative directions",
+    "Create a moodboard direction",
+    "Suggest next steps",
+    "Prepare expert brief",
+  ];
+}
 
 type ProjectMessage = {
   id: number;
@@ -106,24 +210,47 @@ export default function AIWorkspacePage({
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Could not send message");
-      }
+  const isUpgradeRequired = data.error === "Upgrade required";
+  const isLimitReached = data.error?.includes("monthly AI chat limit");
 
-      setMessages((prev) => [...prev, data.message]);
-    } catch (error) {
-      console.error(error);
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: Date.now() + 1,
+      project_id: Number(id),
+      role: "assistant",
+      message: isUpgradeRequired
+        ? "To continue with AI, please choose a Starter or Pro plan. You can upgrade from the pricing section."
+        : isLimitReached
+        ? data.error
+        : "Something went wrong. Please try again.",
+      created_at: new Date().toISOString(),
+    },
+  ]);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          project_id: Number(id),
-          role: "assistant",
-          message: "Something went wrong. Please try again.",
-          created_at: new Date().toISOString(),
-        },
-      ]);
-    } finally {
+  return;
+}
+
+setMessages((prev) => [...prev, data.message]);
+    } catch (error: any) {
+  console.error(error);
+
+  const isUpgradeRequired =
+    error?.message === "Upgrade required";
+
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: Date.now() + 1,
+      project_id: Number(id),
+      role: "assistant",
+      message: isUpgradeRequired
+        ? "To continue with AI, please choose a Starter or Pro plan. You can upgrade from the pricing section."
+        : "Something went wrong. Please try again.",
+      created_at: new Date().toISOString(),
+    },
+  ]);
+} finally {
       setSending(false);
     }
   }
@@ -202,9 +329,9 @@ export default function AIWorkspacePage({
               {project.title || "AI Project Brief"}
             </h2>
 
-            <div className="mt-6 whitespace-pre-wrap rounded-2xl border border-white/10 bg-black/30 p-5 text-sm leading-7 text-white/75">
-              {cleanBrief(project.project_brief)}
-            </div>
+            <div className="mt-6">
+  <BriefCard text={project.project_brief} />
+</div>
           </aside>
 
           <section className="flex min-h-[75vh] flex-col rounded-3xl border border-white/10 bg-white/5 p-6">
@@ -246,6 +373,17 @@ export default function AIWorkspacePage({
                     }`}
                   >
                     {item.message}
+
+{item.message.includes("please choose a Starter or Pro plan") && (
+  <div className="mt-4">
+    <a
+      href="/#pricing"
+      className="inline-flex rounded-full bg-white px-5 py-3 text-sm font-bold text-black transition hover:bg-[#8B5CF6] hover:text-white"
+    >
+      View Plans
+    </a>
+  </div>
+)}
                   </div>
                 </div>
               ))}
@@ -260,12 +398,13 @@ export default function AIWorkspacePage({
               <div ref={messagesEndRef} />
             </div>
 <div className="mt-4 flex flex-wrap gap-2">
-  {[
-    "Give me 5 creative directions",
-    "Create a moodboard direction",
-    "Suggest next steps",
-    "Prepare expert brief",
-  ].map((prompt) => (
+{getProjectQuickActions(
+  `${project?.project_brief || ""} ${messages
+    .filter((item) => item.role === "user")
+    .slice(-3)
+    .map((item) => item.message)
+    .join(" ")}`
+).map((prompt) => (
     <button
       key={prompt}
       onClick={() => setInput(prompt)}

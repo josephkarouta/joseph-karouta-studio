@@ -56,29 +56,15 @@ export default function ProjectDetailPage({
   }, [id]);
 
   function formatDate(dateString: string) {
-    const cleanDate = dateString.includes("T")
-      ? dateString.split("T")[0]
-      : dateString;
-
-    const [year, month, day] = cleanDate.split("-");
-
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-
-    return `${day} ${months[Number(month) - 1]} ${year}`;
-  }
+  return new Date(dateString).toLocaleString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
 
   async function submitExpertRequest() {
     if (!project || !user) return;

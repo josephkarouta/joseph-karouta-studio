@@ -40,6 +40,9 @@ Services:
 
 Rules:
 - Speak as Heyy Studio AI.
+- Only help with design, branding, graphic design, websites, events, architecture, interior design, creative strategy and AI creative workflows.
+- If the user asks about unrelated topics such as food, dinner, health, politics, general homework, entertainment or personal life, politely redirect them back to Heyy Studio services.
+- For unrelated questions, say: "I’m here to help with creative, branding, website, interior, architecture and event projects. What would you like to create?"
 - Do not mention Joseph.
 - Keep replies short, premium and helpful.
 - Ask one question at a time.
@@ -148,6 +151,44 @@ This brief is an AI-generated project foundation designed to accelerate discover
 `;
 }
 
+async function checkUsageLimit(userId: string | null, plan: string) {
+  if (!userId) {
+    return { allowed: true };
+  }
+
+  if (plan === "pro") {
+    return { allowed: true };
+  }
+
+  const monthlyLimit = plan === "starter" ? 100 : 999999;
+
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  const { count, error } = await supabase
+    .from("ai_usage")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("usage_type", "chat")
+    .gte("used_at", startOfMonth.toISOString());
+
+  if (error) {
+    console.error("Usage check error:", error);
+    return { allowed: true };
+  }
+
+  if ((count || 0) >= monthlyLimit) {
+    return {
+      allowed: false,
+      limit: monthlyLimit,
+      used: count || 0,
+    };
+  }
+
+  return { allowed: true, limit: monthlyLimit, used: count || 0 };
+}
+
 export async function POST(req: Request) {
   try {
     const { messages, forceSummary, userId } = await req.json();
@@ -168,6 +209,15 @@ if (userId) {
 }
 
 const selectedModel = getModelForPlan(plan);
+
+const usage = await checkUsageLimit(userId || null, plan);
+
+if (!usage.allowed) {
+  return NextResponse.json({
+    message: `You've reached your monthly AI chat limit of ${usage.limit} messages. Upgrade your plan to continue.`,
+    options: ["View Plans", "Start again"],
+  });
+}
 
 console.log("Heyy Studio AI plan:", plan);
 console.log("Heyy Studio AI model:", selectedModel);
@@ -201,6 +251,18 @@ console.log("Heyy Studio AI model:", selectedModel);
 
     try {
       const parsed = JSON.parse(content);
+
+      if (userId) {
+  const { error } = await supabase
+    .from("ai_usage")
+    .insert({
+      user_id: userId,
+      plan,
+      usage_type: "chat",
+    });
+
+  console.log("AI usage insert error:", error);
+}
 
       return NextResponse.json({
         message: parsed.message || "Tell me more about your project.",
