@@ -130,6 +130,9 @@ export default function AIWorkspacePage({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
+const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -170,6 +173,7 @@ export default function AIWorkspacePage({
 
       setProject(data.project);
       setMessages(data.messages || []);
+      setGeneratedImages((data.images || []).map((image: any) => image.image_url));
       setLoading(false);
     }
 
@@ -192,6 +196,19 @@ export default function AIWorkspacePage({
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setSending(true);
+
+    const wantsImage =
+  currentInput.toLowerCase().includes("generate") ||
+  currentInput.toLowerCase().includes("moodboard") ||
+  currentInput.toLowerCase().includes("image") ||
+  currentInput.toLowerCase().includes("visual") ||
+  currentInput.toLowerCase().includes("logo concept");
+
+if (wantsImage) {
+  await generateImage(`${currentInput}. Based on this project brief: ${project?.project_brief || ""}`);
+  setSending(false);
+  return;
+}
 
     try {
       const response = await fetch("/api/project-ai-chat", {
@@ -254,6 +271,62 @@ setMessages((prev) => [...prev, data.message]);
       setSending(false);
     }
   }
+
+async function generateImage(prompt: string) {
+  if (!user || !project || generatingImage) return;
+
+  setGeneratingImage(true);
+
+  try {
+    const response = await fetch("/api/generate-image", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: user.id,
+        project_id: Number(id),
+        prompt,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          project_id: Number(id),
+          role: "assistant",
+          message:
+            data.error ||
+            "Image generation is available on Pro only. Upgrade to Pro to generate visual concepts.",
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      return;
+    }
+
+    setGeneratedImages((prev) => [data.image_url, ...prev]);
+  } catch (error) {
+    console.error(error);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        project_id: Number(id),
+        role: "assistant",
+        message: "Could not generate image. Please try again.",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+  } finally {
+    setGeneratingImage(false);
+  }
+}
 
   function cleanBrief(text: string) {
     return text
@@ -388,15 +461,62 @@ setMessages((prev) => [...prev, data.message]);
                 </div>
               ))}
 
-              {sending && (
-                <div className="flex items-center gap-3 text-sm text-white/50">
-                  <div className="h-3 w-3 animate-pulse rounded-full bg-purple-400" />
-                  Heyy Studio AI is thinking...
-                </div>
-              )}
+              {(sending || generatingImage) && (
+  <div className="flex items-center gap-3 text-sm text-white/50">
+    <div className="h-3 w-3 animate-pulse rounded-full bg-purple-400" />
+    {generatingImage
+      ? "Heyy Studio is creating your visual concept..."
+      : "Heyy Studio AI is thinking..."}
+  </div>
+)}
 
               <div ref={messagesEndRef} />
             </div>
+
+            {generatedImages.length > 0 && (
+  <div className="mt-4 grid grid-cols-1 gap-4">
+    {generatedImages.map((imageUrl, index) => (
+      <div
+        key={`${imageUrl}-${index}`}
+        className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3"
+      >
+        <button
+          type="button"
+          onClick={() => setSelectedImage(imageUrl)}
+          className="block w-full"
+        >
+          <img
+            src={imageUrl}
+            alt={`Generated concept ${index + 1}`}
+            className="w-full cursor-pointer rounded-xl"
+          />
+        </button>
+
+        <a
+          href={imageUrl}
+          download={`heyy-studio-concept-${index + 1}.png`}
+          className="mt-3 inline-flex rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-[#8B5CF6] hover:text-white"
+        >
+          Download
+        </a>
+        <button
+  type="button"
+  onClick={() =>
+    generateImage(
+      `Create a new variation of this visual concept. Keep it aligned with the same project brief: ${
+        project?.project_brief || ""
+      }`
+    )
+  }
+  className="ml-2 mt-3 inline-flex rounded-full border border-white/15 px-4 py-2 text-xs font-bold text-white hover:bg-white hover:text-black"
+>
+  Generate Variation
+</button>
+      </div>
+    ))}
+  </div>
+)}
+
 <div className="mt-4 flex flex-wrap gap-2">
 {getProjectQuickActions(
   `${project?.project_brief || ""} ${messages
@@ -407,7 +527,14 @@ setMessages((prev) => [...prev, data.message]);
 ).map((prompt) => (
     <button
       key={prompt}
-      onClick={() => setInput(prompt)}
+      onClick={() => {
+  if (prompt.toLowerCase().includes("generate") || prompt.toLowerCase().includes("moodboard")) {
+    generateImage(`${prompt}. Based on this project brief: ${project?.project_brief || ""}`);
+    return;
+  }
+
+  setInput(prompt);
+}}
       className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white hover:text-black transition"
     >
       {prompt}
@@ -437,6 +564,33 @@ setMessages((prev) => [...prev, data.message]);
           </section>
         </div>
       </div>
+      {selectedImage && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6">
+    <button
+      type="button"
+      onClick={() => setSelectedImage(null)}
+      className="absolute right-6 top-6 rounded-full bg-white px-4 py-2 text-sm font-bold text-black"
+    >
+      ✕
+    </button>
+
+    <div className="max-w-5xl">
+      <img
+        src={selectedImage}
+        alt="Generated concept preview"
+        className="max-h-[80vh] w-auto rounded-2xl"
+      />
+
+      <a
+        href={selectedImage}
+        download="heyy-studio-concept.png"
+        className="mt-4 inline-flex rounded-full bg-white px-5 py-3 text-sm font-bold text-black hover:bg-[#8B5CF6] hover:text-white"
+      >
+        Download
+      </a>
+    </div>
+  </div>
+)}
     </main>
   );
 }

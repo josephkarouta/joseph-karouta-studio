@@ -72,20 +72,29 @@ export async function POST(req: Request) {
     }
 
     if (action === "load") {
-      const { data: messages, error: messagesError } = await supabase
-        .from("project_messages")
-        .select("*")
-        .eq("project_id", project_id)
-        .order("created_at", { ascending: true });
+  const { data: messages, error: messagesError } = await supabase
+    .from("project_messages")
+    .select("*")
+    .eq("project_id", project_id)
+    .order("created_at", { ascending: true });
 
-      if (messagesError) throw messagesError;
+  if (messagesError) throw messagesError;
 
-      return NextResponse.json({
-        success: true,
-        project,
-        messages: messages || [],
-      });
-    }
+  const { data: images, error: imagesError } = await supabase
+    .from("ai_images")
+    .select("*")
+    .eq("project_id", project_id)
+    .order("created_at", { ascending: true });
+
+  if (imagesError) throw imagesError;
+
+  return NextResponse.json({
+    success: true,
+    project,
+    messages: messages || [],
+    images: images || [],
+  });
+}
 
     if (action !== "send") {
       return NextResponse.json(
