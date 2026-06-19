@@ -173,7 +173,6 @@ const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
       setProject(data.project);
       setMessages(data.messages || []);
-      setGeneratedImages((data.images || []).map((image: any) => image.image_url));
       setLoading(false);
     }
 
@@ -309,7 +308,16 @@ async function generateImage(prompt: string) {
       return;
     }
 
-    setGeneratedImages((prev) => [data.image_url, ...prev]);
+    setMessages((prev) => [
+  ...prev,
+  {
+    id: Date.now(),
+    project_id: Number(id),
+    role: "assistant",
+    message: `[IMAGE]${data.image_url}`,
+    created_at: new Date().toISOString(),
+  },
+]);
   } catch (error) {
     console.error(error);
 
@@ -445,7 +453,45 @@ async function generateImage(prompt: string) {
                         : "border border-white/10 bg-white/5 text-white/80"
                     }`}
                   >
-                    {item.message}
+                    {item.message.startsWith("[IMAGE]") ? (
+  <div className="space-y-3">
+    <button
+      type="button"
+      onClick={() => setSelectedImage(item.message.replace("[IMAGE]", ""))}
+      className="block w-full"
+    >
+      <img
+        src={item.message.replace("[IMAGE]", "")}
+        alt="Generated visual concept"
+        className="w-full cursor-pointer rounded-xl"
+      />
+    </button>
+
+    <a
+      href={item.message.replace("[IMAGE]", "")}
+      download="heyy-studio-concept.png"
+      className="inline-flex rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-[#8B5CF6] hover:text-white"
+    >
+      Download
+    </a>
+
+    <button
+      type="button"
+      onClick={() =>
+        generateImage(
+          `Create a new variation of this visual concept. Keep it aligned with the same project brief: ${
+            project?.project_brief || ""
+          }`
+        )
+      }
+      className="ml-2 inline-flex rounded-full border border-white/15 px-4 py-2 text-xs font-bold text-white hover:bg-white hover:text-black"
+    >
+      Generate Variation
+    </button>
+  </div>
+) : (
+  item.message
+)}
 
 {item.message.includes("please choose a Starter or Pro plan") && (
   <div className="mt-4">
@@ -473,57 +519,27 @@ async function generateImage(prompt: string) {
               <div ref={messagesEndRef} />
             </div>
 
-            {generatedImages.length > 0 && (
-  <div className="mt-4 grid grid-cols-1 gap-4">
-    {generatedImages.map((imageUrl, index) => (
-      <div
-        key={`${imageUrl}-${index}`}
-        className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3"
-      >
-        <button
-          type="button"
-          onClick={() => setSelectedImage(imageUrl)}
-          className="block w-full"
-        >
-          <img
-            src={imageUrl}
-            alt={`Generated concept ${index + 1}`}
-            className="w-full cursor-pointer rounded-xl"
-          />
-        </button>
-
-        <a
-          href={imageUrl}
-          download={`heyy-studio-concept-${index + 1}.png`}
-          className="mt-3 inline-flex rounded-full bg-white px-4 py-2 text-xs font-bold text-black hover:bg-[#8B5CF6] hover:text-white"
-        >
-          Download
-        </a>
-        <button
-  type="button"
-  onClick={() =>
-    generateImage(
-      `Create a new variation of this visual concept. Keep it aligned with the same project brief: ${
-        project?.project_brief || ""
-      }`
-    )
-  }
-  className="ml-2 mt-3 inline-flex rounded-full border border-white/15 px-4 py-2 text-xs font-bold text-white hover:bg-white hover:text-black"
->
-  Generate Variation
-</button>
-      </div>
-    ))}
-  </div>
-)}
-
 <div className="mt-4 flex flex-wrap gap-2">
 {getProjectQuickActions(
-  `${project?.project_brief || ""} ${messages
-    .filter((item) => item.role === "user")
-    .slice(-3)
-    .map((item) => item.message)
-    .join(" ")}`
+  (() => {
+    const meaningfulUserMessages = messages
+      .filter((item) => item.role === "user")
+      .map((item) => item.message.toLowerCase())
+      .filter(
+        (message) =>
+          !message.includes("thank") &&
+          !message.includes("nice") &&
+          !message.includes("generate") &&
+          !message.includes("moodboard") &&
+          !message.includes("variation") &&
+          !message.includes("image")
+      );
+
+    const latestDirection =
+      meaningfulUserMessages[meaningfulUserMessages.length - 1];
+
+    return latestDirection || project?.project_brief || "";
+  })()
 ).map((prompt) => (
     <button
       key={prompt}

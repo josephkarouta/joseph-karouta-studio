@@ -204,10 +204,13 @@ if (!usage.allowed) {
           role: "system",
           content: systemPrompt,
         },
-        ...(existingMessages || []).map((item: any) => ({
-  role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
-  content: item.message,
-})),
+        ...(existingMessages || [])
+  .filter((item: any) => !item.message?.startsWith("[IMAGE]"))
+  .slice(-10)
+  .map((item: any) => ({
+    role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
+    content: item.message,
+  })),
         {
           role: "user",
           content: message.trim(),

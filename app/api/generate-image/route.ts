@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       model: "gpt-image-2",
       prompt,
       size: "1536x1024",
-      quality: "high",
+      quality: "medium",
       n: 1,
     });
 
@@ -58,6 +58,12 @@ export async function POST(req: Request) {
       prompt,
       image_url: imageUrl,
     });
+
+    await supabase.from("project_messages").insert({
+  project_id,
+  role: "assistant",
+  message: `[IMAGE]${imageUrl}`,
+});
 
     return NextResponse.json({
       success: true,
