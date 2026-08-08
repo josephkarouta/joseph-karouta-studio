@@ -1,0 +1,1 @@
+export default function BrandExportLoader(){return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"><div className="text-center"><div className="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-white/20 border-t-white"/><p className="mt-6 text-white/70">Preparing your Brand Book…</p></div></div>}

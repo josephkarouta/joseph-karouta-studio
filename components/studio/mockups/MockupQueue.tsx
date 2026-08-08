@@ -1,0 +1,1 @@
+export default function MockupQueue(){return <div className="rounded-3xl border border-white/10 p-6"><h2 className="text-2xl font-black">Mockup Queue</h2></div>}

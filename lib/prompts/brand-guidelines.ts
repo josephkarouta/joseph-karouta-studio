@@ -1,0 +1,1 @@
+export const BRAND_GUIDELINES_PROMPT=`Generate a premium agency-quality brand book. Return structured JSON with sections for overview, positioning, personality, tone_of_voice, colour_psychology, typography_rationale, logo_rationale, imagery_guidelines, applications and summary.`;

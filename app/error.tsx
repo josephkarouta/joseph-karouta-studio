@@ -1,0 +1,5 @@
+"use client";
+import { useEffect } from "react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
+import { Button, ButtonLink, GlassCard } from "@/components/ui/heyy";
+export default function GlobalError({error,reset}:{error:Error&{digest?:string};reset:()=>void}){useEffect(()=>console.error(error),[error]);return <main className="grid min-h-screen place-items-center bg-[var(--background)] p-5 text-[var(--text-primary)]"><GlassCard className="max-w-xl p-9 text-center"><AlertTriangle size={36} className="mx-auto text-amber-500"/><h1 className="mt-5 text-4xl font-black tracking-[-.055em]">Something interrupted this page.</h1><p className="mt-4 text-sm font-semibold leading-7 text-[var(--text-secondary)]">Your saved project data remains in Supabase. Retry the page or return to the dashboard.</p><div className="mt-7 flex justify-center gap-3"><Button onClick={reset}><RotateCcw size={15}/>Try again</Button><ButtonLink href="/dashboard" variant="secondary">Dashboard</ButtonLink></div></GlassCard></main>}

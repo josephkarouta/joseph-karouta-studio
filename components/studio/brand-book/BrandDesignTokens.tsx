@@ -1,0 +1,1 @@
+export default function BrandDesignTokens(){return <section className="rounded-[2rem] border border-white/10 p-8"><h2 className="text-3xl font-black">Design Tokens</h2><div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">{["Radius","Spacing","Shadow","Border"].map(x=><div key={x} className="rounded-2xl border border-white/10 p-5">{x}</div>)}</div></section>}

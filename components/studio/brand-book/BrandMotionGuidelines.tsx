@@ -1,0 +1,1 @@
+export default function BrandMotionGuidelines(){return <section className="rounded-[2rem] border border-white/10 p-8"><h2 className="text-3xl font-black">Motion Guidelines</h2><p className="mt-4 text-white/60">Animation duration, easing, transitions, hover behaviour and page motion rules.</p></section>}

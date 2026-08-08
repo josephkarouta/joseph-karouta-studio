@@ -1,0 +1,1 @@
+export default function BrandImageStyle(){return <section className="rounded-[2rem] border border-white/10 p-8"><h2 className="text-3xl font-black">Image Style</h2><div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({length:4}).map((_,i)=><div key={i} className="aspect-square rounded-2xl bg-white/5 border border-white/10"/>)}</div></section>}

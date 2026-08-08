@@ -1,0 +1,1 @@
+export function useMockupQueue(){return{jobs:[],enqueue:()=>{},cancel:()=>{}};}

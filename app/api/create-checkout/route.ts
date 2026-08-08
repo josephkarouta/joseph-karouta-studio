@@ -1,0 +1,84 @@
+import "server-only";
+
+import { NextResponse } from "next/server";
+import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
+import {
+  findBestSubscription,
+  getStripe,
+  hasManagedSubscription,
+  resolveStripeCustomer,
+} from "@/lib/billing/stripe";
+
+type SubscriptionPlan = "starter" | "pro";
+
+function getPlanPriceId(plan: SubscriptionPlan) {
+  return plan === "starter"
+    ? process.env.STRIPE_STARTER_PRICE_ID_USD
+    : process.env.STRIPE_PRO_PRICE_ID_USD;
+}
+
+export async function POST(request: Request) {
+  try {
+    const { user, admin } = await requireApiUser(request);
+    const body = await request.json();
+    const normalizedPlan = String(body.planName || "").toLowerCase() as SubscriptionPlan;
+
+    if (!(normalizedPlan === "starter" || normalizedPlan === "pro")) {
+      return NextResponse.json({ error: "Invalid subscription plan." }, { status: 400 });
+    }
+
+    const priceId = getPlanPriceId(normalizedPlan);
+    if (!priceId) {
+      return NextResponse.json(
+        { error: `The USD Stripe price for ${normalizedPlan} is not configured yet.` },
+        { status: 503 },
+      );
+    }
+
+    const stripe = getStripe();
+    const { customer } = await resolveStripeCustomer({
+      stripe,
+      admin,
+      user,
+      createIfMissing: true,
+    });
+
+    if (!customer) {
+      return NextResponse.json({ error: "Unable to create the Stripe customer." }, { status: 500 });
+    }
+
+    const currentSubscription = await findBestSubscription(stripe, customer.id);
+    if (hasManagedSubscription(currentSubscription)) {
+      return NextResponse.json(
+        {
+          error: "You already have a subscription. Use Manage Billing to change or cancel it.",
+          code: "ACTIVE_SUBSCRIPTION",
+          manageBilling: true,
+        },
+        { status: 409 },
+      );
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "subscription",
+      customer: customer.id,
+      client_reference_id: user.id,
+      metadata: { user_id: user.id, plan: normalizedPlan },
+      subscription_data: { metadata: { user_id: user.id, plan: normalizedPlan } },
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      success_url: `${siteUrl}/billing?subscribed=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteUrl}/pricing?checkout=cancelled`,
+    });
+
+    return NextResponse.json({ url: session.url });
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    console.error("Stripe checkout error:", error);
+    return NextResponse.json({ error: "Could not create checkout session." }, { status: 500 });
+  }
+}

@@ -1,0 +1,1 @@
+export default function BrandExportSuccess(){return <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-6"><h3 className="text-xl font-black">Brand Book Ready</h3><p className="mt-2 text-white/60">Your professional Brand Book is ready to print or save as PDF.</p></div>}

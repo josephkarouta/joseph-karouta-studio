@@ -1,0 +1,1 @@
+export default function BrandVehicleMockup(){return <section className="rounded-[2rem] border border-white/10 p-8"><h2 className="text-3xl font-black">Vehicle Branding</h2><div className="mt-6 aspect-[16/7] rounded-3xl border border-white/10 bg-white/5"></div></section>}

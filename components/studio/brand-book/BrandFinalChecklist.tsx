@@ -1,0 +1,1 @@
+export default function BrandFinalChecklist(){return <section className="rounded-[2rem] border border-emerald-500/20 bg-emerald-500/10 p-8"><h2 className="text-3xl font-black">Delivery Checklist</h2><ul className="mt-5 space-y-2 text-white/70"><li>✓ Logo package</li><li>✓ Colour system</li><li>✓ Typography</li><li>✓ Mockups</li><li>✓ PDF ready</li></ul></section>}

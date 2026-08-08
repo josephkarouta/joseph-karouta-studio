@@ -1,0 +1,1 @@
+export default function BrandGridSystem(){return <section className="rounded-[2rem] border border-white/10 p-8"><h2 className="text-3xl font-black">Grid System</h2><div className="mt-6 aspect-[16/9] rounded-2xl border border-dashed border-white/20 bg-white/5"></div></section>}

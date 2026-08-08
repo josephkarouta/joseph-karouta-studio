@@ -1,0 +1,1 @@
+export default function MockupCreditsCard(){return <div className="rounded-2xl border border-white/10 p-4">Credits Remaining</div>}

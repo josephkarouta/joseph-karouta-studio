@@ -1,0 +1,1 @@
+export type MockupType="website"|"packaging"|"billboard"|"vehicle"|"social";

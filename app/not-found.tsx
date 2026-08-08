@@ -1,0 +1,5 @@
+import { Compass } from "lucide-react";
+import SiteHeader from "@/components/site-header";
+import SiteFooter from "@/components/site-footer";
+import { ButtonLink, GlassCard } from "@/components/ui/heyy";
+export default function NotFound(){return <main className="heyy-page"><SiteHeader/><section className="grid min-h-[calc(100vh-var(--header-height))] place-items-center px-5 pt-[var(--header-height)]"><GlassCard className="max-w-2xl p-9 text-center"><Compass size={36} className="mx-auto text-[var(--accent-strong)]"/><p className="mt-5 text-[.65rem] font-black uppercase tracking-[.2em] text-[var(--accent-strong)]">404</p><h1 className="mt-3 text-5xl font-black tracking-[-.065em]">This page is not part of the workspace.</h1><p className="mt-4 text-sm font-semibold leading-7 text-[var(--text-secondary)]">Return to the homepage or open your dashboard to continue a saved project.</p><div className="mt-7 flex flex-wrap justify-center gap-3"><ButtonLink href="/">Homepage</ButtonLink><ButtonLink href="/dashboard" variant="secondary">Dashboard</ButtonLink></div></GlassCard></section><SiteFooter/></main>}

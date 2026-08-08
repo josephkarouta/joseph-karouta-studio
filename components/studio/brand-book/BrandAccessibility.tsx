@@ -1,0 +1,1 @@
+export default function BrandAccessibility(){return <section className="rounded-[2rem] border border-white/10 p-8"><h2 className="text-3xl font-black">Accessibility</h2><div className="mt-6 grid md:grid-cols-3 gap-4">{["Contrast","Typography","Spacing"].map(x=><div key={x} className="rounded-2xl border border-white/10 p-5">{x}</div>)}</div></section>}

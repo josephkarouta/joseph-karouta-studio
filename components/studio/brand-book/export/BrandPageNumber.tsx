@@ -1,0 +1,1 @@
+export default function BrandPageNumber({page,total}:{page:number,total:number}){return <div className="mt-8 flex justify-between text-xs uppercase tracking-[0.25em] text-white/35"><span>Heyy Studio Brand Book</span><span>{page} / {total}</span></div>}

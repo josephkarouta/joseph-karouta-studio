@@ -1,0 +1,1 @@
+export function calculateMockupCost(type:string){return 0;}
