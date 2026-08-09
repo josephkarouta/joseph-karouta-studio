@@ -19,3 +19,7 @@ tsconfig.tsbuildinfo
 
 # personal Claude Code settings (not shared with collaborators)
 .claude/settings.local.json
+
+.netlify/
+Heyy_V13_*/
+V13_FILE_MANIFEST.txt
