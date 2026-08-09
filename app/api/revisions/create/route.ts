@@ -9,6 +9,24 @@ import {
 } from "@/lib/production/messages";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 
+type RevisionPolicy =
+  | {
+      enforced: false;
+      included: null;
+      used: number;
+      remaining: null;
+      extraRevisionFee: null;
+      currency: null;
+    }
+  | {
+      enforced: true;
+      included: number;
+      used: number;
+      remaining: number;
+      extraRevisionFee: number;
+      currency: string;
+    };
+
 export async function POST(request: NextRequest) {
   let createdRevisionId: string | null = null;
 
@@ -135,6 +153,23 @@ export async function POST(request: NextRequest) {
 
     if (countError) throw countError;
 
+    const revisionPolicy = await loadRevisionPolicy(admin, job, count || 0);
+    if (revisionPolicy.enforced && revisionPolicy.remaining <= 0) {
+      const feeText = revisionPolicy.extraRevisionFee > 0
+        ? ` Additional revisions are quoted at ${revisionPolicy.currency} ${revisionPolicy.extraRevisionFee}.`
+        : " Contact Heyy Studio if you need additional changes.";
+
+      return NextResponse.json(
+        {
+          success: false,
+          code: "REVISION_LIMIT_REACHED",
+          error: `Your ${revisionPolicy.included} included revision${revisionPolicy.included === 1 ? " has" : "s have"} been used.${feeText}`,
+          revisionPolicy,
+        },
+        { status: 409 },
+      );
+    }
+
     const revisionNumber = (count || 0) + 1;
     const now = new Date().toISOString();
 
@@ -257,3 +292,51 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+async function loadRevisionPolicy(admin: any, job: any, used: number): Promise<RevisionPolicy> {
+  const quoteId = String(job?.payment_quote_id || job?.metadata?.quote_id || "").trim();
+
+  let quote: any = null;
+  if (quoteId) {
+    const result = await admin
+      .from("workspace_quotes")
+      .select("id,included_revisions,extra_revision_fee,currency")
+      .eq("id", quoteId)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    quote = result.data;
+  }
+
+  if (!quote) {
+    const result = await admin
+      .from("workspace_quotes")
+      .select("id,included_revisions,extra_revision_fee,currency")
+      .eq("production_job_id", job.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    quote = result.data;
+  }
+
+  if (!quote || quote.included_revisions === null || quote.included_revisions === undefined) {
+    return {
+      enforced: false,
+      included: null,
+      used,
+      remaining: null,
+      extraRevisionFee: null,
+      currency: null,
+    };
+  }
+
+  const included = Math.max(0, Math.trunc(Number(quote.included_revisions) || 0));
+  return {
+    enforced: true,
+    included,
+    used,
+    remaining: Math.max(0, included - used),
+    extraRevisionFee: Number(quote.extra_revision_fee || 0),
+    currency: String(quote.currency || "USD"),
+  };
+}
+

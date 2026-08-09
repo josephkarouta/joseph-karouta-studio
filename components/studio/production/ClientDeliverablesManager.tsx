@@ -9,6 +9,7 @@ type ClientDeliverablesManagerProps = {
   onApproveDelivery: () => void | Promise<void>;
   approving?: boolean;
   approved?: boolean;
+  revisionLimitReached?: boolean;
 };
 
 export default function ClientDeliverablesManager({
@@ -18,6 +19,7 @@ export default function ClientDeliverablesManager({
   onApproveDelivery,
   approving = false,
   approved = false,
+  revisionLimitReached = false,
 }: ClientDeliverablesManagerProps) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
@@ -151,10 +153,11 @@ export default function ClientDeliverablesManager({
                     <button
                       type="button"
                       onClick={onRequestRevision}
-                      disabled={approving}
+                      disabled={approving || revisionLimitReached}
                       className="heyy-send-revision"
+                      title={revisionLimitReached ? "Your included revision limit has been reached." : undefined}
                     >
-                      Send revision
+                      {revisionLimitReached ? "Revision limit reached" : "Send revision"}
                     </button>
 
                     <button

@@ -58,12 +58,25 @@ export async function processQuotePayment(
   const paymentIntentId =
     typeof session.payment_intent === "string" ? session.payment_intent : null;
 
-  const { data: existingPayment, error: existingPaymentError } = await supabase
+  let { data: existingPayment, error: existingPaymentError } = await supabase
     .from("payments")
     .select("id")
-    .eq("stripe_session_id", session.id)
+    .eq("idempotency_stripe_session_id", session.id)
     .limit(1)
     .maybeSingle();
+
+  // Compatibility fallback for historic rows created before the V2 idempotency migration.
+  if (!existingPayment && !existingPaymentError) {
+    const legacyPayment = await supabase
+      .from("payments")
+      .select("id")
+      .eq("stripe_session_id", session.id)
+      .limit(1)
+      .maybeSingle();
+
+    existingPayment = legacyPayment.data;
+    existingPaymentError = legacyPayment.error;
+  }
 
   if (existingPaymentError) {
     throw new Error(
@@ -75,6 +88,7 @@ export async function processQuotePayment(
     const { error: paymentError } = await supabase.from("payments").insert({
       quote_id: quote.id,
       stripe_session_id: session.id,
+      idempotency_stripe_session_id: session.id,
       stripe_payment_intent: paymentIntentId,
       provider: "stripe",
       amount: Number(quote.amount),
@@ -164,11 +178,51 @@ export async function processQuotePayment(
 
   let productionJob = (possibleJobs || []).find(
     (job: any) =>
+      job?.payment_quote_id === quote.id ||
       job?.metadata?.quote_id === quote.id ||
       (quote.studio_request_id &&
         job?.metadata?.studio_request_id === quote.studio_request_id &&
         productionServiceMatches(job, productionService)),
   );
+
+  // V2 uses a dedicated payment_quote_id column. Historic duplicate jobs can
+  // remain untouched; exactly one canonical row carries this unique key.
+  if (!productionJob) {
+    const { data: canonicalJob, error: canonicalJobError } = await supabase
+      .from("production_jobs")
+      .select("*")
+      .eq("payment_quote_id", quote.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (canonicalJobError) {
+      throw new Error(
+        `Could not check the canonical quote production job: ${errorMessage(canonicalJobError)}`,
+      );
+    }
+
+    productionJob = canonicalJob || null;
+  }
+
+  // Legacy metadata fallback keeps old records compatible.
+  // This explicit lookup also makes normal retries cheap and keeps older jobs compatible.
+  if (!productionJob) {
+    const { data: quoteJob, error: quoteJobError } = await supabase
+      .from("production_jobs")
+      .select("*")
+      .contains("metadata", { quote_id: quote.id })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (quoteJobError) {
+      throw new Error(
+        `Could not check the quote production job: ${errorMessage(quoteJobError)}`,
+      );
+    }
+
+    productionJob = quoteJob || null;
+  }
 
   if (!productionJob) {
     const metadata = {
@@ -195,18 +249,52 @@ export async function processQuotePayment(
         delivery_status: "Paid",
         preview_image: studioRequest?.preview_image || null,
         notes: studioRequest?.notes || "",
+        payment_quote_id: quote.id,
         metadata,
       })
       .select()
       .single();
 
-    if (jobError || !data) {
+    if (jobError?.code === "23505") {
+      // Two webhook/reconciliation executions can reach this insert together.
+      // The database lets only one win; the loser reuses that exact job.
+      let { data: existingJobAfterRace, error: existingJobAfterRaceError } =
+        await supabase
+          .from("production_jobs")
+          .select("*")
+          .eq("payment_quote_id", quote.id)
+          .limit(1)
+          .maybeSingle();
+
+      if (!existingJobAfterRace && !existingJobAfterRaceError) {
+        const legacyRaceJob = await supabase
+          .from("production_jobs")
+          .select("*")
+          .contains("metadata", { quote_id: quote.id })
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        existingJobAfterRace = legacyRaceJob.data;
+        existingJobAfterRaceError = legacyRaceJob.error;
+      }
+
+      if (existingJobAfterRaceError || !existingJobAfterRace) {
+        throw new Error(
+          `Production job already existed but could not be reloaded: ${errorMessage(
+            existingJobAfterRaceError || jobError,
+          )}`,
+        );
+      }
+
+      productionJob = existingJobAfterRace;
+    } else if (jobError || !data) {
       throw new Error(
         `Production job creation failed: ${errorMessage(jobError)}`,
       );
+    } else {
+      productionJob = data;
     }
-
-    productionJob = data;
   }
 
   const { error: quoteUpdateError } = await supabase
@@ -246,6 +334,7 @@ export async function processQuotePayment(
       description: "Quote paid and production job created.",
       status: "Assigned",
       created_by: "System",
+      event_key: "payment_received",
     });
 
     if (error && error.code !== "23505") throw error;
@@ -257,6 +346,7 @@ export async function processQuotePayment(
       sender_type: "system",
       sender_name: "Heyy Studio",
       message: "Payment received. Your production job has started.",
+      event_key: "payment_received",
     });
 
     if (error && error.code !== "23505") throw error;

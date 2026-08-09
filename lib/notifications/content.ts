@@ -137,6 +137,19 @@ export function buildInAppNotification(
         metadata,
       };
 
+    case "production.message.studio": {
+      const senderName = clean(payload.metadata?.senderName) || "Heyy Studio";
+      const message = truncate(clean(payload.metadata?.message), 220);
+      return {
+        type: payload.event,
+        title: `${senderName} sent a production message`,
+        message: message || `A new production message is available for ${projectName}.`,
+        href: `${href}#production-messages`,
+        metadata,
+      };
+    }
+
+
     case "production.assigned":
       return {
         type: payload.event,

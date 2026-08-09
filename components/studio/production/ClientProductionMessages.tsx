@@ -24,6 +24,7 @@ type Message = {
 type Props = {
   jobId: string;
   onCountChange?: (count: number) => void;
+  onUnreadChange?: (count: number) => void;
   embedded?: boolean;
 };
 
@@ -32,6 +33,7 @@ const MAX_FILES = 5;
 export default function ClientProductionMessages({
   jobId,
   onCountChange,
+  onUnreadChange,
   embedded = false,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -66,6 +68,7 @@ export default function ClientProductionMessages({
         const nextMessages = Array.isArray(data.messages) ? data.messages : [];
         setMessages(nextMessages);
         onCountChange?.(nextMessages.length);
+        onUnreadChange?.(Number(data.unreadCount || 0));
         setError("");
       } catch (loadError) {
         if (!silent) {
@@ -79,7 +82,7 @@ export default function ClientProductionMessages({
         if (!silent) setLoading(false);
       }
     },
-    [jobId, onCountChange],
+    [jobId, onCountChange, onUnreadChange],
   );
 
   useEffect(() => {

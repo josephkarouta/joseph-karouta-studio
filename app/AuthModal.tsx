@@ -4,7 +4,6 @@ import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function AuthModal({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,33 +16,64 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
 
   const supabase = createSupabaseBrowserClient();
 
+  function currentNextPath() {
+    if (typeof window === "undefined") return "/dashboard";
+    return `${window.location.pathname}${window.location.search}` || "/dashboard";
+  }
+
+  function signupUrl(verifyEmail?: string) {
+    const params = new URLSearchParams({ next: currentNextPath() });
+    if (verifyEmail) params.set("verify", verifyEmail.trim().toLowerCase());
+    return `/signup?${params.toString()}`;
+  }
+
   async function handleEmailSubmit() {
     setLoading(true);
     setMessage("");
     setIsError(false);
-    if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) { setMessage(error.message); setIsError(true); }
-      else { onClose(); }
-    } else {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) { setMessage(error.message); setIsError(true); }
-      else { setMessage("Check your email to confirm your account!"); }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (error) {
+      if (/email.*not.*confirmed|email.*confirmation/i.test(error.message || "")) {
+        window.location.href = signupUrl(normalizedEmail);
+        return;
+      }
+      setMessage(error.message);
+      setIsError(true);
+      setLoading(false);
+      return;
     }
+
+    onClose();
     setLoading(false);
   }
 
-async function handleGoogleLogin() {
-  await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: `${window.location.origin}/`,
-      queryParams: {
-        prompt: "select_account",
+  async function handleGoogleLogin() {
+    setLoading(true);
+    setMessage("");
+
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", currentNextPath());
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: callbackUrl.toString(),
+        queryParams: { prompt: "select_account" },
       },
-    },
-  });
-}
+    });
+
+    if (error) {
+      setMessage(error.message);
+      setIsError(true);
+      setLoading(false);
+    }
+  }
 
   const inputStyle = (focused: boolean): React.CSSProperties => ({
     width: "100%",
@@ -61,48 +91,57 @@ async function handleGoogleLogin() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-3xl border border-white/10 p-10 shadow-2xl" style={{ backgroundColor: "#0a0a0a" }}>
-
+      <div
+        className="relative z-10 w-full max-w-md rounded-3xl border border-white/10 p-10 shadow-2xl"
+        style={{ backgroundColor: "#0a0a0a" }}
+      >
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-3xl font-black text-white">
-            {mode === "login" ? "Welcome back" : "Create account"}
-          </h2>
-          <button onClick={onClose} className="text-white/30 hover:text-white transition text-2xl leading-none">
+          <h2 className="text-3xl font-black text-white">Welcome back</h2>
+          <button
+            onClick={onClose}
+            className="text-2xl leading-none text-white/30 transition hover:text-white"
+            aria-label="Close sign in"
+          >
             &times;
           </button>
         </div>
 
-        <p className="text-white/40 mb-6">
-          {mode === "login" ? "Sign in to your Heyy Studio account" : "Start your Heyy Studio journey"}
-        </p>
+        <p className="mb-6 text-white/40">Sign in to your Heyy Studio account</p>
 
         <div className="flex flex-col gap-4">
           <input
             type="email"
             placeholder="Email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(event) => setEmail(event.target.value)}
             onFocus={() => setEmailFocused(true)}
             onBlur={() => setEmailFocused(false)}
             style={inputStyle(emailFocused)}
+            autoComplete="email"
           />
           <input
             type="password"
             placeholder="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => setPassword(event.target.value)}
             onFocus={() => setPasswordFocused(true)}
             onBlur={() => setPasswordFocused(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void handleEmailSubmit();
+            }}
             style={inputStyle(passwordFocused)}
+            autoComplete="current-password"
           />
 
           {message && (
-            <p style={{ fontSize: "14px", color: isError ? "#f87171" : "#c084fc" }}>{message}</p>
+            <p style={{ fontSize: "14px", color: isError ? "#f87171" : "#c084fc" }}>
+              {message}
+            </p>
           )}
 
           <button
-            onClick={handleEmailSubmit}
-            disabled={loading}
+            onClick={() => void handleEmailSubmit()}
+            disabled={loading || !email || !password}
             onMouseEnter={() => setSignInHover(true)}
             onMouseLeave={() => setSignInHover(false)}
             style={{
@@ -118,7 +157,7 @@ async function handleGoogleLogin() {
               opacity: loading ? 0.5 : 1,
             }}
           >
-            {loading ? (mode === "login" ? "Signing in..." : "Creating account...") : (mode === "login" ? "Sign In" : "Create Account")}
+            {loading ? "Signing in..." : "Sign In"}
           </button>
 
           <div className="flex items-center gap-4">
@@ -128,7 +167,8 @@ async function handleGoogleLogin() {
           </div>
 
           <button
-            onClick={handleGoogleLogin}
+            onClick={() => void handleGoogleLogin()}
+            disabled={loading}
             onMouseEnter={() => setGoogleHover(true)}
             onMouseLeave={() => setGoogleHover(false)}
             style={{
@@ -147,12 +187,15 @@ async function handleGoogleLogin() {
           </button>
 
           <p className="text-center text-sm text-white/40">
-            {mode === "login" ? "Don't have an account? " : "Already have an account? "}
+            Don&apos;t have an account?{" "}
             <button
-              onClick={() => { setMode(mode === "login" ? "signup" : "login"); setMessage(""); }}
+              type="button"
+              onClick={() => {
+                window.location.href = signupUrl();
+              }}
               className="text-purple-400 hover:underline"
             >
-              {mode === "login" ? "Sign up" : "Sign in"}
+              Create an account
             </button>
           </p>
         </div>

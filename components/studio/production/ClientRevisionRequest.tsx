@@ -13,6 +13,15 @@ type ClientRevisionRequestProps = {
   onRevisionCountChange?: (count: number) => void;
 };
 
+type RevisionPolicy = {
+  enforced: boolean;
+  included: number | null;
+  used: number;
+  remaining: number | null;
+  extraRevisionFee: number | null;
+  currency: string | null;
+};
+
 const MAX_REVISION_FILES = 5;
 
 export default function ClientRevisionRequest({
@@ -25,6 +34,8 @@ export default function ClientRevisionRequest({
 }: ClientRevisionRequestProps) {
   const [revisions, setRevisions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [revisionPolicy, setRevisionPolicy] = useState<RevisionPolicy | null>(null);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
@@ -40,10 +51,19 @@ export default function ClientRevisionRequest({
     setLoading(true);
 
     try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Your session expired. Sign in again.");
+
       const response = await fetch(
         `/api/revisions/list?production_job_id=${encodeURIComponent(
           productionJobId,
         )}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        },
       );
 
       const data = await response.json();
@@ -54,9 +74,12 @@ export default function ClientRevisionRequest({
 
       const nextRevisions = data.revisions || [];
       setRevisions(nextRevisions);
+      setRevisionPolicy(data.revisionPolicy || null);
+      setLoadError("");
       onRevisionCountChange?.(nextRevisions.length);
     } catch (error) {
       console.error("Load client revisions error:", error);
+      setLoadError(error instanceof Error ? error.message : "Could not load revisions");
     } finally {
       setLoading(false);
     }
@@ -71,14 +94,18 @@ export default function ClientRevisionRequest({
     return revisions[revisions.length - 1];
   }, [revisions]);
 
+  const revisionLimitReached = Boolean(
+    revisionPolicy?.enforced && Number(revisionPolicy.remaining || 0) <= 0,
+  );
+
   useEffect(() => {
-    if (openComposerSignal > 0 && !disabled) {
+    if (openComposerSignal > 0 && !disabled && !revisionLimitReached) {
       setPreviousRevisionId(null);
       setMessage("");
       setFiles([]);
       setShowComposer(true);
     }
-  }, [openComposerSignal, disabled]);
+  }, [openComposerSignal, disabled, revisionLimitReached]);
 
   async function requestRevision() {
     if (!message.trim()) return;
@@ -227,6 +254,28 @@ export default function ClientRevisionRequest({
           font-family: inherit !important;
           cursor: pointer;
         }
+
+        .heyy-revision-policy {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          border: 1px solid #e6dcf7;
+          border-radius: 16px;
+          background: #faf7ff;
+          padding: 12px 14px;
+          color: #5d5268;
+          font-size: 12px;
+          font-weight: 750;
+        }
+
+        .heyy-revision-policy strong { color: #6d28d9; }
+        .heyy-revision-policy[data-limit="true"] {
+          border-color: #f1c9a2;
+          background: #fff8ee;
+          color: #8a4b14;
+        }
+        .heyy-revision-policy[data-limit="true"] strong { color: #b45309; }
 
         .heyy-revision-loading {
           border: 1px solid #d9c7ff !important;
@@ -735,6 +784,19 @@ export default function ClientRevisionRequest({
           color: #c7bfce !important;
         }
 
+        [data-theme="dark"] .heyy-revision-policy {
+          border-color: #4f3c66 !important;
+          background: #241a31 !important;
+          color: #d7cfdf !important;
+        }
+        [data-theme="dark"] .heyy-revision-policy strong { color: #c4a3ff !important; }
+        [data-theme="dark"] .heyy-revision-policy[data-limit="true"] {
+          border-color: #7c4a25 !important;
+          background: #2c1d14 !important;
+          color: #f5c18e !important;
+        }
+        [data-theme="dark"] .heyy-revision-policy[data-limit="true"] strong { color: #fdba74 !important; }
+
         [data-theme="dark"] .heyy-revision-composer textarea {
           border-color: #554b60 !important;
           background: #17131d !important;
@@ -754,7 +816,26 @@ export default function ClientRevisionRequest({
         }
       `}</style>
 
-      {loading ? (
+      {revisionPolicy?.enforced && (
+        <div className="heyy-revision-policy" data-limit={revisionLimitReached ? "true" : "false"}>
+          <span>
+            <strong>{revisionPolicy.used} of {revisionPolicy.included}</strong> included revision{revisionPolicy.included === 1 ? "" : "s"} used
+          </span>
+          <span>
+            {revisionLimitReached
+              ? revisionPolicy.extraRevisionFee && revisionPolicy.extraRevisionFee > 0
+                ? `Additional revision: ${revisionPolicy.currency || "USD"} ${revisionPolicy.extraRevisionFee}`
+                : "Included revision limit reached"
+              : `${revisionPolicy.remaining} remaining`}
+          </span>
+        </div>
+      )}
+
+      {loadError ? (
+        <div className="heyy-revision-loading">
+          Could not load revision history. Refresh the production workspace and try again.
+        </div>
+      ) : loading ? (
         <div className="heyy-revision-loading">
           Loading revision history...
         </div>
@@ -775,7 +856,7 @@ export default function ClientRevisionRequest({
         )
       )}
 
-      {showComposer && (
+      {showComposer && !revisionLimitReached && (
         <section className="heyy-revision-composer">
           <div className="heyy-revision-composer-head">
             <p className="heyy-revision-composer-title">

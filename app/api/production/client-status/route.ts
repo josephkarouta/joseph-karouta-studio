@@ -5,6 +5,10 @@ import {
 } from "@/lib/production/service-registry";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 
+// Never return private Admin-only production fields (especially internal_notes)
+// through the client status endpoint. Add client-visible fields explicitly here.
+const CLIENT_JOB_FIELDS = "id,project_id,project_name,user_id,studio,assigned_studio,service_id,service,status,priority,delivery_status,preview_image,notes,created_at,updated_at,client_approved_at,payment_quote_id" as const;
+
 export async function GET(request: NextRequest) {
   try {
     const { user, admin } = await requireApiUser(request);
@@ -37,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     const { data: projectJobs, error: jobError } = await admin
       .from("production_jobs")
-      .select("*")
+      .select(CLIENT_JOB_FIELDS)
       .eq("project_id", projectId)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
@@ -60,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     const { data: timeline, error: timelineError } = await admin
       .from("production_timeline")
-      .select("*")
+      .select("id,production_job_id,title,description,status,created_by,created_at")
       .eq("production_job_id", job.id)
       .order("created_at", { ascending: true });
 

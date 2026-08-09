@@ -10,6 +10,7 @@ type ProductionRevisionsProps = {
 export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
   const [revisions, setRevisions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   async function loadRevisions() {
     if (!job?.id) return;
@@ -28,8 +29,10 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
       }
 
       setRevisions(data.revisions || []);
+      setLoadError("");
     } catch (error) {
       console.error("Load revisions error:", error);
+      setLoadError(error instanceof Error ? error.message : "Could not load revisions");
     } finally {
       setLoading(false);
     }
@@ -295,7 +298,19 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
       </div>
 
       <div className="mt-4">
-        {loading ? (
+        {loadError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
+            <p className="font-black">Could not load revisions.</p>
+            <p className="mt-1 text-xs">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => void loadRevisions()}
+              className="mt-3 rounded-full border border-rose-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.12em]"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <p className="rounded-2xl bg-violet-50 p-5 text-sm text-slate-500">
             Loading revisions...
           </p>

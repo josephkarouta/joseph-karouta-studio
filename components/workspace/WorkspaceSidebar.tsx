@@ -11,6 +11,7 @@ import {
   CreditCard,
   FolderKanban,
   FolderOpen,
+  FileClock,
   Gauge,
   ImageIcon,
   Images,
@@ -70,7 +71,8 @@ export default function WorkspaceSidebar({
   const workspaceItems: NavigationItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: Gauge, activePrefixes: ["/dashboard"] },
     { label: "Projects", href: "/dashboard#projects", icon: FolderKanban },
-    { label: "Assets", href: "/dashboard#assets", icon: FolderOpen },
+    { label: "Assets", href: "/dashboard/assets", icon: FolderOpen, activePrefixes: ["/dashboard/assets"] },
+    { label: "Versions", href: "/dashboard/versions", icon: FileClock, activePrefixes: ["/dashboard/versions"] },
     { label: "Production", href: "/dashboard#production", icon: Blocks },
   ];
 

@@ -36,6 +36,15 @@ type ProductionStage = {
   description: string;
 };
 
+type RevisionPolicy = {
+  enforced: boolean;
+  included: number | null;
+  used: number;
+  remaining: number | null;
+  extraRevisionFee: number | null;
+  currency: string | null;
+};
+
 const STAGES: ProductionStage[] = [
   { label: "Requested", description: "Scope received" },
   { label: "Paid", description: "Production confirmed" },
@@ -57,8 +66,10 @@ export default function ClientProductionWorkspace({
 }: ClientProductionWorkspaceProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [revisionComposerSignal, setRevisionComposerSignal] = useState(0);
   const [revisionCount, setRevisionCount] = useState(0);
+  const [revisionPolicy, setRevisionPolicy] = useState<RevisionPolicy | null>(null);
   const [approvingDelivery, setApprovingDelivery] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const revisionSectionRef = useRef<HTMLDivElement | null>(null);
@@ -73,11 +84,11 @@ export default function ClientProductionWorkspace({
     () => [
       {
         id: "production-requested",
-        title: "Production requested",
-        description: "Your approved concept was sent to Heyy Studio production.",
+        title: "Production request sent",
+        description: "Heyy Studio received the approved concept and production scope.",
         created_at: job?.created_at,
       },
-      ...(Array.isArray(timeline) ? timeline : []),
+      ...(Array.isArray(timeline) ? timeline.map(formatTimelineItem) : []),
     ],
     [job?.created_at, timeline],
   );
@@ -87,13 +98,22 @@ export default function ClientProductionWorkspace({
 
     async function loadRevisionCount() {
       try {
+        const supabase = createSupabaseBrowserClient();
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) return;
+
         const response = await fetch(
           `/api/revisions/list?production_job_id=${encodeURIComponent(job.id)}`,
-          { cache: "no-store" },
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          },
         );
         const payload = await response.json();
         if (active && response.ok && payload.success) {
           setRevisionCount(Array.isArray(payload.revisions) ? payload.revisions.length : 0);
+          setRevisionPolicy(payload.revisionPolicy || null);
         }
       } catch {
         // Revision history is supplementary; the workspace remains usable if this count fails.
@@ -116,8 +136,12 @@ export default function ClientProductionWorkspace({
     }
   }
 
+  const revisionLimitReached = Boolean(
+    revisionPolicy?.enforced && Number(revisionPolicy.remaining || 0) <= 0,
+  );
+
   function openRevisionComposer() {
-    if (!deliverableGroups.length || deliveryApproved) return;
+    if (!deliverableGroups.length || deliveryApproved || revisionLimitReached) return;
     setRevisionComposerSignal((value) => value + 1);
     window.setTimeout(() => {
       revisionSectionRef.current?.scrollIntoView({
@@ -189,6 +213,7 @@ export default function ClientProductionWorkspace({
         onApproveDelivery={() => setShowApprovalDialog(true)}
         approving={approvingDelivery}
         approved={deliveryApproved}
+        revisionLimitReached={revisionLimitReached}
       />
     </WorkspaceSection>
   ) : null;
@@ -277,14 +302,17 @@ export default function ClientProductionWorkspace({
             title="Messages"
             description="Questions, updates and reference files stay together here."
             badge={
-              messageCount > 0
-                ? `${messageCount} message${messageCount === 1 ? "" : "s"}`
-                : "Conversation"
+              unreadMessageCount > 0
+                ? `${unreadMessageCount} new`
+                : messageCount > 0
+                  ? `${messageCount} message${messageCount === 1 ? "" : "s"}`
+                  : "Conversation"
             }
           >
             <ClientProductionMessages
               jobId={job.id}
               onCountChange={setMessageCount}
+              onUnreadChange={setUnreadMessageCount}
               embedded
             />
           </WorkspaceSection>
@@ -296,7 +324,13 @@ export default function ClientProductionWorkspace({
                 eyebrow="Feedback"
                 title="Revisions"
                 description="Revision requests and studio responses are kept here as one clear history."
-                badge={revisionCount > 0 ? `${revisionCount} revision${revisionCount === 1 ? "" : "s"}` : "New request"}
+                badge={
+                  revisionPolicy?.enforced
+                    ? `${revisionPolicy.used}/${revisionPolicy.included} used`
+                    : revisionCount > 0
+                      ? `${revisionCount} revision${revisionCount === 1 ? "" : "s"}`
+                      : "New request"
+                }
               >
                 <ClientRevisionRequest
                   productionJobId={job.id}
@@ -556,6 +590,23 @@ function getClientAction(
     description:
       "Heyy Studio is assigning the project and confirming the first production milestone.",
   };
+}
+
+
+function formatTimelineItem(item: any) {
+  const title = String(item?.title || "Production update");
+  const normalized = title.toLowerCase();
+
+  let displayTitle = title;
+  if (normalized === "payment received") displayTitle = "Payment confirmed";
+  else if (normalized.startsWith("production delivered")) displayTitle = "Files sent for review";
+  else if (normalized.startsWith("final deliverables published")) displayTitle = "Final files published";
+  else if (normalized.startsWith("new final selected")) displayTitle = "New final version selected";
+  else if (/revision \d+ requested/i.test(title)) displayTitle = title.replace("Requested", "requested");
+  else if (/revision \d+ ready for review/i.test(title)) displayTitle = title.replace(/Ready for Review/i, "ready for review");
+  else if (/revision \d+ approved/i.test(title)) displayTitle = title.replace("Approved", "approved");
+
+  return { ...item, title: displayTitle };
 }
 
 function formatDate(value: string) {

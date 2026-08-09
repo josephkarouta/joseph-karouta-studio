@@ -19,6 +19,7 @@ type CreditWalletRow = {
   reserved_balance: number;
   period_start: string | null;
   period_end: string | null;
+  verified_signup_granted_at: string | null;
 };
 
 export type EnsuredCreditWallet = {
@@ -28,7 +29,7 @@ export type EnsuredCreditWallet = {
 };
 
 export class CreditError extends Error {
-  code: "INSUFFICIENT_CREDITS" | "CREDIT_SYSTEM_UNAVAILABLE" | "CREDIT_OPERATION_FAILED";
+  code: "INSUFFICIENT_CREDITS" | "EMAIL_VERIFICATION_REQUIRED" | "CREDIT_SYSTEM_UNAVAILABLE" | "CREDIT_OPERATION_FAILED";
   status: number;
 
   constructor(
@@ -111,7 +112,7 @@ export async function ensureCreditWallet({
     admin.from("user_subscriptions").select("*").eq("user_id", userId),
     admin
       .from("credit_wallets")
-      .select("user_id,monthly_balance,purchased_balance,reserved_balance,period_start,period_end")
+      .select("user_id,monthly_balance,purchased_balance,reserved_balance,period_start,period_end,verified_signup_granted_at")
       .eq("user_id", userId)
       .maybeSingle(),
     user
@@ -126,13 +127,77 @@ export async function ensureCreditWallet({
     throw creditSystemError(walletResult.error, "The credit wallet could not be loaded.");
   }
 
+  if (authUserResult.error) {
+    throw creditSystemError(authUserResult.error, "The authenticated user could not be verified.");
+  }
+
+  let wallet = walletResult.data as CreditWalletRow | null;
+  let authUser = authUserResult.data?.user || user || null;
+
+  // API routes authenticate normal requests from verified JWT claims. That
+  // lightweight User shape intentionally does not include email_confirmed_at.
+  // For an established wallet the verified_signup_granted_at marker is already
+  // our durable proof that the account passed email verification. For a brand
+  // new wallet, do one authoritative Auth lookup before granting Free credits.
+  // This keeps the normal account-summary path fast while preserving the
+  // verified-email security boundary for first-time grants.
+  if (!wallet?.verified_signup_granted_at && !authUser?.email_confirmed_at) {
+    const { data: verifiedAuthData, error: verifiedAuthError } =
+      await admin.auth.admin.getUserById(userId);
+
+    if (verifiedAuthError) {
+      throw creditSystemError(
+        verifiedAuthError,
+        "The authenticated user could not be verified.",
+      );
+    }
+
+    authUser = verifiedAuthData.user || null;
+  }
+
+  if (!wallet?.verified_signup_granted_at && !authUser?.email_confirmed_at) {
+    throw new CreditError(
+      "Verify your email address before using Heyy Studio credits.",
+      "EMAIL_VERIFICATION_REQUIRED",
+      403,
+    );
+  }
+
   const resolved = resolveSubscriptionPlan(
     (subscriptionResult.data || []) as Record<string, unknown>[],
-    authUserResult.data?.user || user || null,
+    authUser,
   );
   const plan = getPlan(resolved.plan);
-  let wallet = walletResult.data as CreditWalletRow | null;
   const period = currentMonthlyPeriod();
+
+  // New Free accounts are created with a zero-credit wallet. The allowance is
+  // granted only after Supabase has confirmed ownership of the email address.
+  // The database function is idempotent, so refreshes and parallel requests
+  // cannot grant the signup allowance more than once.
+  if (resolved.plan === "free" && !wallet?.verified_signup_granted_at) {
+    const { error: grantError } = await admin.rpc("heyy_grant_verified_signup_credits", {
+      p_user_id: userId,
+      p_amount: plan.monthlyCredits,
+    });
+
+    if (grantError) {
+      throw creditSystemError(grantError, "Verified signup credits could not be granted.");
+    }
+
+    const { data: refreshedWallet, error: refreshedWalletError } = await admin
+      .from("credit_wallets")
+      .select(
+        "user_id,monthly_balance,purchased_balance,reserved_balance,period_start,period_end,verified_signup_granted_at",
+      )
+      .eq("user_id", userId)
+      .single();
+
+    if (refreshedWalletError || !refreshedWallet) {
+      throw creditSystemError(refreshedWalletError, "The verified credit wallet could not be loaded.");
+    }
+
+    wallet = refreshedWallet as CreditWalletRow;
+  }
 
   const walletExpired =
     !wallet?.period_end || new Date(wallet.period_end).getTime() <= Date.now();
@@ -177,7 +242,7 @@ export async function ensureCreditWallet({
         },
         { onConflict: "user_id" },
       )
-      .select("user_id,monthly_balance,purchased_balance,reserved_balance,period_start,period_end")
+      .select("user_id,monthly_balance,purchased_balance,reserved_balance,period_start,period_end,verified_signup_granted_at")
       .single();
 
     if (error || !data) {

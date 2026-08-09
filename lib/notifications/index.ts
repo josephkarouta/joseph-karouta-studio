@@ -5,6 +5,10 @@ import {
 } from "./content";
 import { handleProductionNotification } from "./handlers/production";
 import type { NotificationPayload } from "./types";
+import {
+  getAccountPreferences,
+  inAppNotificationEnabled,
+} from "@/lib/account/preferences";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,6 +49,22 @@ class NotificationEngine {
     const content = buildInAppNotification(payload);
     if (!content || !payload.userId) return true;
 
+    const delivery = payload.deliveryPreferences;
+    if (delivery) {
+      const enabled = inAppNotificationEnabled(
+        {
+          marketing_email: false,
+          billing_email: delivery.billingEmail,
+          production_email: delivery.productionEmail,
+          in_app_production: delivery.inAppProduction,
+          in_app_billing: delivery.inAppBilling,
+          in_app_messages: delivery.inAppMessages,
+        },
+        payload.event,
+      );
+      if (!enabled) return true;
+    }
+
     const notificationKey = buildNotificationKey(payload);
     const metadata = {
       ...content.metadata,
@@ -79,26 +99,42 @@ class NotificationEngine {
   }
 
   private async enrichPayload(payload: NotificationPayload) {
-    if (payload.clientEmail || !payload.userId) {
-      return payload;
+    let next = payload;
+
+    if (payload.userId) {
+      const preferences = await getAccountPreferences(supabaseAdmin, payload.userId);
+      next = {
+        ...next,
+        deliveryPreferences: {
+          billingEmail: preferences.billing_email,
+          productionEmail: preferences.production_email,
+          inAppProduction: preferences.in_app_production,
+          inAppBilling: preferences.in_app_billing,
+          inAppMessages: preferences.in_app_messages,
+        },
+      };
+    }
+
+    if (next.clientEmail || !next.userId) {
+      return next;
     }
 
     const { data, error } = await supabaseAdmin.auth.admin.getUserById(
-      payload.userId,
+      next.userId,
     );
 
     if (error) {
       console.error("Notification user lookup failed:", error);
-      return payload;
+      return next;
     }
 
     return {
-      ...payload,
+      ...next,
       clientEmail: data.user?.email || null,
       clientName:
         data.user?.user_metadata?.full_name ||
         data.user?.user_metadata?.name ||
-        payload.clientName ||
+        next.clientName ||
         null,
     };
   }

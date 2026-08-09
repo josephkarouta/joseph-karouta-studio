@@ -16,3 +16,6 @@ tsconfig.tsbuildinfo
 
 # large local archives
 *.zip
+
+# personal Claude Code settings (not shared with collaborators)
+.claude/settings.local.json

@@ -239,6 +239,7 @@ export default function ProductionPanel({
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [statusError, setStatusError] = useState("");
   const [job, setJob] = useState<any>(null);
   const [requestRecord, setRequestRecord] = useState<any>(null);
   const [status, setStatus] = useState("");
@@ -286,6 +287,7 @@ export default function ProductionPanel({
     if (!project?.id || !service) return;
 
     setChecking(true);
+    setStatusError("");
 
     try {
       const token = await getAccessToken();
@@ -293,16 +295,17 @@ export default function ProductionPanel({
         `/api/production/client-status?projectId=${project.id}&serviceId=${encodeURIComponent(
           canonicalServiceId,
         )}&service=${encodeURIComponent(service)}`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
       );
 
       const data = await response.json();
-
-      if (data.success) {
-        setRequestRecord(data.request || null);
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Could not load production status.");
       }
 
-      if (data.success && data.exists) {
+      setRequestRecord(data.request || null);
+
+      if (data.exists) {
         setJob(data.job);
         setStatus(data.job.status || "Waiting Assignment");
         setTimeline(data.timeline || []);
@@ -316,6 +319,10 @@ export default function ProductionPanel({
         setDeliverableGroups([]);
         await loadQuotes(token);
       }
+    } catch (error) {
+      setStatusError(
+        error instanceof Error ? error.message : "Could not load production status.",
+      );
     } finally {
       setChecking(false);
     }
@@ -836,6 +843,29 @@ export default function ProductionPanel({
       <p className="heyy-production-eyebrow text-[10px] font-black uppercase tracking-[0.24em]">
         Production
       </p>
+
+      {statusError && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
+          <div>
+            <p className="text-xs font-black">Production status could not be loaded</p>
+            <p className="mt-1 text-[11px] font-semibold opacity-80">{statusError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void checkProductionStatus()}
+            disabled={checking}
+            className="rounded-full border border-current px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] disabled:opacity-50"
+          >
+            {checking ? "Retrying..." : "Retry"}
+          </button>
+        </div>
+      )}
+
+      {checking && !job && !requestRecord && quotes.length === 0 && !statusError && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-xs font-bold text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+          Checking the latest production status...
+        </div>
+      )}
 
       <div className="heyy-production-grid mt-4" data-workspace={job ? "true" : "false"}>
         <div>

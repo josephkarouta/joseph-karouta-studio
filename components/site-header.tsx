@@ -44,6 +44,9 @@ export default function SiteHeader() {
     user?.user_metadata?.name ||
     user?.email?.split("@")[0] ||
     "Account";
+  const avatarUrl = String(
+    user?.user_metadata?.avatar_url || user?.user_metadata?.picture || "",
+  ).trim();
 
   useEffect(() => {
     setMenuOpen(false);
@@ -120,8 +123,12 @@ export default function SiteHeader() {
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
               >
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[0.68rem] font-black text-white">
-                  {displayName.slice(0, 1).toUpperCase()}
+                <span className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-500 text-[0.68rem] font-black text-white">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    displayName.slice(0, 1).toUpperCase()
+                  )}
                 </span>
                 <span className="hidden min-w-0 sm:block">
                   <span className="block max-w-28 truncate text-xs font-black text-[var(--text-primary)]">

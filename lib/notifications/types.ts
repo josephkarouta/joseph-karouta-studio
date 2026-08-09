@@ -14,6 +14,14 @@ export type NotificationEvent =
   | "deliverables.uploaded"
   | "project.completed";
 
+export type NotificationDeliveryPreferences = {
+  billingEmail: boolean;
+  productionEmail: boolean;
+  inAppProduction: boolean;
+  inAppBilling: boolean;
+  inAppMessages: boolean;
+};
+
 export interface NotificationPayload {
   event: NotificationEvent;
 
@@ -32,4 +40,9 @@ export interface NotificationPayload {
   amount?: number;
 
   metadata?: Record<string, any>;
+
+  // Internal delivery controls resolved server-side from account_preferences.
+  // They are never persisted into notification metadata.
+  deliveryPreferences?: NotificationDeliveryPreferences;
 }
+

@@ -56,7 +56,15 @@ export async function storeGeneratedAsset({
       payload,
       file_url: fileUrl,
       thumbnail_url: contentType.startsWith("image/") ? fileUrl : null,
-      metadata: { ...metadata, storage_path: path, content_type: contentType },
+      metadata: {
+        ...(contentType.startsWith("image/") ? {
+          provider: typeof metadata.provider === "string" ? metadata.provider : "openai",
+          model: typeof metadata.model === "string" ? metadata.model : (process.env.OPENAI_IMAGE_MODEL || "gpt-image-2"),
+        } : {}),
+        ...metadata,
+        storage_path: path,
+        content_type: contentType,
+      },
     })
     .select()
     .single();

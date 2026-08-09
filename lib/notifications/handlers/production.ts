@@ -364,6 +364,15 @@ type EmailOptions = {
 
 async function sendClientEmail(payload: NotificationPayload, options: EmailOptions) {
   if (!payload.clientEmail) return;
+  const delivery = payload.deliveryPreferences;
+  if (delivery) {
+    const isBilling =
+      payload.event === "quote.ready" ||
+      payload.event === "quote.replied" ||
+      payload.event === "payment.received";
+    if (isBilling && !delivery.billingEmail) return;
+    if (!isBilling && !delivery.productionEmail) return;
+  }
   const template = {
     ...options,
     recipient: "client" as const,

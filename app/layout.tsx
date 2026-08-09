@@ -1,12 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import "./globals.css";
 import Providers from "@/components/providers";
 import HeyyAssistant from "@/components/assistant/HeyyAssistant";
-import RouteStateRestorer from "@/components/navigation/RouteStateRestorer";
+
+const isPublicBeta = process.env.NEXT_PUBLIC_HEYY_PUBLIC_BETA === "true";
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  (isPublicBeta ? "http://localhost:3000" : "https://heyystudio.com");
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://heyystudio.com"),
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Heyy Studio — Create with AI. Build with Experts.",
     template: "%s | Heyy Studio",
@@ -17,8 +20,16 @@ export const metadata: Metadata = {
     title: "Heyy Studio",
     description: "Create with AI. Build with Experts.",
     type: "website",
-    url: "https://heyystudio.com",
+    url: siteUrl,
   },
+  robots: isPublicBeta
+    ? {
+        index: false,
+        follow: false,
+        nocache: true,
+        googleBot: { index: false, follow: false, noimageindex: true },
+      }
+    : undefined,
 };
 
 export const viewport: Viewport = {
@@ -45,13 +56,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en-US" suppressHydrationWarning>
       <head>
-        <Script id="heyy-theme-init" strategy="beforeInteractive">
-          {themeScript}
-        </Script>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
         <Providers>
-          <RouteStateRestorer />
           {children}
           <HeyyAssistant />
         </Providers>

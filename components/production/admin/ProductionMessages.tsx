@@ -53,10 +53,9 @@ export default function ProductionMessages({ jobId, onRead }: Props) {
         }
 
         setMessages(Array.isArray(data.messages) ? data.messages : []);
-        if (Number(data.unreadClientCount || 0) > 0) {
-          setNewClientMessages(Number(data.unreadClientCount));
-          onRead?.();
-        }
+        const unreadClientCount = Number(data.unreadClientCount || 0);
+        setNewClientMessages(unreadClientCount);
+        if (unreadClientCount > 0) onRead?.();
         setError("");
       } catch (loadError) {
         if (!silent) {
