@@ -5,36 +5,40 @@ import HeyyLogo from "@/components/brand/HeyyLogo";
 
 const columns = [
   {
-    title: "Platform",
+    title: "Create",
     links: [
-      ["Studios", "/#studios"],
+      ["Brand", "/#create"],
+      ["Architecture", "/#create"],
+      ["Interior", "/#create"],
+      ["Marketing", "/#create"],
       ["AI tools", "/#tools"],
-      ["Workspace", "/#workspace"],
-      ["Pricing", "/pricing"],
     ],
   },
   {
-    title: "Company",
+    title: "Heyy Studio",
     links: [
+      ["How it works", "/#how-it-works"],
+      ["Pricing", "/#pricing"],
       ["About", "/about"],
       ["Careers", "/careers"],
       ["Contact", "/contact"],
+    ],
+  },
+  {
+    title: "Help",
+    links: [
       ["Help center", "/help"],
+      ["Contact", "/contact"],
+      ["Responsible AI", "/responsible-ai"],
+      ["Security", "/security"],
     ],
   },
   {
     title: "Legal",
     links: [
-      ["Terms & Conditions", "/terms"],
       ["Privacy Policy", "/privacy"],
+      ["Terms & Conditions", "/terms"],
       ["Refund Policy", "/refunds"],
-    ],
-  },
-  {
-    title: "Trust",
-    links: [
-      ["Responsible AI", "/responsible-ai"],
-      ["Security", "/security"],
       ["Content Policy", "/content-policy"],
     ],
   },
@@ -43,16 +47,15 @@ const columns = [
 export default function SiteFooter() {
   return (
     <footer className="relative overflow-hidden border-t border-white/10 bg-[#15091f] px-5 py-14 text-white sm:px-8 lg:px-12">
-      <div className="pointer-events-none absolute -right-20 -top-32 h-80 w-80 rounded-full bg-violet-600/25 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 left-1/4 h-72 w-72 rounded-full bg-fuchsia-500/15 blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 -top-32 h-80 w-80 rounded-full bg-violet-600/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 left-1/4 h-72 w-72 rounded-full bg-fuchsia-500/12 blur-3xl" />
 
       <div className="relative mx-auto max-w-[1450px]">
         <div className="grid gap-10 lg:grid-cols-[1.35fr_repeat(4,1fr)]">
           <div>
             <HeyyLogo variant="full-colour-light" height={36} />
             <p className="mt-5 max-w-sm text-sm leading-7 text-white/58">
-              Create with AI. Build with Experts. Keep projects, decisions,
-              production and final files inside one connected creative workspace.
+              Create with AI. Build with Experts. Start with an idea, explore it your way, and get professional help when you need it.
             </p>
             <a
               href="mailto:hello@heyystudio.com"
@@ -64,7 +67,7 @@ export default function SiteFooter() {
 
           {columns.map((column) => (
             <div key={column.title}>
-              <p className="text-[0.66rem] font-black uppercase tracking-[0.24em] text-white/35">
+              <p className="text-[0.66rem] font-black uppercase tracking-[0.22em] text-white/35">
                 {column.title}
               </p>
               <div className="mt-5 grid gap-3">
@@ -84,7 +87,7 @@ export default function SiteFooter() {
 
         <div className="mt-12 flex flex-col gap-3 border-t border-white/10 pt-7 text-xs text-white/38 sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 Heyy Studio. All rights reserved.</p>
-          <p>US English · USD · Built for creative teams worldwide</p>
+          <p>US English · USD · Built for creators worldwide</p>
         </div>
       </div>
     </footer>

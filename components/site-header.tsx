@@ -24,10 +24,10 @@ import HeyyLogo from "@/components/brand/HeyyLogo";
 import { ButtonLink } from "@/components/ui/heyy";
 
 const navItems = [
-  ["Studios", "/#studios"],
-  ["Workspace", "/#workspace"],
+  ["Studios", "/#create"],
+  ["How it works", "/#how-it-works"],
   ["Tools", "/#tools"],
-  ["Pricing", "/pricing"],
+  ["Pricing", "/#pricing"],
 ] as const;
 
 export default function SiteHeader() {
@@ -77,12 +77,12 @@ export default function SiteHeader() {
           />
         </Link>
 
-        <nav className="hidden items-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-1 text-sm font-bold text-[var(--text-secondary)] shadow-sm lg:flex">
+        <nav className="hidden items-center gap-1 text-sm font-bold text-[var(--text-secondary)] lg:flex">
           {navItems.map(([label, href]) => (
             <Link
               key={label}
               href={href}
-              className="rounded-full px-4 py-2 transition hover:bg-[var(--surface-strong)] hover:text-[var(--accent-strong)]"
+              className="rounded-full px-4 py-2.5 transition hover:bg-[var(--surface-strong)] hover:text-[var(--text-primary)]"
             >
               {label}
             </Link>
@@ -150,9 +150,7 @@ export default function SiteHeader() {
                     <p className="truncate text-sm font-black">{displayName}</p>
                     <p className="mt-1 truncate text-xs text-white/70">{user.email}</p>
                     <div className="mt-3 flex items-center justify-between rounded-xl bg-white/12 px-3 py-2">
-                      <span className="text-[0.65rem] font-black uppercase tracking-[0.14em]">
-                        {plan} plan
-                      </span>
+                      <span className="text-[0.65rem] font-black uppercase tracking-[0.14em]">{plan} plan</span>
                       <span className="text-xs font-black">{credits.available} credits left</span>
                     </div>
                   </div>
@@ -182,7 +180,7 @@ export default function SiteHeader() {
                 Sign in
               </ButtonLink>
               <ButtonLink href="/signup" size="sm">
-                <Sparkles size={14} /> Sign up
+                <Sparkles size={14} /> Start creating
               </ButtonLink>
             </div>
           )}
@@ -211,6 +209,7 @@ export default function SiteHeader() {
               </Link>
             ))}
           </nav>
+
           {user ? (
             <div className="mt-3 grid gap-1 border-t border-[var(--border)] pt-3">
               <div className="mb-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 p-4 text-white">
@@ -222,7 +221,9 @@ export default function SiteHeader() {
               <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
               <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credit history" />
               <MenuLink href="/help" icon={<BadgeHelp size={16} />} label="Help center" />
-              <button type="button" onClick={handleSignOut} className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/10"><LogOut size={16}/>Sign out</button>
+              <button type="button" onClick={handleSignOut} className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/10">
+                <LogOut size={16} /> Sign out
+              </button>
             </div>
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3">
@@ -230,7 +231,7 @@ export default function SiteHeader() {
                 Sign in
               </ButtonLink>
               <ButtonLink href="/signup" className="w-full">
-                Sign up
+                Start creating
               </ButtonLink>
             </div>
           )}
@@ -239,6 +240,7 @@ export default function SiteHeader() {
     </header>
   );
 }
+
 
 function MenuLink({ href, icon, label }: { href: string; icon: ReactNode; label: string }) {
   return (
