@@ -158,10 +158,10 @@ export default function UpscalerWorkbench() {
             />
           </div>
           <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] px-4 py-3 text-[.68rem] font-semibold leading-5 text-[var(--text-secondary)]">
-            <span className="font-black text-[var(--text-primary)]">Topaz Labs · {model}.</span>{" "}
+            <span className="font-black text-[var(--text-primary)]">{model}.</span>{" "}
             {generative
-              ? "Strong recovery uses Topaz Recover 3. It can reconstruct missing detail, so use it for weak or very low-resolution sources rather than approved artwork that must remain pixel-faithful."
-              : "This is a fidelity-preserving Topaz enhancement mode designed to enlarge the image while keeping the source identity and structure stable."}
+              ? "Strong recovery can reconstruct missing detail, so use it for weak or very low-resolution sources rather than approved artwork that must remain pixel-faithful."
+              : "This enhancement mode is designed to enlarge the image while keeping the source identity and structure stable."}
           </div>
         </div>
 
@@ -204,7 +204,7 @@ export default function UpscalerWorkbench() {
         <div className="flex items-center justify-between gap-4 px-1 pb-4">
           <div>
             <Eyebrow>Enhanced result</Eyebrow>
-            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Topaz-enhanced output saved to your Assets Library.</p>
+            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Enhanced output saved to your Assets Library.</p>
           </div>
           <CreditPill credits={cost} />
         </div>

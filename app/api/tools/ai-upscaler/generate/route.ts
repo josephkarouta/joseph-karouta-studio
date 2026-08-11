@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     if (!imageBase64) return NextResponse.json({ error: "Image is required." }, { status: 400 });
     if (!process.env.TOPAZ_API_KEY) {
-      return NextResponse.json({ error: "TOPAZ_API_KEY is missing." }, { status: 503 });
+      return NextResponse.json({ error: "Enhancement service is not configured." }, { status: 503 });
     }
 
     const source = Buffer.from(imageBase64, "base64");
@@ -94,13 +94,14 @@ export async function POST(request: Request) {
     });
     const data = await readJson(response);
     if (!response.ok) {
-      throw new Error(data?.error?.message || data?.message || "Topaz could not start enhancement.");
+      console.error("Topaz start provider error:", data?.error?.message || data?.message || response.status);
+      throw new Error("The enhancement service could not start this image.");
     }
 
     const providerId = String(
       data?.process_id || response.headers.get("x-process-id") || data?.request_id || data?.id || "",
     ).trim();
-    if (!providerId) throw new Error("Topaz returned no process ID.");
+    if (!providerId) throw new Error("The enhancement service returned an invalid job response.");
 
     const { data: job, error } = await admin
       .from("generation_jobs")
