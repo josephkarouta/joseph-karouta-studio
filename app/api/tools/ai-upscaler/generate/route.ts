@@ -7,7 +7,7 @@ import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
+const MAX_SOURCE_BYTES = 4 * 1024 * 1024;
 const MAX_OUTPUT_PIXELS = 100_000_000;
 
 type TopazChoice = {
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const source = Buffer.from(imageBase64, "base64");
     if (!source.length || source.length > MAX_SOURCE_BYTES) {
-      return NextResponse.json({ error: "The source image must be 20 MB or smaller." }, { status: 400 });
+      return NextResponse.json({ error: "The source image must be 4 MB or smaller." }, { status: 400 });
     }
 
     const metadata = await sharp(source, { failOn: "error" }).metadata();

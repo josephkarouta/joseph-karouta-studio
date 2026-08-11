@@ -96,9 +96,9 @@ export default function DigitalAdaptationsWorkbench() {
       setError("Use a PNG, JPG or WebP key visual.");
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
+    if (file.size > 4 * 1024 * 1024) {
       setSource(null);
-      setError("The key visual must be smaller than 20 MB.");
+      setError("The key visual must be 4 MB or smaller.");
       return;
     }
     setSource(file);
@@ -245,7 +245,7 @@ export default function DigitalAdaptationsWorkbench() {
               <div className="p-8">
                 <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-sm"><ImagePlus size={23} /></span>
                 <p className="mt-4 text-sm font-black">Choose the main key visual</p>
-                <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">PNG, JPG or WebP · maximum 20 MB</p>
+                <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">PNG, JPG or WebP · maximum 4 MB</p>
               </div>
             )}
             <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={chooseSource} />

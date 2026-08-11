@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 180;
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 type VideoMode = "preview" | "high";
 type AspectRatio = "16:9" | "9:16";
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
     const imageBytes = Buffer.from(imageBase64, "base64");
     if (!imageBytes.length || imageBytes.length > MAX_IMAGE_BYTES) {
-      return NextResponse.json({ error: "The source image must be 20 MB or smaller." }, { status: 400 });
+      return NextResponse.json({ error: "The source image must be 4 MB or smaller." }, { status: 400 });
     }
 
     const reservation = await reserveCredits({

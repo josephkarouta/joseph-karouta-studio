@@ -18,7 +18,7 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
+const MAX_SOURCE_BYTES = 4 * 1024 * 1024;
 const MAX_FORMATS = 24;
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Use a PNG, JPG or WebP key visual." }, { status: 400 });
     }
     if (sourceFile.size <= 0 || sourceFile.size > MAX_SOURCE_BYTES) {
-      return NextResponse.json({ error: "The key visual must be smaller than 20 MB." }, { status: 400 });
+      return NextResponse.json({ error: "The key visual must be 4 MB or smaller." }, { status: 400 });
     }
 
     let rawFormats: unknown[] = [];

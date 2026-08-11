@@ -36,8 +36,8 @@ export default function UpscalerWorkbench() {
       setError("Upload a PNG, JPEG or WebP image.");
       return;
     }
-    if (selected.size > 20 * 1024 * 1024) {
-      setError("The image must be 20 MB or smaller.");
+    if (selected.size > 4 * 1024 * 1024) {
+      setError("The image must be 4 MB or smaller.");
       return;
     }
     setFile(selected);
@@ -139,7 +139,7 @@ export default function UpscalerWorkbench() {
                 <Upload size={22} />
               </span>
               <p className="mt-4 text-sm font-black">Upload the original image</p>
-              <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">PNG, JPEG or WebP · maximum 20 MB</p>
+              <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">PNG, JPEG or WebP · maximum 4 MB</p>
             </div>
           )}
         </button>
