@@ -18,10 +18,15 @@ import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 
-type Result = { imageUrl: string; asset?: { id: string; file_url?: string }; creditsUsed: number; revisedPrompt?: string };
+type Result = {
+  imageUrl: string;
+  asset?: { id: string; file_url?: string };
+  creditsUsed: number;
+  revisedPrompt?: string;
+};
 
 const REFERENCE_TYPES = ["image/png", "image/jpeg", "image/webp"];
-const MAX_REFERENCE_BYTES = 10 * 1024 * 1024;
+const MAX_REFERENCE_BYTES = 4 * 1024 * 1024;
 
 export default function TextToImageWorkbench() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -66,7 +71,7 @@ export default function TextToImageWorkbench() {
       return;
     }
     if (selected.size > MAX_REFERENCE_BYTES) {
-      setError("The reference image must be 10 MB or smaller.");
+      setError("The reference image must be 4 MB or smaller.");
       return;
     }
     setReferenceImage(selected);
@@ -86,8 +91,11 @@ export default function TextToImageWorkbench() {
       setError("Describe the image in a little more detail.");
       return;
     }
+
     setLoading(true);
     setError("");
+    setResult(null);
+
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
@@ -106,15 +114,45 @@ export default function TextToImageWorkbench() {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Image generation failed.");
-      setResult(payload);
+      const payload = await readJsonResponse(response);
+      if (!response.ok) throw new Error(payload.error || "Image generation could not start.");
+
+      if (payload.status === "succeeded" && payload.imageUrl) {
+        setResult(payload as Result);
+      } else {
+        await poll(String(payload.jobId || ""), token);
+      }
       await refreshAccount();
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Image generation failed.");
+      await refreshAccount();
     } finally {
       setLoading(false);
     }
+  }
+
+  async function poll(jobId: string, token: string) {
+    if (!jobId) throw new Error("Generation job could not be started.");
+
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await delay(attempt === 0 ? 1200 : 3000);
+      const response = await fetch(`/api/tools/text-to-image/status?job=${encodeURIComponent(jobId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const payload = await readJsonResponse(response);
+      if (!response.ok) throw new Error(payload.error || "Could not check image generation status.");
+      if (payload.status === "failed") {
+        throw new Error(payload.error || "Image generation failed. Your credits were returned.");
+      }
+      if (payload.status === "succeeded") {
+        if (!payload.imageUrl) throw new Error("The generated image could not be loaded.");
+        setResult(payload as Result);
+        return;
+      }
+    }
+
+    throw new Error("Your image is still processing. It will remain available in Assets when completed.");
   }
 
   async function downloadResult() {
@@ -169,21 +207,12 @@ export default function TextToImageWorkbench() {
                   <p className="truncate text-xs font-black">{referenceImage.name}</p>
                   <p className="mt-1 text-[.65rem] font-semibold text-[var(--text-muted)]">Reference image attached</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={removeReference}
-                  aria-label="Remove reference image"
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
-                >
+                <button type="button" onClick={removeReference} aria-label="Remove reference image" className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]">
                   <X size={15} />
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => referenceInputRef.current?.click()}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-xs font-black transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
-              >
+              <button type="button" onClick={() => referenceInputRef.current?.click()} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-xs font-black transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">
                 <Paperclip size={14} /> Attach reference image
               </button>
             )}
@@ -203,8 +232,8 @@ export default function TextToImageWorkbench() {
                     { value: "1024x1024", label: "Square · 1:1" },
                     { value: "1536x1024", label: "Landscape · 3:2" },
                     { value: "1024x1536", label: "Portrait · 2:3" },
-                    { value: "1792x1024", label: "Cinematic · 16:9" },
-                    { value: "1024x1792", label: "Vertical · 9:16" },
+                    { value: "1536x864", label: "Widescreen · 16:9" },
+                    { value: "864x1536", label: "Vertical · 9:16" },
                   ]}
                   onChange={setSize}
                 />
@@ -214,43 +243,26 @@ export default function TextToImageWorkbench() {
               <label className="text-[.64rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Quality</label>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {(["preview", "high"] as const).map((item) => (
-                  <button
-                    type="button"
-                    key={item}
-                    onClick={() => setQuality(item)}
-                    className={cx(
-                      "min-h-12 rounded-2xl border text-xs font-black capitalize transition",
-                      quality === item
-                        ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                        : "border-[var(--border-strong)] bg-[var(--surface)] hover:border-[var(--accent)]",
-                    )}
-                  >
-                    {item}
-                    <span className="ml-1 opacity-70">· {item === "high" ? CREDIT_COSTS.textToImageHigh : CREDIT_COSTS.textToImagePreview}</span>
+                  <button type="button" key={item} onClick={() => setQuality(item)} className={cx("min-h-12 rounded-2xl border text-xs font-black capitalize transition", quality === item ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--border-strong)] bg-[var(--surface)] hover:border-[var(--accent)]")}>
+                    {item}<span className="ml-1 opacity-70">· {item === "high" ? CREDIT_COSTS.textToImageHigh : CREDIT_COSTS.textToImagePreview}</span>
                   </button>
                 ))}
               </div>
             </div>
           </div>
+
           {error && <div className="mt-5 flex gap-3 rounded-2xl border border-red-300/60 bg-red-500/10 p-4 text-sm font-bold text-red-700 dark:text-red-200"><AlertCircle size={18} className="shrink-0"/>{error}</div>}
           <Button className="mt-6 w-full" size="lg" onClick={() => void generate()} disabled={loading}>{loading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>} {loading ? "Generating image…" : `Generate · ${cost} credits`}</Button>
-          <p className="mt-3 text-center text-[.65rem] font-semibold text-[var(--text-muted)]">Credits are reserved before generation and automatically returned if the provider fails.</p>
+          <p className="mt-3 text-center text-[.65rem] font-semibold text-[var(--text-muted)]">Credits are reserved before generation and automatically returned if generation fails.</p>
         </GlassCard>
 
         <GlassCard className="flex min-h-[620px] flex-col p-4 sm:p-5">
           <div className="flex items-center justify-between gap-4 px-1 pb-4"><div><Eyebrow>Generated asset</Eyebrow><p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Your latest result appears here.</p></div>{result && <CreditPill credits={result.creditsUsed}/>}</div>
           <div className="grid flex-1 place-items-center overflow-hidden rounded-[1.4rem] border border-dashed border-[var(--border-strong)] bg-[linear-gradient(135deg,var(--surface-hover),rgba(46,124,246,.08))]">
-            {loading ? <div className="text-center"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] shadow-lg"><Loader2 size={25} className="animate-spin text-[var(--accent-strong)]"/></span><p className="mt-4 text-sm font-black">Building your image</p><p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">Composition, lighting and detail are being resolved.</p></div> : result ? (
-              <button
-                type="button"
-                onClick={() => setPreviewOpen(true)}
-                className="group relative h-full max-h-[720px] w-full"
-                aria-label="Preview generated image"
-              >
+            {loading ? <div className="text-center"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] shadow-lg"><Loader2 size={25} className="animate-spin text-[var(--accent-strong)]"/></span><p className="mt-4 text-sm font-black">Building your image</p><p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">You can keep this page open while the image finishes in the background.</p></div> : result ? (
+              <button type="button" onClick={() => setPreviewOpen(true)} className="group relative h-full max-h-[720px] w-full" aria-label="Preview generated image">
                 <img src={result.imageUrl} alt="Generated result" className="h-full max-h-[720px] w-full object-contain"/>
-                <span className="pointer-events-none absolute right-4 top-4 inline-flex items-center gap-2 rounded-full bg-black/65 px-3 py-2 text-xs font-black text-white opacity-0 transition group-hover:opacity-100">
-                  <Expand size={14} /> Preview
-                </span>
+                <span className="pointer-events-none absolute right-4 top-4 inline-flex items-center gap-2 rounded-full bg-black/65 px-3 py-2 text-xs font-black text-white opacity-0 transition group-hover:opacity-100"><Expand size={14} /> Preview</span>
               </button>
             ) : <div className="max-w-sm p-8 text-center"><ImageIcon size={34} className="mx-auto text-[var(--accent-strong)]"/><h3 className="mt-4 text-xl font-black">Ready for a prompt</h3><p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Be specific about subject, environment, lighting, materials, camera and composition.</p></div>}
           </div>
@@ -261,26 +273,28 @@ export default function TextToImageWorkbench() {
       {previewOpen && result && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4" onClick={() => setPreviewOpen(false)}>
           <div className="relative max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-[1.6rem] border border-white/10 bg-[var(--surface-strong)] p-3 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between gap-3 px-1">
-              <div>
-                <Eyebrow>Image preview</Eyebrow>
-                <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Review the generated result at a larger size.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewOpen(false)}
-                aria-label="Close preview"
-                className="grid h-10 w-10 place-items-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] transition hover:border-[var(--accent)]"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="grid max-h-[78vh] place-items-center overflow-auto rounded-[1.2rem] bg-black/20 p-3">
-              <img src={result.imageUrl} alt="Generated preview" className="h-auto max-h-[74vh] w-auto max-w-full object-contain" />
-            </div>
+            <div className="mb-3 flex items-center justify-between gap-3 px-1"><div><Eyebrow>Image preview</Eyebrow><p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Review the generated result at a larger size.</p></div><button type="button" onClick={() => setPreviewOpen(false)} aria-label="Close preview" className="grid h-10 w-10 place-items-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] transition hover:border-[var(--accent)]"><X size={16} /></button></div>
+            <div className="grid max-h-[78vh] place-items-center overflow-auto rounded-[1.2rem] bg-black/20 p-3"><img src={result.imageUrl} alt="Generated preview" className="h-auto max-h-[74vh] w-auto max-w-full object-contain" /></div>
           </div>
         </div>
       )}
     </>
   );
+}
+
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (/inactivity timeout/i.test(text)) {
+      return { error: "The generation service timed out before the job could start. Please try again." };
+    }
+    return { error: response.ok ? "The server returned an invalid response." : `Image generation request failed (${response.status}).` };
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
