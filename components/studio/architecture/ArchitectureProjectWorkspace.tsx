@@ -1791,6 +1791,35 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     }, 3500);
 
     try {
+      type ArchitectureImageResponse = {
+        success?: boolean;
+        status?: "processing" | "succeeded" | "failed";
+        jobId?: string;
+        error?: string;
+        direction?: Direction;
+        concept?: ArchitectureConcept;
+        visual?: ArchitectureVisual;
+      };
+
+      async function readArchitectureImageResponse(
+        response: Response,
+        fallback: string,
+      ): Promise<ArchitectureImageResponse> {
+        const text = await response.text();
+        if (!text) {
+          if (!response.ok) throw new Error(fallback);
+          return {};
+        }
+        try {
+          return JSON.parse(text) as ArchitectureImageResponse;
+        } catch {
+          if (response.status === 504 || /inactivity timeout|<html|<!doctype/i.test(text)) {
+            throw new Error("Architecture Studio could not start this image request. Please try again.");
+          }
+          throw new Error(fallback);
+        }
+      }
+
       const response = await fetch("/api/architecture/images/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1802,15 +1831,46 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
           planMode,
         }),
       });
-      const payload = (await response.json()) as {
-        success?: boolean;
-        error?: string;
-        direction?: Direction;
-        concept?: ArchitectureConcept;
-        visual?: ArchitectureVisual;
-      };
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || "Architecture image could not be generated.");
+      const started = await readArchitectureImageResponse(
+        response,
+        "Architecture image generation could not be started.",
+      );
+      if (!response.ok || !started.success || !started.jobId) {
+        throw new Error(started.error || "Architecture image generation could not be started.");
+      }
+
+      let payload: ArchitectureImageResponse | null = null;
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 2500));
+        }
+
+        const statusResponse = await fetch(
+          `/api/architecture/images/status?job=${encodeURIComponent(started.jobId)}`,
+          { cache: "no-store" },
+        );
+        const statusPayload = await readArchitectureImageResponse(
+          statusResponse,
+          "Unable to check Architecture image generation.",
+        );
+        if (!statusResponse.ok || statusPayload.success === false) {
+          throw new Error(statusPayload.error || "Unable to check Architecture image generation.");
+        }
+        if (statusPayload.status === "failed") {
+          throw new Error(
+            statusPayload.error || "Architecture image generation failed. Your credits were returned.",
+          );
+        }
+        if (statusPayload.status === "succeeded") {
+          payload = statusPayload;
+          break;
+        }
+      }
+
+      if (!payload) {
+        throw new Error(
+          "Your Architecture image is still being prepared safely in the background. Reopen the project shortly to see the saved result.",
+        );
       }
 
       const updatedDirection = payload.direction;
