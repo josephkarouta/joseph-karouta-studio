@@ -1,4 +1,3 @@
-import "server-only";
 import OpenAI from "openai";
 
 let client: OpenAI | null = null;
