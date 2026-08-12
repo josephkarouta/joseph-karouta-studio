@@ -204,6 +204,9 @@ export function useMoodboards({ project, brand }: { project: any; brand: any }) 
         brand,
         direction: moodboards[index],
         tier,
+        directionIndex: index,
+        directions: moodboards,
+        selectedMoodboard,
       });
       const uploaded = generatedImage(generated);
       const next = moodboards.map((item, itemIndex) =>
@@ -212,7 +215,9 @@ export function useMoodboards({ project, brand }: { project: any; brand: any }) 
           : item,
       );
       setMoodboards(next);
-      const saved = await saveDirections(next, "moodboard", `Creative Direction Visual - ${next[index]?.title}`, selectedMoodboard);
+      const saved = uploaded.assetId
+        ? { id: uploaded.assetId }
+        : await saveDirections(next, "moodboard", `Creative Direction Visual - ${next[index]?.title}`, selectedMoodboard);
       await refreshAccount();
       addActivity({
         id: saved.id,
@@ -236,6 +241,9 @@ export function useMoodboards({ project, brand }: { project: any; brand: any }) 
         project,
         brand,
         selectedMoodboard: moodboards[index],
+        directionIndex: index,
+        directions: moodboards,
+        selectedMoodboardIndex: selectedMoodboard,
       });
       const uploaded = generated?.[0] ? generatedImage(generated[0]) : null;
       if (!uploaded?.imageUrl) throw new Error("No direction variation image was returned.");
@@ -243,7 +251,9 @@ export function useMoodboards({ project, brand }: { project: any; brand: any }) 
         itemIndex === index ? { ...item, variation: { imageUrl: uploaded.imageUrl } } : item,
       );
       setMoodboards(next);
-      await saveDirections(next, "moodboard_variations", `Creative Direction Variation - ${next[index]?.title}`, selectedMoodboard);
+      if (!uploaded.assetId) {
+        await saveDirections(next, "moodboard_variations", `Creative Direction Variation - ${next[index]?.title}`, selectedMoodboard);
+      }
       await refreshAccount();
     } catch (variationError) {
       console.error(variationError);

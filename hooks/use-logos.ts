@@ -109,13 +109,18 @@ export function useLogos({ project, brand }: { project: any; brand: any }) {
         creativeDirection: selectedCreativeDirection,
         existingLogoUrl,
         tier,
+        directionIndex: index,
+        existingConcepts: concepts,
+        selectedLogoDirection,
       });
       const uploaded = generated?.[0] ? generatedImage(generated[0]) : null;
       if (!uploaded?.imageUrl) throw new Error("No logo image was returned.");
       const next = { ...concepts, [index]: { ...uploaded, directionIndex: index, tier, variation: null } };
       setConcepts(next);
       setSelectedLogoDirection(index);
-      const saved = await save(next, "logo_concept", `Logo Concept - ${direction.title || `Direction ${index + 1}`}`, index);
+      const saved = uploaded.assetId
+        ? { id: uploaded.assetId }
+        : await save(next, "logo_concept", `Logo Concept - ${direction.title || `Direction ${index + 1}`}`, index);
       addActivity({ id: saved.id, title: "Logo concept generated", description: `${direction.title || `Direction ${index + 1}`} now has a ${tier} logo concept.`, createdAt: "Now" });
       await refreshAccount();
     } catch (generationError) {
@@ -132,12 +137,22 @@ export function useLogos({ project, brand }: { project: any; brand: any }) {
     try {
       setVariationLoading(index);
       setError("");
-      const generated = await generateBrandLogoVariations({ project, brand, selectedLogo: selected, logoDirection: direction });
+      const generated = await generateBrandLogoVariations({
+        project,
+        brand,
+        selectedLogo: selected,
+        logoDirection: direction,
+        directionIndex: index,
+        existingConcepts: concepts,
+        selectedLogoDirection,
+      });
       const uploaded = generated?.[0] ? generatedImage(generated[0]) : null;
       if (!uploaded?.imageUrl) throw new Error("No logo variation was returned.");
       const next = { ...concepts, [index]: { ...selected, variation: { imageUrl: uploaded.imageUrl } } };
       setConcepts(next);
-      await save(next, "logo_variation", `Logo Variation - ${direction.title || `Direction ${index + 1}`}`, selectedLogoDirection);
+      if (!uploaded.assetId) {
+        await save(next, "logo_variation", `Logo Variation - ${direction.title || `Direction ${index + 1}`}`, selectedLogoDirection);
+      }
       await refreshAccount();
     } catch (variationError) {
       console.error(variationError);

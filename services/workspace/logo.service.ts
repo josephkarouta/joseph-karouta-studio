@@ -1,5 +1,6 @@
 import { generateLogos } from "@/services/ai/image";
 import { AI_CONFIG } from "@/services/ai/config";
+import { runBrandImageJob } from "@/services/workspace/brand-image-job.service";
 
 export async function generateBrandLogos({
   project,
@@ -8,6 +9,9 @@ export async function generateBrandLogos({
   creativeDirection,
   existingLogoUrl,
   tier = "preview",
+  directionIndex = 0,
+  existingConcepts = {},
+  selectedLogoDirection = null,
 }: {
   project: any;
   brand: any;
@@ -15,25 +19,32 @@ export async function generateBrandLogos({
   creativeDirection?: any;
   existingLogoUrl?: string | null;
   tier?: "preview" | "final";
+  directionIndex?: number;
+  existingConcepts?: Record<number, any>;
+  selectedLogoDirection?: number | null;
 }) {
   if (AI_CONFIG.mockImages) {
     const mock = await generateLogos();
     if (mock) return mock;
   }
 
-  const response = await fetch("/api/brand-studio/logo", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const data = await runBrandImageJob(
+    "/api/brand-studio/logo",
+    {
       project,
       brand,
       logoDirection,
       creativeDirection,
       existingLogoUrl,
       tier,
-    }),
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data?.error || "Logo generation failed.");
-  return data?.logos || [];
+      directionIndex,
+      existingConcepts,
+      selectedLogoDirection,
+    },
+    "Logo generation failed.",
+  );
+
+  return Array.isArray(data?.logos)
+    ? data.logos.map((item: any) => ({ ...item, assetId: data.assetId || null }))
+    : [];
 }

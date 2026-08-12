@@ -23,6 +23,7 @@ import {
 } from "@/lib/brand/project-templates";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { runBrandImageJob } from "@/services/workspace/brand-image-job.service";
 
 function readAssetPayload(asset: any) {
   const source = asset?.output_payload || asset?.payload || {};
@@ -323,10 +324,9 @@ export default function BrandApplicationsWorkspace({
     setError("");
 
     try {
-      const response = await fetch("/api/brand-studio/application-visual", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await runBrandImageJob(
+        "/api/brand-studio/application-visual",
+        {
           project,
           brand,
           application: active,
@@ -336,12 +336,9 @@ export default function BrandApplicationsWorkspace({
           directionReferenceUrl,
           selectedDirection,
           referenceImageUrls,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || "Application visual generation failed.");
-      }
+        },
+        "Application visual generation failed.",
+      );
       const returnedOutputs = Array.isArray(data?.outputs)
         ? data.outputs.filter(
             (item: any) => item && typeof item.imageUrl === "string",
@@ -390,26 +387,28 @@ export default function BrandApplicationsWorkspace({
 
       setVisuals((current) => ({ ...current, [active.id]: nextVisual }));
 
-      const saved = await addAsset({
-        user_id: project.user_id,
-        project_id: project.id,
-        project_type: "brand",
-        asset_type: "brand_application_visual",
-        title: `${active.label} AI Visual - ${project.project_name}`,
-        input_payload: {
-          applicationId: active.id,
-          applicationLabel: active.label,
-          applicationBrief: brief,
-          applicationPlan: plan,
-          logoReferenceUrl,
-          directionReferenceUrl,
-          selectedDirection,
-          referenceImageUrls,
-        },
-        output_payload: nextVisual,
-        file_url: nextVisual.imageUrl,
-        thumbnail_url: nextVisual.imageUrl,
-      });
+      const saved = data.assetId
+        ? { id: data.assetId }
+        : await addAsset({
+            user_id: project.user_id,
+            project_id: project.id,
+            project_type: "brand",
+            asset_type: "brand_application_visual",
+            title: `${active.label} AI Visual - ${project.project_name}`,
+            input_payload: {
+              applicationId: active.id,
+              applicationLabel: active.label,
+              applicationBrief: brief,
+              applicationPlan: plan,
+              logoReferenceUrl,
+              directionReferenceUrl,
+              selectedDirection,
+              referenceImageUrls,
+            },
+            output_payload: nextVisual,
+            file_url: nextVisual.imageUrl,
+            thumbnail_url: nextVisual.imageUrl,
+          });
 
       setVisuals((current) => ({
         ...current,
