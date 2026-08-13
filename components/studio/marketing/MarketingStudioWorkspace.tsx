@@ -210,6 +210,50 @@ const VISUALS: Array<{
   },
 ];
 
+// HEYY_STUDIO_ASYNC_INTERIOR_MARKETING_V1
+async function readStudioAsyncPayload(response: Response, fallback: string): Promise<any> {
+  const text = await response.text();
+  if (!text) {
+    if (!response.ok) throw new Error(fallback);
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (response.status === 504 || /inactivity timeout|<!doctype|<html|<head|<body/i.test(text)) {
+      throw new Error("Heyy Studio could not start the background generation request. Please try again.");
+    }
+    throw new Error(fallback);
+  }
+}
+
+async function waitForStudioAsyncJob(
+  studio: "interior" | "marketing",
+  kind: "concept" | "image",
+  jobId: string,
+  accessToken: string,
+): Promise<any> {
+  if (!jobId) throw new Error("The generation job could not be started.");
+  const statusPath = kind === "image"
+    ? `/api/studios/${studio}/images/status?job=${encodeURIComponent(jobId)}`
+    : `/api/studios/${studio}/status?job=${encodeURIComponent(jobId)}`;
+
+  for (let attempt = 0; attempt < 360; attempt += 1) {
+    if (attempt > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 2000));
+    const response = await fetch(statusPath, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const payload = await readStudioAsyncPayload(response, "Unable to check generation status.");
+    if (!response.ok || payload.success === false) throw new Error(payload.error || "Unable to check generation status.");
+    if (payload.status === "failed") throw new Error(payload.error || "Generation failed. Your credits were returned.");
+    if (payload.status === "succeeded") return payload;
+  }
+
+  throw new Error("Generation is still processing safely in the background. Refresh this project shortly to load the completed result.");
+}
+
 export default function MarketingStudioWorkspace() {
   return (
     <StudioAccessGate path="/marketing-studio">
@@ -366,11 +410,16 @@ function MarketingExperience() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ input: { ...form, workMode }, projectId: project?.id || null }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Campaign generation failed.");
+      const started = await readStudioAsyncPayload(response, "Campaign generation could not start.");
+      if (!response.ok || started.success === false) throw new Error(started.error || "Campaign generation could not start.");
+      const data = started.status === "succeeded"
+        ? started
+        : await waitForStudioAsyncJob("marketing", "concept", String(started.jobId || ""), token);
       const savedProject = data.project as ProjectRecord;
+      const savedOutput = data.output as ResultData;
+      if (!savedProject?.id || !savedOutput) throw new Error("Campaign generation finished without a saved project.");
       setProject(savedProject);
-      setResult(data.output as ResultData);
+      setResult(savedOutput);
       setStep(activeSteps.length);
       setActiveTab("overview");
       await Promise.all([loadAssets(String(savedProject.id)), refreshAccount()]);
@@ -399,8 +448,11 @@ function MarketingExperience() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ projectId: project.id, viewType, stage, tweak: tweak.trim() || null }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Campaign visual generation failed.");
+      const started = await readStudioAsyncPayload(response, "Campaign visual generation could not start.");
+      if (!response.ok || started.success === false) throw new Error(started.error || "Campaign visual generation could not start.");
+      if (started.status !== "succeeded") {
+        await waitForStudioAsyncJob("marketing", "image", String(started.jobId || ""), token);
+      }
       await Promise.all([loadAssets(project.id), refreshAccount()]);
       selectWorkspaceTab("visuals");
     } catch (visualError) {
@@ -1374,7 +1426,7 @@ function FullScreenCampaignLoader({ workMode }: { workMode: WorkMode }) {
       tone="marketing"
       eyebrow="Marketing Studio is preparing"
       title={stages[activeStep]}
-      detail="Keep this page open. Credits are refunded automatically if generation fails."
+      detail="Generation continues safely in the background if you leave this page. Credits are refunded automatically if generation fails."
       steps={stages}
       activeStep={activeStep}
       variant="fullscreen"

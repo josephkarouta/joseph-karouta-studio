@@ -196,6 +196,50 @@ const VISUALS: Array<{ id: VisualType; title: string; description: string }> = [
   },
 ];
 
+// HEYY_STUDIO_ASYNC_INTERIOR_MARKETING_V1
+async function readStudioAsyncPayload(response: Response, fallback: string): Promise<any> {
+  const text = await response.text();
+  if (!text) {
+    if (!response.ok) throw new Error(fallback);
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (response.status === 504 || /inactivity timeout|<!doctype|<html|<head|<body/i.test(text)) {
+      throw new Error("Heyy Studio could not start the background generation request. Please try again.");
+    }
+    throw new Error(fallback);
+  }
+}
+
+async function waitForStudioAsyncJob(
+  studio: "interior" | "marketing",
+  kind: "concept" | "image",
+  jobId: string,
+  accessToken: string,
+): Promise<any> {
+  if (!jobId) throw new Error("The generation job could not be started.");
+  const statusPath = kind === "image"
+    ? `/api/studios/${studio}/images/status?job=${encodeURIComponent(jobId)}`
+    : `/api/studios/${studio}/status?job=${encodeURIComponent(jobId)}`;
+
+  for (let attempt = 0; attempt < 360; attempt += 1) {
+    if (attempt > 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 2000));
+    const response = await fetch(statusPath, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const payload = await readStudioAsyncPayload(response, "Unable to check generation status.");
+    if (!response.ok || payload.success === false) throw new Error(payload.error || "Unable to check generation status.");
+    if (payload.status === "failed") throw new Error(payload.error || "Generation failed. Your credits were returned.");
+    if (payload.status === "succeeded") return payload;
+  }
+
+  throw new Error("Generation is still processing safely in the background. Refresh this project shortly to load the completed result.");
+}
+
 export default function InteriorStudioWorkspace() {
   return (
     <StudioAccessGate path="/interior-studio">
@@ -351,24 +395,26 @@ function InteriorExperience() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ input: { ...form, workMode }, projectId: project?.id || null }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Generation failed.");
+      const started = await readStudioAsyncPayload(response, "Interior project generation could not start.");
+      if (!response.ok || started.success === false) throw new Error(started.error || "Interior project generation could not start.");
+      const data = started.status === "succeeded"
+        ? started
+        : await waitForStudioAsyncJob("interior", "concept", String(started.jobId || ""), token);
 
       const nextProject = data.project as ProjectRecord;
       const nextResult = data.output as ResultData;
+      if (!nextProject?.id || !nextResult) throw new Error("Interior project generation finished without a saved project.");
       setResult(nextResult);
       setProject(nextProject);
       setStep(activeSteps.length);
       setActiveTab("overview");
       await refreshAccount();
-      if (nextProject?.id) {
-        rememberInteriorWorkspaceTab(nextProject.id, "overview");
-        const url = new URL(window.location.href);
-        url.searchParams.set("project", nextProject.id);
-        url.searchParams.set("tab", "overview");
-        window.history.replaceState({}, "", url);
-        await loadAssets(nextProject.id);
-      }
+      rememberInteriorWorkspaceTab(nextProject.id, "overview");
+      const url = new URL(window.location.href);
+      url.searchParams.set("project", nextProject.id);
+      url.searchParams.set("tab", "overview");
+      window.history.replaceState({}, "", url);
+      await loadAssets(nextProject.id);
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Generation failed.");
     } finally {
@@ -393,8 +439,11 @@ function InteriorExperience() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ projectId: project.id, viewType, stage }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Image generation failed.");
+      const started = await readStudioAsyncPayload(response, "Interior image generation could not start.");
+      if (!response.ok || started.success === false) throw new Error(started.error || "Interior image generation could not start.");
+      if (started.status !== "succeeded") {
+        await waitForStudioAsyncJob("interior", "image", String(started.jobId || ""), token);
+      }
 
       await Promise.all([loadAssets(project.id), refreshAccount()]);
       selectWorkspaceTab(viewType.endsWith("_plan") ? "plans" : "visuals");
@@ -1454,7 +1503,7 @@ function FullScreenGenerationOverlay({ workMode }: { workMode: WorkMode }) {
       tone="interior"
       eyebrow="Interior Studio is preparing"
       title={steps[activeStep]}
-      detail="Keep this page open. Reserved credits are automatically returned if generation fails."
+      detail="Generation continues safely in the background if you leave this page. Reserved credits are automatically returned if generation fails."
       steps={steps}
       activeStep={activeStep}
       variant="fullscreen"
