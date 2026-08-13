@@ -1,3 +1,4 @@
+
 export type AiPlan = "free" | "starter" | "pro";
 export type AiMode = "demo" | "live";
 export type ImageGenerationTier = "preview" | "final";

@@ -1703,6 +1703,37 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
       ? "/api/architecture/demo/generate"
       : "/api/architecture/stages/generate";
 
+    type ArchitectureStageResponse = {
+      success?: boolean;
+      status?: "processing" | "succeeded" | "failed";
+      jobId?: string;
+      error?: string;
+      project?: Project;
+      concept?: ArchitectureConcept | null;
+      planSet?: ArchitecturePlanSet | null;
+      visuals?: ArchitectureVisual[];
+      designPack?: ArchitectureDesignPack | null;
+    };
+
+    async function readArchitectureStageResponse(
+      response: Response,
+      fallback: string,
+    ): Promise<ArchitectureStageResponse> {
+      const text = await response.text();
+      if (!text) {
+        if (!response.ok) throw new Error(fallback);
+        return {};
+      }
+      try {
+        return JSON.parse(text) as ArchitectureStageResponse;
+      } catch {
+        if (response.status === 504 || /inactivity timeout|<html|<!doctype/i.test(text)) {
+          throw new Error("Architecture Studio could not start this generation request. Please try again.");
+        }
+        throw new Error(fallback);
+      }
+    }
+
     try {
       const response = await fetch(route, {
         method: "POST",
@@ -1710,18 +1741,55 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         body: JSON.stringify({ projectId, stage }),
       });
 
-      const payload = (await response.json()) as {
-        success?: boolean;
-        error?: string;
-        project?: Project;
-        concept?: ArchitectureConcept | null;
-        planSet?: ArchitecturePlanSet | null;
-        visuals?: ArchitectureVisual[];
-        designPack?: ArchitectureDesignPack | null;
-      };
+      let payload = await readArchitectureStageResponse(
+        response,
+        "Architecture content could not be prepared.",
+      );
 
       if (!response.ok || !payload.success) {
         throw new Error(payload.error || "Architecture content could not be prepared.");
+      }
+
+      if (!useDemoRoute) {
+        if (!payload.jobId) {
+          throw new Error("Architecture generation did not return a job ID.");
+        }
+
+        let completed: ArchitectureStageResponse | null = null;
+        for (let attempt = 0; attempt < 180; attempt += 1) {
+          if (attempt > 0) {
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 2500));
+          }
+
+          const statusResponse = await fetch(
+            `/api/architecture/stages/status?job=${encodeURIComponent(payload.jobId)}`,
+            { cache: "no-store" },
+          );
+          const statusPayload = await readArchitectureStageResponse(
+            statusResponse,
+            "Unable to check Architecture generation.",
+          );
+
+          if (!statusResponse.ok || statusPayload.success === false) {
+            throw new Error(statusPayload.error || "Unable to check Architecture generation.");
+          }
+          if (statusPayload.status === "failed") {
+            throw new Error(
+              statusPayload.error || "Architecture content generation failed. Your credits were returned.",
+            );
+          }
+          if (statusPayload.status === "succeeded") {
+            completed = statusPayload;
+            break;
+          }
+        }
+
+        if (!completed) {
+          throw new Error(
+            "Your Architecture content is still being prepared safely in the background. Reopen the project shortly to see the saved result.",
+          );
+        }
+        payload = completed;
       }
 
       if (payload.project) {
