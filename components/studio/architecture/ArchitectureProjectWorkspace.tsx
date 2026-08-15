@@ -1513,6 +1513,35 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     setError("");
     setMessage("");
 
+    type ArchitectureDirectionResponse = {
+      success?: boolean;
+      status?: "processing" | "succeeded" | "failed";
+      jobId?: string;
+      error?: string;
+      directions?: Direction[];
+      project?: Project | null;
+    };
+
+    async function readArchitectureDirectionResponse(
+      response: Response,
+      fallback: string,
+    ): Promise<ArchitectureDirectionResponse> {
+      const text = await response.text();
+      if (!text) {
+        if (!response.ok) throw new Error(fallback);
+        return {};
+      }
+
+      try {
+        return JSON.parse(text) as ArchitectureDirectionResponse;
+      } catch {
+        if (response.status === 504 || /inactivity timeout|<html|<!doctype/i.test(text)) {
+          throw new Error("Architecture Studio could not start the Direction request. Please try again.");
+        }
+        throw new Error(fallback);
+      }
+    }
+
     try {
       const response = await fetch("/api/architecture/directions/generate", {
         method: "POST",
@@ -1525,16 +1554,48 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         }),
       });
 
-      const payload = (await response.json()) as {
-        success?: boolean;
-        error?: string;
-        directions?: Direction[];
-        project?: Project | null;
-        partialImageFailure?: boolean;
-      };
+      const started = await readArchitectureDirectionResponse(
+        response,
+        "Architecture Directions could not be started.",
+      );
 
-      if (!response.ok || !payload.success || !payload.directions) {
-        throw new Error(payload.error || "Architecture Directions could not be generated.");
+      if (!response.ok || !started.success || !started.jobId) {
+        throw new Error(started.error || "Architecture Directions could not be started.");
+      }
+
+      let payload: ArchitectureDirectionResponse | null = null;
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 2500));
+        }
+
+        const statusResponse = await fetch(
+          `/api/architecture/directions/status?job=${encodeURIComponent(started.jobId)}`,
+          { cache: "no-store" },
+        );
+        const statusPayload = await readArchitectureDirectionResponse(
+          statusResponse,
+          "Unable to check Architecture Direction generation.",
+        );
+
+        if (!statusResponse.ok || statusPayload.success === false) {
+          throw new Error(statusPayload.error || "Unable to check Architecture Direction generation.");
+        }
+        if (statusPayload.status === "failed") {
+          throw new Error(
+            statusPayload.error || "Architecture Direction generation failed. Your credits were returned.",
+          );
+        }
+        if (statusPayload.status === "succeeded") {
+          payload = statusPayload;
+          break;
+        }
+      }
+
+      if (!payload?.directions) {
+        throw new Error(
+          "Your Architecture Directions are still being prepared safely in the background. Reopen the project shortly to see the saved result.",
+        );
       }
 
       setDirections(payload.directions);
