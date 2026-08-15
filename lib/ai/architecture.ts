@@ -7,7 +7,6 @@ import { getOpenAI } from "@/lib/ai/openai-server";
 import { imageQualityForTier, type AiPlanConfig, type ImageGenerationTier } from "@/lib/ai/config";
 import { renderArchitecturalDrawingSvg } from "@/lib/ai/architecture-drawing";
 import {
-  ARCHITECTURE_PROJECT_TYPES,
   getArchitectureProjectTemplate,
   getArchitectureVisualViews,
 } from "@/lib/architecture/project-templates";
@@ -55,13 +54,6 @@ export type CanonicalPlanRoom = {
   y: number;
   width: number;
   height: number;
-  /**
-   * Capacity carried by this room/ward/unit. New plan generations always
-   * populate these fields; they remain optional here so older saved projects
-   * continue to load safely.
-   */
-  capacity_type?: string;
-  capacity_count?: number;
 };
 
 export type CanonicalPlanSectionCut = {
@@ -228,7 +220,7 @@ const architectureDnaSchema = {
     properties: {
       identity_name: { type: "string" },
       design_summary: { type: "string" },
-      storeys: { type: "integer", minimum: 1, maximum: 12 },
+      storeys: { type: "integer", minimum: 1, maximum: 8 },
       massing: { type: "string" },
       roof_form: { type: "string" },
       facade_rhythm: { type: "string" },
@@ -437,7 +429,7 @@ const planSchema = {
           levels: {
             type: "array",
             minItems: 1,
-            maxItems: 12,
+            maxItems: 6,
             items: {
               type: "object",
               additionalProperties: false,
@@ -452,7 +444,7 @@ const planSchema = {
                   items: {
                     type: "object",
                     additionalProperties: false,
-                    required: ["id", "name", "zone", "x", "y", "width", "height", "capacity_type", "capacity_count"],
+                    required: ["id", "name", "zone", "x", "y", "width", "height"],
                     properties: {
                       id: { type: "string" },
                       name: { type: "string" },
@@ -461,8 +453,6 @@ const planSchema = {
                       y: coordinateProperty,
                       width: coordinateProperty,
                       height: coordinateProperty,
-                      capacity_type: { type: "string" },
-                      capacity_count: { type: "integer", minimum: 0, maximum: 1000 },
                     },
                   },
                 },
@@ -525,7 +515,7 @@ const planSchema = {
                     properties: {
                       room_id: { type: "string" },
                       fixture_type: { type: "string" },
-                      count: { type: "integer", minimum: 1, maximum: 1000 },
+                      count: { type: "integer", minimum: 1, maximum: 20 },
                     },
                   },
                 },
@@ -549,80 +539,6 @@ const planSchema = {
             },
             title: { type: "string" },
             prompt: { type: "string" },
-          },
-        },
-      },
-    },
-  },
-} as const;
-
-const architectureRequirementContractSchema = {
-  name: "architecture_requirement_contract",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["summary", "requirements"],
-    properties: {
-      summary: { type: "string" },
-      requirements: {
-        type: "array",
-        minItems: 1,
-        maxItems: 40,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "id", "source", "priority", "validation_scope", "category",
-            "statement", "measurable", "metric", "target_value", "unit",
-            "comparison", "evidence_hint",
-          ],
-          properties: {
-            id: { type: "string" },
-            source: { type: "string" },
-            priority: { type: "string", enum: ["hard", "preferred", "assumption"] },
-            validation_scope: { type: "string", enum: ["plan", "visual", "project"] },
-            category: { type: "string" },
-            statement: { type: "string" },
-            measurable: { type: "boolean" },
-            metric: { type: "string" },
-            target_value: { type: "number", minimum: 0 },
-            unit: { type: "string" },
-            comparison: {
-              type: "string",
-              enum: ["at_least", "exactly", "at_most", "present", "absent", "qualitative"],
-            },
-            evidence_hint: { type: "string" },
-          },
-        },
-      },
-    },
-  },
-} as const;
-
-const architectureRequirementAuditSchema = {
-  name: "architecture_requirement_audit",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["overall_pass", "checks"],
-    properties: {
-      overall_pass: { type: "boolean" },
-      checks: {
-        type: "array",
-        minItems: 1,
-        maxItems: 40,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["requirement_id", "status", "evidence", "observed_value", "reason"],
-          properties: {
-            requirement_id: { type: "string" },
-            status: { type: "string", enum: ["pass", "fail", "uncertain"] },
-            evidence: { type: "string" },
-            observed_value: { type: "number", minimum: 0 },
-            reason: { type: "string" },
           },
         },
       },
@@ -662,8 +578,6 @@ type ArchitectureSchema =
   | typeof architectureDnaSchema
   | typeof conceptSchema
   | typeof planSchema
-  | typeof architectureRequirementContractSchema
-  | typeof architectureRequirementAuditSchema
   | typeof visualPromptsSchema;
 
 async function structuredCompletion<T>(args: {
@@ -758,595 +672,6 @@ const imagePromptInstruction = [
   "No text, labels, dimensions, logos, signatures or watermarks inside photorealistic images.",
 ].join(" ");
 
-type ArchitectureCapacityConstraint = {
-  metric: string;
-  requestedCount: number;
-  sourceText: string;
-};
-
-type ArchitectureRequirementPriority = "hard" | "preferred" | "assumption";
-type ArchitectureRequirementScope = "plan" | "visual" | "project";
-type ArchitectureRequirementComparison =
-  | "at_least"
-  | "exactly"
-  | "at_most"
-  | "present"
-  | "absent"
-  | "qualitative";
-
-type ArchitectureRequirement = {
-  id: string;
-  source: string;
-  priority: ArchitectureRequirementPriority;
-  validation_scope: ArchitectureRequirementScope;
-  category: string;
-  statement: string;
-  measurable: boolean;
-  metric: string;
-  target_value: number;
-  unit: string;
-  comparison: ArchitectureRequirementComparison;
-  evidence_hint: string;
-};
-
-type ArchitectureRequirementContract = {
-  summary: string;
-  requirements: ArchitectureRequirement[];
-};
-
-type ArchitectureRequirementAudit = {
-  overall_pass: boolean;
-  checks: Array<{
-    requirement_id: string;
-    status: "pass" | "fail" | "uncertain";
-    evidence: string;
-    observed_value: number;
-    reason: string;
-  }>;
-};
-
-function objectRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function projectCapacityText(project: Record<string, unknown>) {
-  const professionalBrief = objectRecord(project.professional_brief);
-  const value = professionalBrief.user_capacity;
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function requestedProjectStoreys(
-  project: Record<string, unknown>,
-  site: Record<string, unknown> | null,
-) {
-  const siteValue = Number(site?.desired_floors);
-  if (Number.isFinite(siteValue) && siteValue > 0) return Math.round(siteValue);
-
-  const sourceBrief = objectRecord(project.source_brief);
-  const sourceValue = Number(sourceBrief.desired_floors);
-  if (Number.isFinite(sourceValue) && sourceValue > 0) return Math.round(sourceValue);
-  return null;
-}
-
-function parseCapacityConstraint(
-  projectType: string,
-  project: Record<string, unknown>,
-): ArchitectureCapacityConstraint | null {
-  const sourceText = projectCapacityText(project);
-  if (!sourceText) return null;
-  const lower = sourceText.toLowerCase();
-
-  const patterns: Array<{ metric: string; regex: RegExp }> = [];
-  if (/health|hospital|medical|clinic/i.test(projectType)) {
-    patterns.push(
-      { metric: "beds", regex: /(\d[\d,]*)\s*(?:hospital\s*)?beds?\b/i },
-      { metric: "patients", regex: /(\d[\d,]*)\s*patients?\b/i },
-    );
-  } else if (/hotel/i.test(projectType)) {
-    patterns.push(
-      { metric: "guest_rooms", regex: /(\d[\d,]*)\s*(?:guest\s*)?rooms?\b/i },
-      { metric: "guests", regex: /(\d[\d,]*)\s*guests?\b/i },
-    );
-  } else if (/resort/i.test(projectType)) {
-    patterns.push(
-      { metric: "villas", regex: /(\d[\d,]*)\s*villas?\b/i },
-      { metric: "guest_rooms", regex: /(\d[\d,]*)\s*(?:guest\s*)?rooms?\b/i },
-      { metric: "guests", regex: /(\d[\d,]*)\s*guests?\b/i },
-    );
-  } else if (/apartment|mixed/i.test(projectType)) {
-    patterns.push(
-      { metric: "units", regex: /(\d[\d,]*)\s*(?:apartments?|units?)\b/i },
-      { metric: "residents", regex: /(\d[\d,]*)\s*residents?\b/i },
-    );
-  } else if (/education|school|campus/i.test(projectType)) {
-    patterns.push(
-      { metric: "students", regex: /(\d[\d,]*)\s*students?\b/i },
-      { metric: "staff", regex: /(\d[\d,]*)\s*staff\b/i },
-    );
-  } else if (/restaurant|café|cafe/i.test(projectType)) {
-    patterns.push(
-      { metric: "seats", regex: /(\d[\d,]*)\s*seats?\b/i },
-      { metric: "guests", regex: /(\d[\d,]*)\s*guests?\b/i },
-    );
-  } else if (/office/i.test(projectType)) {
-    patterns.push({ metric: "staff", regex: /(\d[\d,]*)\s*staff\b/i });
-  } else if (/warehouse|industrial/i.test(projectType)) {
-    patterns.push(
-      { metric: "loading_bays", regex: /(\d[\d,]*)\s*loading\s*bays?\b/i },
-      { metric: "staff", regex: /(\d[\d,]*)\s*staff\b/i },
-    );
-  } else if (/community/i.test(projectType)) {
-    patterns.push(
-      { metric: "people", regex: /(\d[\d,]*)\s*(?:people|persons?|users?)\b/i },
-    );
-  }
-
-  for (const pattern of patterns) {
-    const match = lower.match(pattern.regex);
-    if (!match) continue;
-    const requestedCount = Number(match[1].replace(/,/g, ""));
-    if (Number.isFinite(requestedCount) && requestedCount > 0) {
-      return { metric: pattern.metric, requestedCount, sourceText };
-    }
-  }
-  return null;
-}
-
-function capacityTypeMatches(metric: string, candidate: string) {
-  const value = candidate.toLowerCase().replace(/[\s-]+/g, "_");
-  const aliases: Record<string, RegExp> = {
-    beds: /bed|inpatient/,
-    patients: /patient/,
-    guest_rooms: /guest.*room|room|key/,
-    guests: /guest/,
-    villas: /villa/,
-    units: /apartment|unit|dwelling/,
-    residents: /resident/,
-    students: /student/,
-    staff: /staff|employee|worker/,
-    seats: /seat|cover|diner/,
-    loading_bays: /loading.*bay|dock/,
-    people: /people|person|user|occupant/,
-  };
-  return (aliases[metric] || new RegExp(metric, "i")).test(value);
-}
-
-function generatedCapacityCount(plan: CanonicalPlanSpec, constraint: ArchitectureCapacityConstraint) {
-  const roomCapacity = (plan.levels || []).reduce((total, level) =>
-    total + (level.rooms || []).reduce((sum, room) => {
-      const count = Number(room.capacity_count || 0);
-      return sum + (
-        count > 0 && capacityTypeMatches(constraint.metric, String(room.capacity_type || ""))
-          ? count
-          : 0
-      );
-    }, 0), 0);
-
-  const fixtureCapacity = (plan.levels || []).reduce((total, level) =>
-    total + (level.fixtures || []).reduce((sum, fixture) => {
-      const count = Number(fixture.count || 0);
-      return sum + (
-        count > 0 && capacityTypeMatches(constraint.metric, String(fixture.fixture_type || ""))
-          ? count
-          : 0
-      );
-    }, 0), 0);
-
-  // New prompts ask for both room capacity metadata and visible fixtures. Use
-  // the larger number rather than double-counting the same beds/seats twice.
-  return Math.max(roomCapacity, fixtureCapacity);
-}
-
-function planValidationIssues(args: {
-  planSet: LivePlanSet;
-  project: Record<string, unknown>;
-  site: Record<string, unknown> | null;
-}) {
-  const issues: string[] = [];
-  const projectType = String(args.project.project_type || "Other");
-  const capacity = parseCapacityConstraint(projectType, args.project);
-  const requestedStoreys = requestedProjectStoreys(args.project, args.site);
-  const levels = args.planSet.canonical_plan?.levels || [];
-
-  if (requestedStoreys && levels.length !== requestedStoreys) {
-    issues.push(
-      `The user requested exactly ${requestedStoreys} floor${requestedStoreys === 1 ? "" : "s"}, but the Canonical Plan contains ${levels.length}.`,
-    );
-  }
-
-  if (capacity) {
-    const generated = generatedCapacityCount(args.planSet.canonical_plan, capacity);
-    if (generated < capacity.requestedCount) {
-      issues.push(
-        `The user requested ${capacity.requestedCount} ${capacity.metric.replace(/_/g, " ")}, but the Canonical Plan accounts for only ${generated}.`,
-      );
-    }
-
-    if (capacity.metric === "beds") {
-      const hasInpatientSpace = levels.some((level) =>
-        (level.rooms || []).some((room) =>
-          /patient|inpatient|ward|icu/i.test(`${room.name} ${room.zone}`),
-        ),
-      );
-      if (!hasInpatientSpace) {
-        issues.push("A bed-based healthcare project must contain inpatient wards/patient rooms; an outpatient-only plan is invalid.");
-      }
-    }
-  }
-
-  return issues;
-}
-
-function splitArchitectureSpaceProgram(spaceProgram: Array<Record<string, unknown>>) {
-  const normalised = spaceProgram.map((row) => ({
-    space_name: String(row.space_name || "").trim(),
-    zone: String(row.zone || "Flexible"),
-    level: String(row.level || "Ground"),
-    quantity: Math.max(1, Number(row.quantity) || 1),
-    area_each_m2: Math.max(0, Number(row.area_each_m2) || 0),
-    total_area_m2: Math.max(0, Number(row.total_area_m2) || 0),
-    priority: String(row.priority || "Required"),
-    notes: typeof row.notes === "string" ? row.notes : null,
-    is_ai_suggested: row.is_ai_suggested === true,
-  })).filter((row) => Boolean(row.space_name));
-
-  return {
-    user_defined: normalised.filter((row) => !row.is_ai_suggested),
-    ai_suggestions: normalised.filter((row) => row.is_ai_suggested),
-    all: normalised,
-  };
-}
-
-function isCustomArchitectureProjectType(projectType: string) {
-  return !ARCHITECTURE_PROJECT_TYPES.includes(projectType);
-}
-
-function architectureRequirementSource(args: {
-  project: Record<string, unknown>;
-  site: Record<string, unknown> | null;
-  planning: Record<string, unknown> | null;
-  spaceProgram: Array<Record<string, unknown>>;
-}) {
-  const program = splitArchitectureSpaceProgram(args.spaceProgram);
-  const projectType = String(args.project.project_type || "Other");
-  const customProjectType = isCustomArchitectureProjectType(projectType);
-
-  return {
-    project_type: projectType,
-    project_type_is_custom: customProjectType,
-    project_name: args.project.project_name || null,
-    scope: args.project.scope || null,
-    architectural_style: args.project.architectural_style || null,
-    selected_spaces: args.project.selected_spaces || [],
-    project_notes: args.project.notes || null,
-    source_notes: args.project.source_notes || null,
-    professional_brief: args.project.professional_brief || {},
-    source_brief: args.project.source_brief || {},
-    site: args.site,
-    planning: args.planning,
-    saved_space_program: {
-      user_defined: program.user_defined,
-      ai_suggestions: customProjectType ? [] : program.ai_suggestions,
-      ignored_generic_suggestions: customProjectType ? program.ai_suggestions : [],
-      policy: customProjectType
-        ? "This is a custom project type. Generic template-generated Space Program rows are placeholders only and must not become hard requirements. User-defined rows remain authoritative."
-        : "AI-suggested rows are defaults only. They may guide the plan but are never hard unless independently repeated by the user. User-defined rows marked Required may become hard plan requirements.",
-    },
-  };
-}
-
-function requirementLooksLikeBroadCompliance(requirement: ArchitectureRequirement) {
-  const value = `${requirement.category} ${requirement.statement} ${requirement.metric}`.toLowerCase();
-  return /\b(comply|compliance|code|regulation|regulatory|functional and safety|safety requirements|best practice|all applicable|standards?)\b/.test(value);
-}
-
-function requirementSourceLooksUserAuthored(source: string) {
-  return /project_notes|source_notes|professional_brief|user_capacity|source_brief|site\.desired_floors|planning\.|user_defined|custom|explicit/i.test(source);
-}
-
-function requirementSourceLooksSuggested(source: string) {
-  return /ai_suggestions|template|default|smart suggestion|suggested|selected_spaces/i.test(source);
-}
-
-function sanitiseArchitectureRequirementContract(args: {
-  contract: ArchitectureRequirementContract;
-  project: Record<string, unknown>;
-  site: Record<string, unknown> | null;
-  spaceProgram: Array<Record<string, unknown>>;
-}) {
-  const program = splitArchitectureSpaceProgram(args.spaceProgram);
-  const suggestedNames = program.ai_suggestions.map((row) => row.space_name.toLowerCase());
-  const customProjectType = isCustomArchitectureProjectType(String(args.project.project_type || "Other"));
-
-  const requirements = args.contract.requirements.map((requirement) => {
-    let next = { ...requirement };
-    const source = String(next.source || "");
-    const statement = next.statement.toLowerCase();
-    const suggestedMatches = suggestedNames.filter((name) => name && statement.includes(name)).length;
-    const derivedFromSuggestedProgram =
-      requirementSourceLooksSuggested(source) ||
-      (/saved_space_program/i.test(source) && !/user_defined/i.test(source)) ||
-      (suggestedMatches >= 2 && !requirementSourceLooksUserAuthored(source));
-
-    if (derivedFromSuggestedProgram) {
-      next.priority = "preferred";
-      if (customProjectType) next.source = `${source || "saved_space_program"} (generic suggestion only)`;
-    }
-
-    if (requirementLooksLikeBroadCompliance(next) && !requirementSourceLooksUserAuthored(source)) {
-      next = {
-        ...next,
-        priority: "assumption",
-        validation_scope: "project",
-        measurable: false,
-        target_value: 0,
-        comparison: "qualitative",
-      };
-    }
-
-    return next;
-  });
-
-  return { ...args.contract, requirements };
-}
-
-async function extractArchitectureRequirementContract(args: {
-  plan: AiPlanConfig;
-  project: Record<string, unknown>;
-  site: Record<string, unknown> | null;
-  planning: Record<string, unknown> | null;
-  spaceProgram: Array<Record<string, unknown>>;
-}) {
-  const requestedStoreys = requestedProjectStoreys(args.project, args.site);
-  const result = await structuredCompletion<ArchitectureRequirementContract>({
-    plan: args.plan,
-    schema: architectureRequirementContractSchema,
-    system: [
-      "You are Heyy Studio's architecture brief requirements analyst.",
-      "Convert the supplied project information into a compact Requirement Contract before any plan is accepted.",
-      "This must work for any project type, including custom and unusual projects. Never rely on a fixed list such as beds, hotel rooms, students or seats.",
-      "Capture explicit user-authored requirements from free text, capacity fields, professional notes, site information, source rules and saved Space Program.",
-      "Explicit user statements are HARD unless they are clearly preferences. AI/template defaults and unverified planning assumptions are PREFERRED or ASSUMPTION, never hard merely because they exist in a template.",
-      "Rows under saved_space_program.ai_suggestions are NEVER HARD. They are template guidance only. Rows under saved_space_program.ignored_generic_suggestions must be ignored entirely. Only saved_space_program.user_defined rows may become hard when they are marked Required.",
-      "Never convert an automatically suggested Space Program into one combined hard requirement. A custom project type must be understood from the user's project_type and free-form brief, not from generic Other-template placeholders.",
-      "The project type itself is context, not permission to invent vague obligations such as 'comply with all functional and safety requirements'. Only explicit, testable requirements from the user's inputs may block the plan stage.",
-      "Do not invent requirements that the user did not state or that are not directly implied by a selected project setting.",
-      "Assign validation_scope=plan only when the Canonical Plan can prove the requirement through levels, spaces, quantities, capacity, access, adjacencies, site layout, preservation or prohibition.",
-      "Use validation_scope=visual for appearance/material/style requirements that a plan cannot prove. Use project for broader requirements that must be carried through the workflow but are not plan-verifiable.",
-      "For every measurable requirement, normalize the metric into a short reusable noun phrase, set target_value, unit and comparison. Examples are only illustrative: rooms, beds, apartments, classrooms, courts, loading bays, seats, people, parking spaces, treatment rooms, production lines or animal pens.",
-      "For non-measurable requirements use measurable=false, target_value=0 and comparison present/absent/qualitative as appropriate.",
-      "If an exact floor count was supplied, it is a hard plan requirement.",
-      "Return one requirement per independently testable obligation. Preserve the user's wording in statement/source where useful.",
-    ].join(" "),
-    payload: {
-      source_of_truth: architectureRequirementSource(args),
-      deterministic_floor_count: requestedStoreys,
-    },
-  });
-
-  const sanitised = sanitiseArchitectureRequirementContract({
-    contract: result.value,
-    project: args.project,
-    site: args.site,
-    spaceProgram: args.spaceProgram,
-  });
-  const requirements = [...sanitised.requirements];
-  if (requestedStoreys && !requirements.some((item) => item.category === "floor_count")) {
-    requirements.unshift({
-      id: "explicit-floor-count",
-      source: "site.desired_floors/source_brief.desired_floors",
-      priority: "hard",
-      validation_scope: "plan",
-      category: "floor_count",
-      statement: `The project must contain exactly ${requestedStoreys} floor${requestedStoreys === 1 ? "" : "s"}.`,
-      measurable: true,
-      metric: "floors",
-      target_value: requestedStoreys,
-      unit: "floors",
-      comparison: "exactly",
-      evidence_hint: "canonical_plan.levels.length",
-    });
-  }
-
-  return {
-    contract: { ...sanitised, requirements },
-    usage: result.usage,
-  };
-}
-
-function normaliseRequirementMetric(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function metricTokens(value: string) {
-  return normaliseRequirementMetric(value)
-    .split(/\s+/)
-    .filter((token) => token.length > 2 && !["the", "and", "for", "with", "room", "rooms", "area", "spaces"].includes(token));
-}
-
-function textMatchesRequirementMetric(text: string, metric: string) {
-  const candidate = normaliseRequirementMetric(text);
-  const tokens = metricTokens(metric);
-  if (!candidate || !tokens.length) return false;
-  return tokens.every((token) => candidate.includes(token)) || candidate.includes(normaliseRequirementMetric(metric));
-}
-
-function planScheduleAreaForMetric(planSet: LivePlanSet, metric: string) {
-  const matches = (planSet.area_schedule || []).filter((item) =>
-    textMatchesRequirementMetric(String(item.space || ""), metric),
-  );
-  if (!matches.length) return null;
-  return matches.reduce((sum, item) => sum + Math.max(0, Number(item.approx_area_m2 || 0)), 0);
-}
-
-function deterministicObservedRequirement(
-  planSet: LivePlanSet,
-  requirement: ArchitectureRequirement,
-): { supported: boolean; observed: number; evidence: string } {
-  const plan = planSet.canonical_plan;
-  const metric = normaliseRequirementMetric(requirement.metric);
-  const unit = normaliseRequirementMetric(requirement.unit);
-
-  if (requirement.category === "floor_count" || /floor|storey|story|level/.test(metric)) {
-    return { supported: true, observed: plan.levels?.length || 0, evidence: "canonical_plan.levels.length" };
-  }
-
-  if (/m2|sqm|square metre|square meter/.test(unit) || /\barea\b/.test(metric)) {
-    const area = planScheduleAreaForMetric(planSet, requirement.metric);
-    return area === null
-      ? { supported: false, observed: 0, evidence: "No deterministic area-schedule match." }
-      : { supported: true, observed: area, evidence: "planSet.area_schedule" };
-  }
-
-  let capacityTotal = 0;
-  let fixtureTotal = 0;
-  let matchingRooms = 0;
-  for (const level of plan.levels || []) {
-    for (const room of level.rooms || []) {
-      if (textMatchesRequirementMetric(`${room.capacity_type || ""} ${room.name || ""} ${room.zone || ""}`, requirement.metric)) {
-        matchingRooms += 1;
-        capacityTotal += Math.max(0, Number(room.capacity_count || 0));
-      }
-    }
-    for (const fixture of level.fixtures || []) {
-      if (textMatchesRequirementMetric(String(fixture.fixture_type || ""), requirement.metric)) {
-        fixtureTotal += Math.max(0, Number(fixture.count || 0));
-      }
-    }
-  }
-
-  const countLike = /count|unit|units|room|rooms|bed|beds|seat|seats|person|people|student|staff|guest|bay|bays|space|spaces|court|courts|pen|pens|vehicle|parking/.test(`${unit} ${metric}`);
-  if (!countLike) {
-    return { supported: false, observed: 0, evidence: "Requirement is not safely countable deterministically." };
-  }
-
-  if (capacityTotal > 0 || fixtureTotal > 0) {
-    return { supported: true, observed: Math.max(capacityTotal, fixtureTotal), evidence: "canonical room capacity metadata / fixtures" };
-  }
-
-  return { supported: true, observed: matchingRooms, evidence: "countable canonical room matches" };
-}
-
-function deterministicRequirementIssues(
-  planSet: LivePlanSet,
-  contract: ArchitectureRequirementContract,
-) {
-  const issues: string[] = [];
-  for (const requirement of contract.requirements) {
-    if (requirement.priority !== "hard" || requirement.validation_scope !== "plan") continue;
-    if (!requirement.measurable || requirement.target_value <= 0) continue;
-
-    const observation = deterministicObservedRequirement(planSet, requirement);
-    if (!observation.supported) continue;
-
-    const observed = observation.observed;
-    const target = requirement.target_value;
-    const passes = requirement.comparison === "at_least"
-      ? observed >= target
-      : requirement.comparison === "at_most"
-        ? observed <= target
-        : requirement.comparison === "exactly"
-          ? observed === target
-          : true;
-
-    if (!passes) {
-      issues.push(`${requirement.id}: ${requirement.statement} Deterministic evidence found ${observed} ${requirement.unit || requirement.metric}; target is ${requirement.comparison.replace(/_/g, " ")} ${target}. Evidence source: ${observation.evidence}.`);
-    }
-  }
-  return issues;
-}
-
-async function auditArchitecturePlanRequirements(args: {
-  plan: AiPlanConfig;
-  contract: ArchitectureRequirementContract;
-  planSet: LivePlanSet;
-}) {
-  return structuredCompletion<ArchitectureRequirementAudit>({
-    plan: args.plan,
-    schema: architectureRequirementAuditSchema,
-    system: [
-      "You are Heyy Studio's independent Architecture Requirement auditor.",
-      "Audit the generated Canonical Plan against the Requirement Contract. You did not generate the plan and must not give it the benefit of the doubt.",
-      "Evaluate every requirement independently. For validation_scope=plan, require concrete evidence in canonical levels, rooms, room capacity metadata, fixtures, circulation, openings, site elements, area schedule or relationships.",
-      "For validation_scope=visual or project, mark pass only when the supplied plan data genuinely proves it; otherwise mark uncertain rather than inventing evidence. These non-plan requirements do not block this plan stage.",
-      "For hard plan requirements, uncertain is not acceptable: if evidence is missing, use fail or uncertain and explain what is absent.",
-      "Do not audit AI/template Space Program suggestions as hard requirements. Do not turn broad code/compliance/safety language into a plan failure unless the Requirement Contract contains a specific user-authored, plan-verifiable obligation.",
-      "Quantitative requirements must reconcile with explicit counts, capacity metadata or clearly countable spaces. Do not infer a number from a room name alone when the requested quantity is larger than one.",
-      "Presence, absence, preservation, access and relationship requirements must point to specific rooms, openings, circulation links, levels or site elements as evidence.",
-      "overall_pass means every HARD requirement with validation_scope=plan is pass.",
-    ].join(" "),
-    payload: {
-      requirement_contract: args.contract,
-      generated_plan: args.planSet,
-    },
-  });
-}
-
-function hardPlanAuditFailures(
-  contract: ArchitectureRequirementContract,
-  audit: ArchitectureRequirementAudit,
-) {
-  const byId = new Map(audit.checks.map((check) => [check.requirement_id, check]));
-  return contract.requirements.flatMap((requirement) => {
-    if (requirement.priority !== "hard" || requirement.validation_scope !== "plan") return [];
-    const check = byId.get(requirement.id);
-    if (check?.status === "pass") return [];
-    return [
-      `${requirement.id}: ${requirement.statement} Audit status: ${check?.status || "missing"}. ${check?.reason || "No compliance evidence was returned."}`,
-    ];
-  });
-}
-
-function floorVisualTypeForIndex(index: number) {
-  if (index <= 0) return "ground_floor";
-  if (index === 1) return "upper_floor";
-  return `level_${index}_floor`;
-}
-
-function floorIndexFromVisualType(visualType: string) {
-  if (visualType === "ground_floor") return 0;
-  if (visualType === "upper_floor") return 1;
-  const match = visualType.match(/^level_(\d+)_floor$/);
-  return match ? Number(match[1]) : null;
-}
-
-function isFloorPlanVisualType(visualType: string) {
-  return floorIndexFromVisualType(visualType) !== null;
-}
-
-function floorPlanTitle(level: CanonicalPlanLevel | undefined, index: number) {
-  const label = String(level?.label || "").trim();
-  if (!label) return index === 0 ? "Ground Floor Plan" : `Level ${index} Plan`;
-  if (/\bplan\b/i.test(label)) return label;
-  return `${label} Plan`;
-}
-
-function rendererPlanForFloor(plan: CanonicalPlanSpec, visualType: string) {
-  const index = floorIndexFromVisualType(visualType);
-  if (index === null || index <= 1) {
-    return { plan, rendererVisualType: visualType };
-  }
-
-  const target = plan.levels?.[index];
-  const ground = plan.levels?.[0];
-  if (!target || !ground) {
-    return { plan, rendererVisualType: "upper_floor" };
-  }
-
-  return {
-    plan: {
-      ...plan,
-      levels: [ground, target],
-    },
-    rendererVisualType: "upper_floor",
-  };
-}
-
 export async function generateArchitectureDirection(args: {
   plan: AiPlanConfig;
   directionNumber: number;
@@ -1367,9 +692,6 @@ export async function generateArchitectureDirection(args: {
       "Create one clearly differentiated architectural direction from the supplied project data.",
       `This is a ${projectType} project. Never default to residential language unless the project type is residential.`,
       `Focus on the correct users, operations and spatial priorities: ${template.directionFocus.join(", ")}.`,
-      "Treat explicit user capacity and floor-count inputs as hard design requirements, not optional inspiration.",
-      "If a healthcare brief specifies beds, the direction must describe a genuine inpatient hospital strategy with wards/patient rooms and the clinical/service systems needed to support that bed count; do not turn it into an outpatient clinic.",
-      "If the user supplied an exact number of floors, the massing and image prompt must preserve exactly that number. If floors are unspecified, choose a credible storey count from the programme, capacity, site and target area instead of defaulting to two storeys.",
       "Write concise but complete professional content suitable for an architecture design pack.",
       safetyInstruction,
       "The direction image prompt must clearly define a single repeatable building identity, including massing, roof geometry, facade rhythm, openings, material placement, pool and landscape relationship.",
@@ -1387,11 +709,6 @@ export async function generateArchitectureDirection(args: {
       planning_assumptions: args.planning,
       selected_materials: args.selectedMaterials,
       project_type_template: template,
-      hard_project_requirements: {
-        capacity_text: projectCapacityText(args.project) || null,
-        parsed_capacity: parseCapacityConstraint(projectType, args.project),
-        requested_storeys: requestedProjectStoreys(args.project, args.site),
-      },
       mandatory_disclaimer: "Conceptual architecture only; professional local verification is required.",
     },
   }).then(({ value, usage }) => ({ direction: value, usage }));
@@ -1412,9 +729,6 @@ export async function generateArchitectureDna(args: {
       "Convert the selected Architecture Direction into one strict Architecture DNA record.",
       "This record is a non-negotiable identity lock for every later concept image, floor-plan diagram and architectural visual.",
       "Use the selected direction as the source of truth. Resolve ambiguity into specific, repeatable visual rules.",
-      "Explicit user programme requirements override a vague storey assumption in the direction text.",
-      "If the user supplied desired_floors, architecture_dna.storeys must equal that exact number.",
-      "If floors were not supplied, architecture_dna.storeys must be a credible programme-driven number based on requested capacity, target area and site. Do not automatically choose two storeys for large hospitals, hotels, schools or mixed-use projects.",
       "The prohibited_changes list must explicitly prevent redesigning the property into a different building.",
       safetyInstruction,
     ].join(" "),
@@ -1423,21 +737,8 @@ export async function generateArchitectureDna(args: {
       selected_direction: args.direction,
       site: args.site,
       selected_materials: args.selectedMaterials,
-      hard_project_requirements: {
-        capacity_text: projectCapacityText(args.project) || null,
-        parsed_capacity: parseCapacityConstraint(String(args.project.project_type || "Other"), args.project),
-        requested_storeys: requestedProjectStoreys(args.project, args.site),
-      },
     },
-  }).then(({ value, usage }) => {
-    const requestedStoreys = requestedProjectStoreys(args.project, args.site);
-    return {
-      architectureDna: requestedStoreys
-        ? { ...value, storeys: requestedStoreys }
-        : value,
-      usage,
-    };
-  });
+  }).then(({ value, usage }) => ({ architectureDna: value, usage }));
 }
 
 export async function generateArchitectureConcept(args: {
@@ -1456,9 +757,7 @@ export async function generateArchitectureConcept(args: {
     system: [
       "You are Heyy Studio's senior conceptual architect preparing a selected-direction concept strategy.",
       "Translate the selected direction into a clear spatial, environmental and material concept without redesigning the building.",
-      "Use the saved Space Program as client intent, but never let an incomplete saved programme erase a hard user capacity requirement.",
-      "Explicit bed, room, unit, student, staff, seat or other capacity requirements must be carried forward into the spatial strategy.",
-      "If a healthcare brief specifies beds, the concept must include inpatient accommodation and supporting clinical/service zoning, not only reception, diagnostics and outpatient rooms.",
+      "Use the saved Space Program as client intent, not as an approved schedule.",
       "The concept image prompt must request an architectural concept presentation board, not another standalone facade render.",
       "The board should combine the exact Master Architecture Reference with clear visual studies such as massing evolution, site response, zoning, circulation, sun/orientation, material palette and indoor-outdoor relationships.",
       "It must preserve the Architecture DNA, including massing, roof geometry, facade rhythm, window language, material locations and signature elements.",
@@ -1472,48 +771,29 @@ export async function generateArchitectureConcept(args: {
       site: args.site,
       planning_assumptions: args.planning,
       selected_materials: args.selectedMaterials,
-      saved_space_program: architectureRequirementSource({
-        project: args.project,
-        site: args.site,
-        planning: args.planning,
-        spaceProgram: args.spaceProgram,
-      }).saved_space_program,
-      hard_project_requirements: {
-        capacity_text: projectCapacityText(args.project) || null,
-        parsed_capacity: parseCapacityConstraint(String(args.project.project_type || "Other"), args.project),
-        requested_storeys: requestedProjectStoreys(args.project, args.site),
-      },
+      saved_space_program: args.spaceProgram,
     },
   }).then(({ value, usage }) => ({ concept: value, usage }));
 }
 
 function expandedPlanViews(planSet: LivePlanSet, architectureDna: ArchitectureDna) {
-  const levels = Array.isArray(planSet.canonical_plan?.levels)
-    ? planSet.canonical_plan.levels
-    : [];
+  const hasUpperLevel = Array.isArray(planSet.canonical_plan?.levels) && planSet.canonical_plan.levels.length > 1;
   const identity = architectureDna.identity_name || "Selected Architecture Direction";
-  const floorViews: LivePlanSet["plan_images"] = levels.map((level, index) => ({
-    visual_type: floorVisualTypeForIndex(index),
-    title: floorPlanTitle(level, index),
-    prompt: index === 0
-      ? "Coordinated ground-floor plan with room names, approximate areas, entry, openings, capacity-bearing spaces and outdoor relationships."
-      : `Coordinated ${String(level.label || `Level ${index}`).toLowerCase()} plan aligned with the same footprint, structure, vertical circulation and programme. This floor is part of the same canonical multi-floor building.`,
-  }));
-
   const views: LivePlanSet["plan_images"] = [
-    ...floorViews,
-    { visual_type: "functional_zoning", title: "Functional Zoning", prompt: "Colour-coded functional zones derived from the same canonical multi-floor geometry." },
+    { visual_type: "functional_zoning", title: "Functional Zoning", prompt: "Colour-coded functional zones derived from the same canonical floor-plan geometry." },
+    { visual_type: "ground_floor", title: "Ground Floor Plan", prompt: "Coordinated ground-floor plan with room names, approximate areas, entry, openings and outdoor relationships." },
+    ...(hasUpperLevel ? [{ visual_type: "upper_floor", title: "Upper Floor Plan", prompt: "Coordinated upper-floor plan aligned with the same footprint, structure and vertical circulation." }] : []),
     { visual_type: "site_plan", title: "Site Plan", prompt: "Coordinated site plan showing the same footprint, access, driveway, pool, landscape, orientation and conceptual setbacks." },
-    { visual_type: "circulation", title: "Circulation Diagram", prompt: "Public, patient/guest/resident, staff, service and outdoor movement derived from the same canonical room relationships and vertical circulation." },
-    { visual_type: "north_elevation", title: "North Elevation", prompt: `Orthographic north elevation of ${identity}, preserving the selected massing, exact canonical storey count, roof, facade rhythm, openings and materials.` },
-    { visual_type: "south_elevation", title: "South Elevation", prompt: `Orthographic south elevation of ${identity}, preserving the selected massing, exact canonical storey count, roof, facade rhythm, openings and materials.` },
-    { visual_type: "east_elevation", title: "East Elevation", prompt: `Orthographic east elevation of ${identity}, preserving the selected massing, exact canonical storey count, roof, facade rhythm, openings and materials.` },
-    { visual_type: "west_elevation", title: "West Elevation", prompt: `Orthographic west elevation of ${identity}, preserving the selected massing, exact canonical storey count, roof, facade rhythm, openings and materials.` },
-    { visual_type: "section_longitudinal", title: "Longitudinal Section A—A", prompt: `True vertical longitudinal building section A—A through ${identity}. The cut line must be marked on every relevant floor plan with architectural section symbols and direction arrows. Pass through the stair/vertical circulation where possible and show every canonical level, foundations, slabs, floor-to-floor heights, clear ceiling heights, doors, windows, stair flights and landings, roof build-up and site levels.` },
-    { visual_type: "section_transverse", title: "Transverse Section B—B", prompt: `True vertical transverse building section B—B through ${identity}, perpendicular to A—A. The cut line must be marked on every relevant floor plan with architectural section symbols and direction arrows. Show every canonical level, cut walls and slabs, projected interior elements, floor levels, door/window heights, roof, foundations and the relationship between principal spaces.` },
-    { visual_type: "perspective_front", title: "Front Perspective", prompt: `Front three-quarter perspective of the exact same ${identity}, preserving the canonical storey count.` },
-    { visual_type: "perspective_rear", title: "Rear Perspective", prompt: `Rear three-quarter perspective of the exact same ${identity}, showing the primary outdoor relationship and preserving the canonical storey count.` },
-    { visual_type: "perspective_aerial", title: "Aerial Perspective", prompt: `Oblique aerial perspective of the exact same ${identity}, coordinated with the canonical site plan and all canonical floors.` },
+    { visual_type: "circulation", title: "Circulation Diagram", prompt: "Guest, resident, staff, service and outdoor movement derived from the same canonical room relationships." },
+    { visual_type: "north_elevation", title: "North Elevation", prompt: `Orthographic north elevation of ${identity}, preserving the selected massing, roof, facade rhythm, openings and materials.` },
+    { visual_type: "south_elevation", title: "South Elevation", prompt: `Orthographic south elevation of ${identity}, preserving the selected massing, roof, facade rhythm, openings and materials.` },
+    { visual_type: "east_elevation", title: "East Elevation", prompt: `Orthographic east elevation of ${identity}, preserving the selected massing, roof, facade rhythm, openings and materials.` },
+    { visual_type: "west_elevation", title: "West Elevation", prompt: `Orthographic west elevation of ${identity}, preserving the selected massing, roof, facade rhythm, openings and materials.` },
+    { visual_type: "section_longitudinal", title: "Longitudinal Section A—A", prompt: `True vertical longitudinal building section A—A through ${identity}. The cut line must be marked on every relevant floor plan with architectural section symbols and direction arrows. Pass through the stair/vertical circulation where possible and show foundations, slabs, floor-to-floor heights, clear ceiling heights, doors, windows, stair flight and landings, roof build-up and site levels.` },
+    { visual_type: "section_transverse", title: "Transverse Section B—B", prompt: `True vertical transverse building section B—B through ${identity}, perpendicular to A—A. The cut line must be marked on every relevant floor plan with architectural section symbols and direction arrows. Show cut walls and slabs, projected interior elements, floor levels, door/window heights, roof, foundations and the relationship between principal spaces.` },
+    { visual_type: "perspective_front", title: "Front Perspective", prompt: `Front three-quarter perspective of the exact same ${identity}.` },
+    { visual_type: "perspective_rear", title: "Rear Perspective", prompt: `Rear three-quarter perspective of the exact same ${identity}, showing the primary outdoor relationship.` },
+    { visual_type: "perspective_aerial", title: "Aerial Perspective", prompt: `Oblique aerial perspective of the exact same ${identity}, coordinated with the canonical site plan.` },
   ];
   return views;
 }
@@ -1534,201 +814,80 @@ export async function generateArchitecturePlanSet(args: {
 }) {
   const adjustmentInstruction = args.adjustmentInstruction?.trim();
   const isAdjustment = Boolean(args.existingPlan && adjustmentInstruction);
-  const projectType = String(args.project.project_type || "Other");
-  const capacityConstraint = parseCapacityConstraint(projectType, args.project);
-  const requestedStoreys = requestedProjectStoreys(args.project, args.site);
 
-  const requirementResult = await extractArchitectureRequirementContract({
-    plan: args.plan,
-    project: args.project,
-    site: args.site,
-    planning: args.planning,
-    spaceProgram: args.spaceProgram,
-  });
-  const requirementContract = requirementResult.contract;
-
-  const hardPlanRequirements = requirementContract.requirements.filter(
-    (requirement) => requirement.priority === "hard" && requirement.validation_scope === "plan",
-  );
-
-  const baseSystem = [
-    "You are Heyy Studio's senior conceptual architect preparing one internally coordinated, non-construction concept plan set.",
-    "Create exactly one Canonical Plan Specification. Every plan view must derive from this same site, footprint, room coordinates, circulation and entry.",
-    "The supplied Requirement Contract is the source of truth for user intent. This system must work for any project type or custom requirement; do not rely on a narrow set of hard-coded examples.",
-    "Satisfy every HARD requirement with validation_scope=plan. Preferred requirements should be satisfied when they do not conflict with hard requirements, site constraints or each other. Assumptions may be changed when needed and must never override explicit user requirements.",
-    "For every measurable hard plan requirement, make the evidence machine-checkable. Use canonical room names plus capacity_type/capacity_count or explicit fixtures/counts so the requested quantity can be audited later.",
-    "For requirements about presence, absence, separation, adjacency, access, preservation or prohibition, represent the evidence explicitly in rooms, circulation, openings, site elements, level assignments or planning assumptions.",
-    "Never silently omit an explicit requirement because the template Space Program is incomplete. The Requirement Contract overrides generic defaults.",
-    requestedStoreys
-      ? `HARD FLOOR COUNT: canonical_plan.levels must contain exactly ${requestedStoreys} distinct levels. Do not reduce, merge or omit floors.`
-      : "No exact floor count was supplied. Choose a credible number of levels from the complete requirement contract, programme, capacity, site, target area and operational needs. Do not automatically default large or complex projects to two floors.",
-    capacityConstraint
-      ? `A legacy deterministic capacity parser also recognized at least ${capacityConstraint.requestedCount} ${capacityConstraint.metric.replace(/_/g, " ")}. Treat this as supporting evidence, not as the only type of requirement the system understands.`
-      : "Do not assume the absence of a recognized legacy capacity metric means there is no capacity requirement; use the universal Requirement Contract.",
-    "For every canonical room, set capacity_type and capacity_count. Use capacity_count=0 and capacity_type='' when the room carries no measurable programme quantity. For capacity-bearing rooms, use the same normalized metric language as the Requirement Contract wherever practical.",
-    "Coordinates use a 0 to 100 site grid. All rooms, pool, driveway, entry and footprint must fit within that grid.",
-    "Use the full coordinate canvas: distribute each level between approximately 8 and 92 rather than clustering rooms in one small corner.",
-    "Rooms on the same level must not overlap. Align shared walls, keep circulation legible and give every room a practical minimum width and height.",
-    "Create a mostly contiguous architectural footprint. Avoid isolated floating room boxes; gaps are allowed only for real courtyards, patios, light wells or separated service buildings when the brief requires them.",
-    "Use project-type-appropriate adjacencies and operational logic. Never apply residential adjacency rules to non-residential projects unless the brief explicitly asks for residential functions.",
-    "For every level, define a real opening schedule. Include the main entry door, internal doors for every enclosed room, exterior windows for occupied rooms where relevant, and explicit exterior/service access where required.",
-    "Every room must be reachable through the circulation graph and opening schedule. Respect any requirement for separated public/private/staff/service/secure circulation rather than collapsing all movement into one route.",
-    "Define stairs/vertical circulation whenever the project has more than one level. Vertical circulation must align between connected levels and open into usable halls or landings.",
-    "Define representative fixtures/equipment appropriate to the actual project and to measurable requirements, so the detailed plan can visually demonstrate that the brief was satisfied.",
-    "Define at least two perpendicular architectural section cuts in canonical_plan.section_cuts. Label them A—A and B—B, specify the cut axis and viewing direction, and list the rooms crossed by each cut.",
-    "At least one section cut must pass through the principal vertical circulation so the section can show floor-to-floor relationships.",
-    "All levels must align vertically where appropriate and describe the same building represented by the selected Architecture Direction.",
-    "Align vertical circulation, wet/service cores, primary structural zones and major facade openings between levels. Higher floors must respond to lower-floor geometry rather than becoming unrelated layouts.",
-    "Use realistic room proportions and circulation widths. Avoid extremely long, narrow or oversized spaces unless the brief explicitly requires them.",
-    "Do not create alternative floor plans. Do not allow each diagram to invent a different property.",
-    "The plan_images array in the schema is only a compact legacy presentation list. Heyy Studio automatically creates one visible plan card for every canonical level after generation.",
-    "Include functional_zoning, ground_floor, upper_floor when two or more storeys exist, site_plan and circulation in the compact plan_images array.",
-    ...(isAdjustment
-      ? [
-          "This request is a controlled adjustment to an existing coordinated plan set, not a new design.",
-          "Use existing_plan as the source of truth and preserve every unaffected room, coordinate, opening, stair, fixture, section cut, footprint, site element, area and relationship.",
-          "Apply only adjustment_request.instruction at the requested scope. Make the smallest coordinated change that satisfies it.",
-          "The Requirement Contract still applies after the adjustment; do not fix the requested local change by breaking another hard requirement.",
-          "Return the complete updated plan set in the normal schema, including all unchanged data as well as the adjusted data.",
-        ]
-      : []),
-    safetyInstruction,
-  ].filter(Boolean).join(" ");
-
-  const payload: Record<string, unknown> = {
-    project: args.project,
-    selected_direction: args.direction,
-    architecture_dna: args.architectureDna,
-    concept: args.concept,
-    site: args.site,
-    planning_assumptions: args.planning,
-    selected_materials: args.selectedMaterials,
-    saved_space_program: architectureRequirementSource({
-      project: args.project,
-      site: args.site,
-      planning: args.planning,
-      spaceProgram: args.spaceProgram,
-    }).saved_space_program,
-    requirement_contract: requirementContract,
-    hard_plan_requirements: hardPlanRequirements,
-    legacy_supporting_checks: {
-      parsed_capacity: capacityConstraint,
-      requested_storeys: requestedStoreys,
-    },
-    ...(isAdjustment
-      ? {
-          existing_plan: args.existingPlan,
-          adjustment_request: {
-            instruction: adjustmentInstruction,
-            scope: args.adjustmentScope || "all_connected",
-          },
-        }
-      : {}),
-    canonical_plan_rules: {
-      coordinate_system: "0-100 relative site grid using most of the available canvas",
-      room_geometry: "No overlapping room rectangles. Shared walls should align. Keep coordinates and dimensions practical and readable.",
-      requirement_evidence: "Every hard plan requirement must have explicit evidence in the canonical model. Quantities use capacity_type/capacity_count or countable rooms/fixtures; relationships use circulation/openings/level placement/site elements.",
-      same_property_rule: "Every level and diagram is the same property and uses one footprint and one site arrangement.",
-      opening_rules: "Every enclosed room has an internal door; occupied rooms have appropriate exterior openings where relevant; required access/separation is explicit.",
-      vertical_rules: "Vertical circulation, wet/service cores, structural zones and major openings align between levels.",
-      section_rules: "Provide perpendicular A—A and B—B section cuts. At least one passes through vertical circulation; both are marked on floor plans and produce true vertical sections with level and height information.",
-      fixture_rules: "Include representative project-specific fixtures/equipment so usability and measurable requirements can be audited and visibly represented.",
-      diagram_renderer: "GPT Image 2 detailed concept drawing using the canonical model as the source",
-    },
-  };
-
-  const first = await structuredCompletion<LivePlanSet>({
+  return structuredCompletion<LivePlanSet>({
     plan: args.plan,
     schema: planSchema,
-    system: baseSystem,
-    payload,
-  });
-
-  let value = first.value;
-  let correctionUsage: unknown = null;
-  let correctionAuditUsage: unknown = null;
-
-  let deterministicIssues = [
-    ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
-    ...deterministicRequirementIssues(value, requirementContract),
-  ];
-  let auditResult = await auditArchitecturePlanRequirements({
-    plan: args.plan,
-    contract: requirementContract,
-    planSet: value,
-  });
-  let auditFailures = hardPlanAuditFailures(requirementContract, auditResult.value);
-
-  const correctionUsages: unknown[] = [];
-  const correctionAuditUsages: unknown[] = [];
-  for (let correctionAttempt = 1; correctionAttempt <= 2 && (deterministicIssues.length || auditFailures.length); correctionAttempt += 1) {
-    const allFailures = [...new Set([...deterministicIssues, ...auditFailures])];
-    const corrected = await structuredCompletion<LivePlanSet>({
-      plan: args.plan,
-      schema: planSchema,
-      system: [
-        baseSystem,
-        `INDEPENDENT REQUIREMENT VALIDATION FAILED (correction pass ${correctionAttempt} of 2). Correct the complete Canonical Plan rather than explaining the failure.`,
-        "The previous plan failed these checks:",
-        ...allFailures.map((issue, index) => `${index + 1}. ${issue}`),
-        "For quantitative failures, write explicit machine-checkable evidence into capacity_type/capacity_count, fixtures, level count and/or area_schedule as appropriate. Do not merely mention the target in prose.",
-        "If a capacity target is distributed across several spaces or floors, make the explicit capacity_count values sum to the required target without double counting the same physical capacity.",
-        "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements and the selected Architecture DNA.",
-      ].join(" "),
-      payload: {
-        ...payload,
-        previous_plan_to_correct: value,
-        validation_failures_to_correct: allFailures,
-        previous_requirement_audit: auditResult.value,
-        correction_attempt: correctionAttempt,
+    system: [
+      "You are Heyy Studio's senior conceptual architect preparing one internally coordinated, non-construction concept plan set.",
+      "Create exactly one Canonical Plan Specification. Every plan view must derive from this same site, footprint, room coordinates, circulation and entry.",
+      "Coordinates use a 0 to 100 site grid. All rooms, pool, driveway, entry and footprint must fit within that grid.",
+      "Use the full coordinate canvas: distribute each level between approximately 8 and 92 rather than clustering rooms in one small corner.",
+      "Rooms on the same level must not overlap. Align shared walls, keep circulation legible and give every room a practical minimum width and height.",
+      "Create a mostly contiguous architectural footprint. Avoid isolated floating room boxes; gaps are allowed only for real courtyards, patios, light wells or separated garages.",
+      "Place kitchens beside dining spaces, bathrooms near plumbing zones, bedrooms in private zones, garages at vehicle access and entries beside circulation halls.",
+      "For every level, define a real opening schedule. Include the main entry door, internal doors for every enclosed room, exterior windows for habitable rooms, and sliding or hinged doors to terraces, balconies, gardens, patios and pool decks where relevant.",
+      "Every room must be reachable through the circulation graph and opening schedule. Do not leave isolated rooms, inaccessible outdoor spaces or a main entrance that does not connect to a foyer or hall.",
+      "Define stairs whenever the project has more than one level. Stairs must align vertically between connected levels and must open into usable halls or landings.",
+      "Define representative fixtures for kitchens, bathrooms, bedrooms, living, dining, laundry, utility and garage spaces so the detailed concept plan can show professional interior information.",
+      "Define at least two perpendicular architectural section cuts in canonical_plan.section_cuts. Label them A—A and B—B, specify the cut axis and viewing direction, and list the rooms crossed by each cut.",
+      "At least one section cut must pass through the principal stair or other vertical circulation so the section can show stair flights, landings, slab openings and floor-to-floor relationships.",
+      "The A—A and B—B cut lines must be suitable for drawing on every applicable floor plan with standard architectural section symbols and arrows.",
+      "Ground and upper levels must align vertically where appropriate and describe the same building represented by the selected Architecture Direction.",
+      "Align stairs, wet areas, primary structural zones and major facade openings between levels. Upper floors must respond to the ground-floor geometry rather than becoming unrelated layouts. Treat the building as one coordinated object: all stairs, lifts, shafts, major service cores and principal corridor spines must remain in the same position on every connected level unless the brief explicitly requires termination. Use one shared building outline logic across every floor so the overall footprint and massing remain consistent with the selected Architecture Direction. Every enclosed room must have at least one real door opening and must connect to a corridor, hall, landing or appropriate external access. Avoid dead-end inaccessible rooms. Maintain the same public, private, service and emergency circulation logic across the full project rather than redesigning circulation independently on each floor. For healthcare projects, keep public circulation and service circulation separate where practical, keep critical departments accessible by clear corridors, give every inpatient bedroom a directly accessible ensuite bathroom, and encode the inpatient room mix clearly when the brief asks for one-bed, two-bed or three-bed rooms.",
+      "Use realistic room proportions and circulation widths. Avoid extremely long, narrow or oversized spaces unless the brief explicitly requires them.",
+      "Do not create alternative floor plans. Do not allow each diagram to invent a different property.",
+      "The plan_images prompts are labels and presentation notes only. Heyy Studio will use GPT Image 2 with canonical_plan, the selected direction and related approved floors to create detailed concept plans.",
+      "Include functional_zoning, ground_floor, upper_floor when two or more storeys exist, site_plan and circulation.",
+      ...(isAdjustment
+        ? [
+            "This request is a controlled adjustment to an existing coordinated plan set, not a new design.",
+            "Use existing_plan as the source of truth and preserve every unaffected room, coordinate, opening, stair, fixture, section cut, footprint, site element, area and relationship.",
+            "Apply only adjustment_request.instruction at the requested scope. Make the smallest coordinated change that satisfies it.",
+            "For local_area, change only the directly requested room or local relationship unless a minimal connected adjustment is unavoidable.",
+            "For current_floor, preserve every other level and keep stairs, wet cores, structure, section cuts and major openings aligned.",
+            "For all_connected, update all dependent levels and views only where coordination requires it, while preserving the approved Architecture DNA.",
+            "Return the complete updated plan set in the normal schema, including all unchanged data as well as the adjusted data.",
+          ]
+        : []),
+      safetyInstruction,
+    ].join(" "),
+    payload: {
+      project: args.project,
+      selected_direction: args.direction,
+      architecture_dna: args.architectureDna,
+      concept: args.concept,
+      site: args.site,
+      planning_assumptions: args.planning,
+      selected_materials: args.selectedMaterials,
+      saved_space_program: args.spaceProgram,
+      ...(isAdjustment
+        ? {
+            existing_plan: args.existingPlan,
+            adjustment_request: {
+              instruction: adjustmentInstruction,
+              scope: args.adjustmentScope || "all_connected",
+            },
+          }
+        : {}),
+      canonical_plan_rules: {
+        coordinate_system: "0-100 relative site grid using most of the available canvas",
+        room_geometry: "No overlapping room rectangles. Shared walls should align. Keep coordinates and dimensions practical and readable.",
+        same_property_rule: "Every level and diagram is the same property and uses one footprint and one site arrangement.",
+        opening_rules: "Every enclosed room has an internal door; habitable rooms have exterior windows; relevant public rooms have explicit outdoor access.",
+        vertical_rules: "Stairs, lifts, shafts, wet cores, structural zones, corridor spines and major openings align between levels and keep the same core positions across the building.",
+        accessibility_rules: "Every enclosed room has a door opening and a valid access path from circulation or external entry.",
+        building_outline_rules: "Every floor belongs to the same building and keeps a coordinated overall outline consistent with the selected direction.",
+        healthcare_rules: "For hospital and healthcare projects, maintain clear public, clinical and service circulation logic and give inpatient bedrooms direct ensuite access.",
+        section_rules: "Provide perpendicular A—A and B—B section cuts. At least one passes through the stair; both are marked on floor plans and produce true vertical sections with level and height information.",
+        fixture_rules: "Include representative architectural fixtures and furniture so plans can be checked for usability.",
+        diagram_renderer: "GPT Image 2 detailed concept drawing using the canonical model as the source",
       },
-    });
-    value = corrected.value;
-    correctionUsages.push(corrected.usage);
-
-    deterministicIssues = [
-      ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
-      ...deterministicRequirementIssues(value, requirementContract),
-    ];
-    auditResult = await auditArchitecturePlanRequirements({
-      plan: args.plan,
-      contract: requirementContract,
-      planSet: value,
-    });
-    correctionAuditUsages.push(auditResult.usage);
-    auditFailures = hardPlanAuditFailures(requirementContract, auditResult.value);
-  }
-  correctionUsage = correctionUsages;
-  correctionAuditUsage = correctionAuditUsages;
-
-  const unresolved = [...new Set([...deterministicIssues, ...auditFailures])];
-  if (unresolved.length) {
-    throw new Error(
-      `Architecture Plan validation failed before images were generated: ${unresolved.join(" ")}`,
-    );
-  }
-
-  return {
-    planSet: {
-      ...value,
-      planning_assumptions: [
-        ...value.planning_assumptions,
-        `Requirement Contract validated: ${hardPlanRequirements.length} hard plan requirement${hardPlanRequirements.length === 1 ? "" : "s"} checked before plan images were unlocked.`,
-      ],
-      plan_images: expandedPlanViews(value, args.architectureDna),
     },
-    usage: {
-      requirement_extraction: requirementResult.usage,
-      plan_generation: first.usage,
-      requirement_audit: auditResult.usage,
-      correction: correctionUsage,
-      correction_audit: correctionAuditUsage,
-      validated_hard_plan_requirements: hardPlanRequirements.map((requirement) => ({
-        id: requirement.id,
-        statement: requirement.statement,
-      })),
-    },
-  };
+  }).then(({ value, usage }) => ({
+    planSet: { ...value, plan_images: expandedPlanViews(value, args.architectureDna) },
+    usage,
+  }));
 }
 
 export async function generateArchitectureVisualPrompts(args: {
@@ -2118,9 +1277,10 @@ function clamp(value: number, minimum = 0, maximum = 100) {
 
 function levelForType(plan: CanonicalPlanSpec, visualType: string) {
   const levels = Array.isArray(plan.levels) ? plan.levels : [];
-  const requestedIndex = floorIndexFromVisualType(visualType);
-  if (requestedIndex !== null) {
-    return levels[requestedIndex] || levels[0];
+  if (visualType === "upper_floor") {
+    return levels.find((level) => /upper|first|second|level\s*1|level\s*2/i.test(`${level.id} ${level.label}`))
+      || levels[1]
+      || levels[0];
   }
   return levels.find((level) => /ground|lower|level\s*0/i.test(`${level.id} ${level.label}`))
     || levels[0];
@@ -2487,12 +1647,7 @@ export function renderCanonicalPlanSvg(args: {
   projectName: string;
   architectureDna?: ArchitectureDna | null;
 }) {
-  const floorRender = rendererPlanForFloor(args.plan, args.visualType);
-  return renderArchitecturalDrawingSvg({
-    ...args,
-    plan: floorRender.plan,
-    visualType: floorRender.rendererVisualType,
-  });
+  return renderArchitecturalDrawingSvg(args);
 }
 
 export async function generateAndStoreCanonicalPlanImage(args: {
@@ -2554,7 +1709,7 @@ function architectureDocumentPrompt(args: {
   sourceGeometryLocked?: boolean;
 }) {
   const visualType = args.visualType;
-  const isFloorPlan = isFloorPlanVisualType(visualType);
+  const isFloorPlan = visualType === "ground_floor" || visualType === "upper_floor";
   const isSitePlan = visualType === "site_plan";
   const isZoning = visualType === "functional_zoning" || visualType === "circulation";
   const isElevation = /_elevation$/.test(visualType);
@@ -2563,8 +1718,6 @@ function architectureDocumentPrompt(args: {
   const roomProgram = (level?.rooms || []).map((room) => ({
     name: room.name,
     zone: room.zone,
-    capacity_type: room.capacity_type || "",
-    capacity_count: Number(room.capacity_count || 0),
     relative_position: { x: room.x, y: room.y, width: room.width, height: room.height },
   }));
 
@@ -2601,11 +1754,10 @@ function architectureDocumentPrompt(args: {
       "Show a clear main entrance and foyer/entry sequence connected to internal circulation. Every enclosed room must have a logical door and must be reachable without passing through unrelated private rooms.",
       "Show realistic external windows embedded in exterior walls, sized and positioned for daylight and ventilation. Show glazed doors or hinged doors providing real access to terraces, balconies, gardens, patios, pool decks and other outdoor spaces where relevant.",
       "Draw exterior walls heavier than interior partitions. Draw door openings with swing arcs, sliding doors where appropriate, window frames, stairs with direction arrow, landings, wardrobes, storage and built-in cabinetry.",
-      "Add professional architectural symbols and project-type-appropriate fixtures. Residential plans need normal residential furniture; healthcare plans need patient beds, clinical equipment, nurse/support spaces; hospitality plans need guest-room beds and operational furniture; education plans need classroom/study furniture; commercial plans need workplace/retail furniture.",
-      "For any room with capacity_count greater than zero, visibly represent that capacity in a believable architectural way. In bed-based healthcare wards, subdivide large ward zones into patient rooms/bays as needed and show the correct number of beds distributed across them instead of drawing one empty rectangle.",
+      "Add professional architectural symbols and detailed fixtures: kitchen counters, island, sink, cooktop, refrigerator, pantry and dishwasher; bathroom toilets, basins, showers and baths; beds, bedside tables, wardrobes; dining table and chairs; living furniture; laundry equipment; garage cars when required.",
       "Label each room clearly and add plausible room dimensions in metres beneath the room name. Add selected overall dimensions, hall widths, north arrow and a simple 0–5 m scale bar.",
-      "Keep wet/service areas coordinated, circulation practical, furniture clear of door swings, and operational relationships obvious.",
-      "The result should visually match the standard of a polished professional architect's concept floor plan appropriate to this building type, not a residential template.",
+      "Keep wet areas coordinated, circulation practical, furniture clear of door swings, and indoor-outdoor connections obvious.",
+      "The result should visually match the standard of a polished residential architect's concept floor plan, with the level of detail seen in professional plan brochures.",
       ...shared,
     ].join("\n\n");
   }
@@ -2705,7 +1857,7 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
       ),
     )
   ).filter((asset): asset is ArchitectureReferenceAsset => Boolean(asset));
-  const styleReference = isFloorPlanVisualType(args.visualType)
+  const styleReference = /^(ground_floor|upper_floor)$/.test(args.visualType)
     ? await loadBundledFloorPlanStyleReference()
     : null;
   const guideAsset: ArchitectureReferenceAsset = {
@@ -2732,7 +1884,7 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
     allAssets.map((asset) => toFile(asset.bytes, asset.filename, { type: asset.mimeType })),
   );
   const quality = imageQualityForTier(args.plan, tier);
-  const imageSize = isFloorPlanVisualType(args.visualType) || args.visualType === "site_plan"
+  const imageSize = /^(ground_floor|upper_floor|site_plan)$/.test(args.visualType)
     ? "1024x1536"
     : "1536x1024";
   const result = await openai.images.edit({
