@@ -444,6 +444,36 @@ function recordValue(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function canonicalFloorVisualType(index: number) {
+  if (index <= 0) return "ground_floor";
+  if (index === 1) return "upper_floor";
+  return `level_${index}_floor`;
+}
+
+function canonicalFloorIndex(visualType: string) {
+  if (visualType === "ground_floor") return 0;
+  if (visualType === "upper_floor") return 1;
+  const match = visualType.match(/^level_(\d+)_floor$/);
+  return match ? Number(match[1]) : null;
+}
+
+function isCanonicalFloorVisualType(visualType: string) {
+  return canonicalFloorIndex(visualType) !== null;
+}
+
+function floorPlanTypesForLevels(levels: unknown[]) {
+  return levels.map((_, index) => canonicalFloorVisualType(index));
+}
+
+function floorPlanDisplayName(visualType: string, levels?: unknown[]) {
+  const index = canonicalFloorIndex(visualType);
+  if (index === null) return visualType.replace(/_/g, " ");
+  const level = levels?.[index];
+  const label = String(recordValue(level).label || "").trim();
+  if (label) return /\bplan\b/i.test(label) ? label : `${label} Plan`;
+  return index === 0 ? "Ground Floor Plan" : index === 1 ? "Upper Floor Plan" : `Level ${index} Plan`;
+}
+
 function assetPreviewUrl(value: unknown): string | null {
   const record = recordValue(value);
   return typeof record.preview_url === "string" ? record.preview_url : null;
@@ -829,9 +859,21 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     if (!projectDraft || !user) return;
     if (spaceProgram.length > 0 && !window.confirm("Replace the current draft Space Program with smart suggestions?")) return;
     const template = getArchitectureProjectTemplate(projectDraft.project_type);
-    const source = (projectDraft.selected_spaces || []).length
-      ? (projectDraft.selected_spaces || [])
-      : template.defaultSpaces;
+    const selectedSource = (projectDraft.selected_spaces || []).length
+      ? [...(projectDraft.selected_spaces || [])]
+      : [...template.defaultSpaces];
+    const capacityText = String(projectDraft.professional_brief?.user_capacity || "");
+    const bedBasedHealthcare = template.category === "healthcare" && /\b\d[\d,]*\s*(?:hospital\s*)?beds?\b/i.test(capacityText);
+    const source = bedBasedHealthcare
+      ? Array.from(new Set([
+          ...selectedSource,
+          "Patient Rooms",
+          "Nurse Stations",
+          "Clean Utility",
+          "Dirty Utility",
+          "Service Access",
+        ]))
+      : selectedSource;
     setSpaceProgram(source.map((spaceName, index) => {
       const item = getArchitectureSpaceDefault(spaceName);
       return {
@@ -844,7 +886,10 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         area_each_m2: item.area,
         total_area_m2: item.quantity * item.area,
         priority: "Required",
-        notes: null,
+        notes:
+          bedBasedHealthcare && spaceName === "Patient Rooms"
+            ? `Hard capacity requirement from brief: ${capacityText}. Final Canonical Plan must explicitly account for every requested bed.`
+            : null,
         is_ai_suggested: true,
         sort_order: index,
       };
@@ -2591,6 +2636,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
               <VisualsTab
                 project={projectDraft}
                 direction={selectedDirection}
+                planSet={planSet}
                 visuals={visuals}
                 documents={documents}
                 generating={generatingStage === "visuals" || generatingStage === "all"}
@@ -4477,51 +4523,55 @@ function PlansTab({
   const existingDesignSource = false;
 
   const planVisualTypes = [
-    "functional_zoning", "ground_floor", "upper_floor", "site_plan", "circulation",
+    "functional_zoning", "site_plan", "circulation",
     "north_elevation", "south_elevation", "east_elevation", "west_elevation",
     "section_longitudinal", "section_transverse",
     "perspective_front", "perspective_rear", "perspective_aerial",
   ];
   const planVisuals = visuals.filter(
-    (visual) => visual.metadata?.group === "plans" || planVisualTypes.includes(visual.visual_type),
+    (visual) =>
+      visual.metadata?.group === "plans" ||
+      isCanonicalFloorVisualType(visual.visual_type) ||
+      planVisualTypes.includes(visual.visual_type),
   );
   const canonicalPlan = recordValue(recordValue(planSet?.generation_json).canonical_plan);
   const canonicalLevels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
-  const requiredFloorPlanTypes = [
-    "ground_floor",
-    ...(canonicalLevels.length > 1 ? ["upper_floor"] : []),
-  ];
-  const requiredFloorPlansReady = existingDesignSource || requiredFloorPlanTypes.every((type) => {
+  const requiredFloorPlanTypes = floorPlanTypesForLevels(canonicalLevels);
+  const requiredFloorPlansReady = existingDesignSource || (
+    requiredFloorPlanTypes.length > 0 && requiredFloorPlanTypes.every((type) => {
     const visual = planVisuals.find((item) => item.visual_type === type);
-    return Boolean(visual?.is_approved && assetPreviewUrl(visual.metadata?.technical_assets));
-  });
+      return Boolean(
+        visual?.is_approved &&
+        (assetPreviewUrl(recordValue(visual.metadata).technical_assets) || visual.image_url),
+      );
+    })
+  );
 
   const planDisplayOrder = [
-  "ground_floor",
-  "upper_floor",
-  "functional_zoning",
-  "site_plan",
-  "circulation",
-  "north_elevation",
-  "south_elevation",
-  "east_elevation",
-  "west_elevation",
-  "section_longitudinal",
-  "section_transverse",
-  "perspective_front",
-  "perspective_rear",
-  "perspective_aerial",
-];
+    ...requiredFloorPlanTypes,
+    "functional_zoning",
+    "site_plan",
+    "circulation",
+    "north_elevation",
+    "south_elevation",
+    "east_elevation",
+    "west_elevation",
+    "section_longitudinal",
+    "section_transverse",
+    "perspective_front",
+    "perspective_rear",
+    "perspective_aerial",
+  ];
 
-function planOrderIndex(type: string) {
-  const index = planDisplayOrder.indexOf(type);
-  return index === -1 ? planDisplayOrder.length : index;
-}
+  function planOrderIndex(type: string) {
+    const index = planDisplayOrder.indexOf(type);
+    return index === -1 ? planDisplayOrder.length : index;
+  }
 
-const orderedPlanVisuals = [...planVisuals].sort(
-  (a, b) =>
-    planOrderIndex(a.visual_type) - planOrderIndex(b.visual_type),
-);
+  const orderedPlanVisuals = [...planVisuals].sort(
+    (a, b) =>
+      planOrderIndex(a.visual_type) - planOrderIndex(b.visual_type),
+  );
 
   function togglePlanSelection(visualId: string) {
     setSelectedPlanIds((current) => current.includes(visualId) ? current.filter((id) => id !== visualId) : [...current, visualId]);
@@ -4529,8 +4579,8 @@ const orderedPlanVisuals = [...planVisuals].sort(
 
   async function runPlanBatch(mode: "technical" | "rendered") {
     const queue = orderedPlanVisuals.filter((visual) =>
-  selectedPlanIds.includes(visual.id),
-);
+      selectedPlanIds.includes(visual.id),
+    );
     if (!queue.length) return;
     setBatchRunning(mode);
     try {
@@ -4598,7 +4648,7 @@ const orderedPlanVisuals = [...planVisuals].sort(
             ? "Visuals and optional redraws use the uploaded source drawings first. Heyy Studio must preserve the existing footprint, layout, stairs, openings and level relationships."
             : requiredFloorPlansReady
               ? "Previews, professional finals, elevations, sections and project visuals can now use the approved floor-plan geometry."
-              : `Workflow: detailed plan → approval → preview → professional final. Required floor plans: ${requiredFloorPlanTypes.map((item) => item.replace(/_/g, " ")).join(" and ")}.`}</span>
+              : `Workflow: detailed plan → approval → preview → professional final. Required floor plans: ${requiredFloorPlanTypes.map((item) => floorPlanDisplayName(item, canonicalLevels)).join(", ")}.`}</span>
         </div>
         <div className="credit-legend">
           <span>Detailed plan · {ARCHITECTURE_CREDIT_COSTS.technicalPlan} credits</span>
@@ -5075,6 +5125,7 @@ function PlanVisualCard({
 function VisualsTab({
   project,
   direction,
+  planSet,
   visuals,
   documents,
   generating,
@@ -5089,6 +5140,7 @@ function VisualsTab({
 }: {
   project: Project;
   direction: Direction | null;
+  planSet: ArchitecturePlanSet | null;
   visuals: ArchitectureVisual[];
   documents: DocumentRow[];
   generating: boolean;
@@ -5122,25 +5174,31 @@ function VisualsTab({
   }
 
   const planRows = visuals.filter(
-    (visual) => visual.metadata?.group === "plans" || ["ground_floor", "upper_floor"].includes(visual.visual_type),
+    (visual) =>
+      visual.metadata?.group === "plans" ||
+      isCanonicalFloorVisualType(visual.visual_type),
   );
-  const requiredPlanTypes = [
-    "ground_floor",
-    ...(planRows.some((visual) => visual.visual_type === "upper_floor") ? ["upper_floor"] : []),
-  ];
+  const canonicalPlan = recordValue(recordValue(planSet?.generation_json).canonical_plan);
+  const canonicalLevels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
+  const requiredPlanTypes = floorPlanTypesForLevels(canonicalLevels);
   const existingDesignSource = project.workflow_mode === "plan_to_render" && documents.some(
     (document) => document.category.startsWith("source") && document.mime_type?.startsWith("image/"),
   );
-  const plansReady = existingDesignSource || requiredPlanTypes.every((requiredType) => {
+  const plansReady = existingDesignSource || (
+    requiredPlanTypes.length > 0 && requiredPlanTypes.every((requiredType) => {
     const plan = planRows.find((visual) => visual.visual_type === requiredType);
-    return Boolean(plan?.is_approved && assetPreviewUrl(recordValue(plan.metadata).technical_assets));
-  });
+      return Boolean(
+        plan?.is_approved &&
+        (assetPreviewUrl(recordValue(plan.metadata).technical_assets) || plan.image_url),
+      );
+    })
+  );
   if (!plansReady) {
     return (
       <StageLocked
         eyebrow="Approved Plans Required"
         title="Approve the connected floor plans before creating visuals"
-        body={`Visuals must follow the approved ${requiredPlanTypes.map((item) => item.replace(/_/g, " ")).join(" and ")}. Generate, review and approve those plans first so the exterior and interior images are not random.`}
+        body={`Visuals must follow every approved floor plan in this building (${requiredPlanTypes.map((item) => floorPlanDisplayName(item, canonicalLevels)).join(", ")}). Generate, review and approve those plans first so exterior and interior images remain coordinated with the complete building.`}
         onOpenDirections={onOpenPlans}
         actionLabel="Open Concept Plans →"
       />
@@ -5567,12 +5625,14 @@ function EstimateTab({
 
   if (!existingDesign && planSet) {
     const planRows = visuals.filter(
-      (visual) => recordValue(visual.metadata).group === "plans" || ["ground_floor", "upper_floor"].includes(visual.visual_type),
+      (visual) =>
+        recordValue(visual.metadata).group === "plans" ||
+        isCanonicalFloorVisualType(visual.visual_type),
     );
     const canonicalPlan = recordValue(recordValue(planSet.generation_json).canonical_plan);
     const levels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
-    const requiredPlanTypes = ["ground_floor", ...(levels.length > 1 ? ["upper_floor"] : [])];
-    const plansReady = requiredPlanTypes.every((requiredType) => {
+    const requiredPlanTypes = floorPlanTypesForLevels(levels);
+    const plansReady = requiredPlanTypes.length > 0 && requiredPlanTypes.every((requiredType) => {
       const plan = planRows.find((visual) => visual.visual_type === requiredType);
       const metadata = recordValue(plan?.metadata);
       return Boolean(
@@ -5586,7 +5646,7 @@ function EstimateTab({
         <StageLocked
           eyebrow="Approved Plans Required"
           title="Approve the required floor plans before estimating"
-          body="Approve the ground floor and, when applicable, the upper floor so quantities are calculated from the current connected design."
+          body={`Approve every generated floor plan (${requiredPlanTypes.map((item) => floorPlanDisplayName(item, levels)).join(", ")}) so quantities and downstream visuals use the complete connected building.`}
           onOpenDirections={onOpenPlans}
           actionLabel="Review Plans →"
         />
