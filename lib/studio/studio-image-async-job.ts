@@ -7,13 +7,6 @@ type InteriorImageType = "space_plan" | "furniture_plan" | "lighting_plan" | "ma
 type MarketingVisualType = "key_visual" | "social_feed" | "story_cover" | "carousel_cover" | "landing_hero" | "email_header" | "display_ad" | "outdoor_poster";
 type GenerationStage = "technical" | "preview" | "final";
 
-type InteriorAnchorSet = {
-  spacePlan: any | null;
-  mainSpace: any | null;
-  furniturePlan: any | null;
-  lightingPlan: any | null;
-};
-
 type StudioImageJobInput = {
   studio?: StudioId;
   projectId?: string;
@@ -143,16 +136,8 @@ async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, user
   const label = isPlan ? INTERIOR_PLAN_LABELS[imageType] : INTERIOR_VISUAL_LABELS[imageType];
   if (!label) throw new Error("Invalid Interior image type.");
 
-  const anchors = await resolveInteriorConsistencyAnchors(admin, String(project.id));
-  if ((imageType === "furniture_plan" || imageType === "lighting_plan" || !isPlan) && !anchors.spacePlan) {
-    throw new Error("Generate and approve the Furniture & Space Plan first.");
-  }
-  if (!isPlan && imageType !== "main_space" && !anchors.mainSpace) {
-    throw new Error("Generate and approve the Main Space Perspective first. It becomes the visual anchor for every other Interior view.");
-  }
-
   const prompt = buildInteriorImagePrompt(String(project.project_name || "Interior project"), imageType, stage, project.input || {}, project.output || {});
-  const references = await loadInteriorReferences(admin, userId, String(project.id), imageType, stage, project.input || {}, anchors);
+  const references = await loadInteriorReferences(admin, userId, String(project.id), imageType, stage, project.input || {});
   const common = { model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2", prompt, size: "1536x1024" as const, quality: stage === "final" ? "high" as const : "medium" as const, output_format: "png" as const };
   const image = references.length ? await openai.images.edit({ ...common, image: references.length === 1 ? references[0] : references }) : await openai.images.generate(common);
   const base64 = image.data?.[0]?.b64_json;
@@ -167,21 +152,7 @@ async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, user
     title: `${project.project_name || "Interior project"} — ${label} — ${stageLabel(stage)}`,
     buffer: Buffer.from(base64, "base64"),
     payload: { prompt, imageType, stage, projectName: project.project_name },
-    metadata: {
-      view_type: imageType,
-      output_kind: outputKind,
-      stage,
-      approved: false,
-      source: "interior_studio",
-      credit_reservation_id: reservationId,
-      connected_architecture_id: architectureProjectIdFromInput(project.input || {}) || null,
-      consistency_mode: "locked_project",
-      consistency_version: 2,
-      anchor_space_plan_asset_id: anchors.spacePlan?.id || null,
-      anchor_main_space_asset_id: imageType === "main_space" ? null : anchors.mainSpace?.id || null,
-      anchor_furniture_plan_asset_id: anchors.furniturePlan?.id || null,
-      anchor_lighting_plan_asset_id: anchors.lightingPlan?.id || null,
-    },
+    metadata: { view_type: imageType, output_kind: outputKind, stage, approved: false, source: "interior_studio", credit_reservation_id: reservationId, connected_architecture_id: architectureProjectIdFromInput(project.input || {}) || null },
   });
 
   await admin.from("studio_projects").update({ progress: stage === "final" ? 94 : isPlan ? 86 : 92, current_step: stage === "final" ? `${outputKind}_final_ready` : `${outputKind}_${stage}_ready` }).eq("id", project.id).eq("user_id", userId);
@@ -219,94 +190,33 @@ async function generateMarketingImage(admin: SupabaseClient, openai: OpenAI, use
 function buildInteriorImagePrompt(projectName: string, imageType: InteriorImageType, stage: GenerationStage, input: Record<string, unknown>, output: Record<string, unknown>) {
   const planInstruction: Record<string, string> = {
     space_plan: "Create a complete top-down interior furniture and space plan showing the full boundary, walls, openings, doors with swings, windows, circulation paths, built-in joinery, furniture, rugs, room labels and key dimensions. Show the complete drawing inside the canvas with generous margins.",
-    furniture_plan: "Create a coordinated top-down furniture placement plan. Preserve every wall, opening, door, window and circulation route from the approved Furniture & Space Plan. Keep furniture families and zoning consistent with the approved project. Add furniture footprints, item labels, quantities, rug extents and critical clearances.",
-    lighting_plan: "Create a professional reflected ceiling and lighting plan. Preserve the approved room geometry and furniture layout. Coordinate the same ceiling logic and fixture families used by the approved project. Show ceiling zones, recessed lights, pendants, wall lights, decorative fixtures, indirect lighting, switching groups and a concise symbol legend.",
+    furniture_plan: "Create a coordinated top-down furniture placement plan. Preserve every wall, opening, door, window and circulation route from the approved Furniture & Space Plan. Add furniture footprints, item labels, quantities, rug extents and critical clearances.",
+    lighting_plan: "Create a professional reflected ceiling and lighting plan. Preserve the approved room geometry and furniture layout. Show ceiling zones, recessed lights, pendants, wall lights, decorative fixtures, indirect lighting, switching groups and a concise symbol legend.",
   };
   const visualInstruction: Record<string, string> = {
-    main_space: "Create the master hero perspective for this approved interior project. This image will become the canonical visual anchor for every later view. Follow the approved Furniture & Space Plan faithfully: match the room geometry, wall openings, doors, windows, circulation, principal furniture positions, built-in joinery and zoning. Establish one coherent furniture family, joinery language, material palette, ceiling treatment and lighting system that can be preserved in all later views.",
-    alternate_angle: "SCENE LOCK MODE. Show the exact same approved room from a genuinely different useful camera position. Do not redesign anything. Keep the same walls, openings, joinery, reception/counter geometry, display units, furniture models, furniture counts, furniture positions, rugs, plants, ceiling, light fixtures, finishes and styling. Only the camera position, crop and visible occlusion may change.",
-    focal_point: "SCENE LOCK MODE. Create a closer architectural view of the exact same approved room, focused on the principal feature wall, custom joinery or focal furniture moment. Do not invent a new feature wall, new joinery, new furniture or a different room. The view must read as a crop or camera move inside the same built project.",
-    material_detail: "SCENE LOCK MODE. Create a close editorial detail from the exact same approved room. Preserve the identical material palette, joinery profiles, furniture upholstery/finishes, metal finishes, flooring, ceiling and lighting fixtures. Do not substitute products or redesign the scene; only move closer to show detail.",
-    day_view: "SCENE LOCK MODE. Create the exact same approved room in a daylight atmosphere. Furniture, joinery, built-ins, wall openings, ceiling, light fixtures, materials, styling and object placement must remain unchanged. Only natural-light intensity, exposure and time-of-day atmosphere may change.",
-    evening_view: "SCENE LOCK MODE. Create the exact same approved room in an evening atmosphere. Furniture, joinery, built-ins, wall openings, ceiling, fixture positions, materials, styling and object placement must remain unchanged. Only the lighting state, colour temperature, exterior light and exposure may change.",
+    main_space: "Create a wide hero perspective that follows the approved interior plan. Match walls, openings, doors, windows, circulation and principal furniture placement instead of inventing a different room.",
+    alternate_angle: "Create a second perspective from the opposite useful corner. Preserve the exact same room, layout, furniture, materials and lighting as the main concept.",
+    focal_point: "Create a deliberately tight feature-focused architectural photograph of the principal feature wall or custom joinery. The selected feature must dominate roughly 70–85% of the frame. Use a medium-close camera position and clearly show cabinetry profiles, reveals, shelf or door rhythm, integrated lighting, hardware, material transitions and craftsmanship. Include only enough surrounding room context to prove continuity. Do NOT create another wide room perspective or hero shot.",
+    material_detail: "Create a true close-up editorial interior detail photograph, not a room perspective. Frame one or two approved material or lighting junctions at close range—for example timber-to-stone edges, joinery reveals, metal trims, upholstery texture, integrated LED details or a decorative fixture. The detail subject must occupy roughly 75–90% of the frame with tactile texture, realistic scale and controlled depth. Use the surrounding room only as soft background context. Do NOT show the full room, retail floor or another hero angle.",
+    day_view: "Create a daylight version of the approved room with realistic natural light direction, balanced exposure and the exact same layout, furniture and materials.",
+    evening_view: "Create an evening version of the approved room with warm layered artificial lighting while preserving the exact same layout, furniture, materials and architectural openings.",
   };
   const isPlan = Boolean(planInstruction[imageType]);
-  const isDerivedVisual = !isPlan && imageType !== "main_space";
   const stageInstruction = stage === "technical"
     ? "LEGACY TECHNICAL STAGE: prioritise accurate geometry, readable symbols, dimensions, openings, furniture footprints and coordination."
     : stage === "final"
-      ? "PROFESSIONAL FINAL STAGE: refine the supplied preview into a production-quality image while preserving the approved geometry and project identity. Improve realism, material accuracy, lighting, detailing and polish only. Do not change the layout, furniture family, object positions, joinery design, light-fixture design or overall art direction."
+      ? "PROFESSIONAL FINAL STAGE: use the supplied preview and approved references as fixed sources. Improve presentation quality, realism, material accuracy, lighting, joinery detail and polish without changing geometry, layout, furniture placement or design direction. Produce one complete uncropped final image."
       : isPlan
         ? "PREVIEW STAGE: create the primary AI plan output. Prioritise accurate geometry, readable room labels, doors, windows, furniture, circulation, legends and clear presentation. Use restrained material colour and furniture styling without hiding important plan information."
-        : imageType === "main_space"
-          ? "MASTER VISUAL PREVIEW: this is the visual source of truth for the project. Make it faithful to the approved plan and saved design system because every later angle and atmosphere will be derived from it."
-          : "DERIVED VISUAL PREVIEW: preserve the approved master scene exactly. The task is a controlled camera/detail/atmosphere variation, not a redesign.";
+        : "PREVIEW STAGE: create a refined concept-quality render. Preserve geometry, furniture placement, materials and lighting direction exactly.";
   const label = isPlan ? INTERIOR_PLAN_LABELS[imageType] : INTERIOR_VISUAL_LABELS[imageType];
+  const detailReferenceRule = !isPlan && (imageType === "focal_point" || imageType === "material_detail")
+    ? "- For this detail-focused output, any supplied main-space, plan or architecture image is a DESIGN CONTINUITY REFERENCE ONLY. Do not copy its camera position, crop or wide framing. Move the virtual camera substantially closer to the requested feature or detail."
+    : "";
   const brief = sanitizePromptValue(input);
-  const concept = sanitizePromptValue({
-    conceptSummary: output.conceptSummary,
-    designDirection: output.designDirection,
-    layoutPlan: output.layoutPlan,
-    materialPalette: output.materialPalette,
-    furniturePlan: output.furniturePlan,
-    lightingPlan: output.lightingPlan,
-    colorPalette: output.colorPalette,
-    stylingNotes: output.stylingNotes,
-    procurementPriorities: output.procurementPriorities,
-    visualPrompt: output.visualPrompt,
-    professionalPackage: output.professionalPackage,
-  });
-  const visualHierarchy = isDerivedVisual
-    ? `REFERENCE HIERARCHY FOR THIS DERIVED VIEW
-1. The approved Main Space Perspective is the PRIMARY appearance and scene-identity reference.
-2. The approved Furniture & Space Plan is the PRIMARY geometry and object-position reference.
-3. Any approved Furniture Placement Plan and Lighting & Ceiling Plan refine furniture and fixture placement.
-4. Connected Architecture references control fixed building geometry where supplied.
-If references appear to disagree, preserve fixed architectural geometry from the approved plan/Architecture source and preserve interior appearance from the approved Main Space Perspective.`
-    : imageType === "main_space"
-      ? `REFERENCE HIERARCHY FOR THE MASTER VISUAL
-1. The approved Furniture & Space Plan controls geometry, zoning and principal object positions.
-2. Approved Furniture Placement and Lighting & Ceiling plans, when supplied, refine furniture and fixture placement.
-3. Connected Architecture references control fixed building geometry.
-The result must be a believable perspective of that same plan, not a new interpretation.`
-      : `REFERENCE HIERARCHY
-Use the approved Furniture & Space Plan as the fixed source of project geometry. Use any approved downstream plans and connected Architecture references to refine coordination.`;
-
-  const prompt = `Create a premium ${isPlan ? "interior plan" : "interior visual"} for Heyy Studio.
-
-PROJECT
-${projectName}
-
-OUTPUT
-${label}
-${stageInstruction}
-${isPlan ? planInstruction[imageType] : visualInstruction[imageType]}
-
-${visualHierarchy}
-
-SAVED PROJECT BRIEF
-${promptJson(brief, 10000)}
-
-APPROVED INTERIOR CONCEPT
-${promptJson(concept, 10000)}
-
-NON-NEGOTIABLE PROJECT CONSISTENCY RULES
-- Treat this as ONE real interior project across every output, never as a fresh design prompt.
-- Preserve fixed walls, openings, doors, windows, circulation, floor/ceiling relationships and built-in joinery from approved references.
-- Preserve furniture FAMILY, SHAPE, COUNT and PLACEMENT from the approved visual/plan references. Do not swap chairs, tables, counters, display islands, shelving or joinery for different designs.
-- Preserve material colours, stone/timber/metal finishes, upholstery, flooring, wall treatment and ceiling design.
-- Preserve the lighting DESIGN: fixture family, pendant count, recessed-light pattern, wall-light positions and integrated lighting. Atmosphere views may change only whether/how those same fixtures are illuminated.
-- Preserve styling language and major accessories. Camera changes may hide objects through normal perspective, but must not replace or relocate them.
-- Do not add or remove major architectural elements, counters, display units, furniture groups or feature walls just to improve composition.
-- Do not mirror the plan or silently change room proportions.
-- No fake logos, watermark, moodboard collage or split-screen presentation.
-- Plans must show the entire drawing with generous margins and never crop labels, dimensions or legends.
-- Visuals must be one complete full-frame image with professional architectural photography and no fake text.
-- ${isDerivedVisual ? "The finished image must be immediately recognisable as another photograph of the SAME completed room shown in the approved Main Space Perspective." : "The finished image must establish a coherent, repeatable project identity."}`;
-
-  return prompt.length <= 30000 ? prompt : `${prompt.slice(0, 29600)}
-
-[Context shortened automatically to stay within the image model prompt limit.]`;
+  const concept = sanitizePromptValue({ conceptSummary: output.conceptSummary, designDirection: output.designDirection, layoutPlan: output.layoutPlan, materialPalette: output.materialPalette, furniturePlan: output.furniturePlan, lightingPlan: output.lightingPlan, colorPalette: output.colorPalette, stylingNotes: output.stylingNotes, procurementPriorities: output.procurementPriorities, visualPrompt: output.visualPrompt, professionalPackage: output.professionalPackage });
+  const prompt = `Create a premium ${isPlan ? "interior plan" : "interior visual"} for Heyy Studio.\n\nPROJECT\n${projectName}\n\nOUTPUT\n${label}\n${stageInstruction}\n${isPlan ? planInstruction[imageType] : visualInstruction[imageType]}\n\nSAVED PROJECT BRIEF\n${promptJson(brief, 11000)}\n\nAPPROVED INTERIOR CONCEPT\n${promptJson(concept, 11000)}\n\nNON-NEGOTIABLE CONSISTENCY RULES\n- If this Interior project is connected to Architecture Studio, supplied architecture floor plans, sections and elevations are the highest-priority geometry references.\n- Treat supplied reference images as the source of truth for geometry and approved design decisions.\n- Preserve walls, openings, doors, windows, circulation, ceiling relationships and furniture positions from the previous approved stage.\n- Use the saved layout, materials, colour palette, furniture and lighting as one connected design system.\n- Do not invent a different architectural space between plans, previews and finals.\n- No fake logos, watermark, moodboard collage or split-screen presentation.\n${detailReferenceRule}\n- Plans must show the entire drawing with generous margins and never crop labels, dimensions or legends.\n- Visuals must be one complete full-frame image with professional architectural photography and no fake text.`;
+  return prompt.length <= 30000 ? prompt : `${prompt.slice(0, 29600)}\n\n[Context shortened automatically to stay within the image model prompt limit.]`;
 }
 
 function buildMarketingVisualPrompt(projectName: string, viewType: MarketingVisualType, stage: "preview" | "final", input: Record<string, unknown>, output: Record<string, unknown>, tweak: string) {
@@ -322,87 +232,27 @@ function buildMarketingVisualPrompt(projectName: string, viewType: MarketingVisu
   return prompt.length <= 30000 ? prompt : `${prompt.slice(0, 29750)}\n\n[Project context compacted to fit the image-generation limit.]`;
 }
 
-async function loadInteriorReferences(
-  admin: SupabaseClient,
-  userId: string,
-  projectId: string,
-  imageType: InteriorImageType,
-  stage: GenerationStage,
-  input: Record<string, unknown>,
-  anchors: InteriorAnchorSet,
-) {
+async function loadInteriorReferences(admin: SupabaseClient, userId: string, projectId: string, imageType: InteriorImageType, stage: GenerationStage, input: Record<string, unknown>) {
   const refs: any[] = [];
-  const isPlan = Boolean(INTERIOR_PLAN_LABELS[imageType]);
-
-  // For a Professional Final, the current Preview is the first refinement reference.
-  if (stage === "final") {
-    await addInteriorAssetRef(admin, refs, projectId, imageType, ["preview", "technical"], false);
-  }
-
-  // Derived visual views are anchored first to the APPROVED master hero render.
-  if (!isPlan && imageType !== "main_space" && anchors.mainSpace?.file_url) {
-    await pushUrlRef(refs, String(anchors.mainSpace.file_url), "approved-main-space-visual-anchor.png");
-  }
-
-  // Every downstream plan/visual stays tied to the approved project geometry.
-  if (imageType !== "space_plan" && anchors.spacePlan?.file_url) {
-    await pushUrlRef(refs, String(anchors.spacePlan.file_url), "approved-furniture-space-plan-geometry-anchor.png");
-  }
-
-  // Approved specialist plans refine furniture and lighting consistency when available.
-  if (!isPlan && anchors.furniturePlan?.file_url) {
-    await pushUrlRef(refs, String(anchors.furniturePlan.file_url), "approved-furniture-placement-anchor.png");
-  }
-  if (!isPlan && anchors.lightingPlan?.file_url) {
-    await pushUrlRef(refs, String(anchors.lightingPlan.file_url), "approved-lighting-ceiling-anchor.png");
-  }
-
-  // Connected Architecture references remain authoritative for fixed building geometry,
-  // but come after the Interior master anchors so they do not overwhelm the visual identity.
   const connectedArchitectureId = architectureProjectIdFromInput(input);
-  if (connectedArchitectureId && refs.length < 8) {
-    const beforeArchitecture = refs.length;
-    await addArchitectureSourceDrawings(admin, userId, connectedArchitectureId, imageType, refs, Math.min(3, 8 - refs.length));
-    if (refs.length === beforeArchitecture) {
-      const { data: rows } = await admin.from("architecture_visuals")
-        .select("visual_type,image_url,is_approved,created_at")
-        .eq("project_id", connectedArchitectureId)
-        .eq("user_id", userId)
-        .in("visual_type", ["ground_floor", "upper_floor", "site_plan", "functional_zoning", "front_elevation", "rear_elevation", "section"])
-        .order("is_approved", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(20);
+  if (connectedArchitectureId) {
+    await addArchitectureSourceDrawings(admin, userId, connectedArchitectureId, imageType, refs, 5);
+    if (!refs.length) {
+      const { data: rows } = await admin.from("architecture_visuals").select("visual_type,image_url,is_approved,created_at").eq("project_id", connectedArchitectureId).eq("user_id", userId).in("visual_type", ["ground_floor", "upper_floor", "site_plan", "functional_zoning", "front_elevation", "rear_elevation", "section"]).order("is_approved", { ascending: false }).order("created_at", { ascending: false }).limit(20);
       const order = ["ground_floor", "upper_floor", "section", "front_elevation", "rear_elevation", "site_plan", "functional_zoning"];
       for (const type of order) {
         const row = (rows || []).find((r: any) => r.visual_type === type && r.image_url);
         if (row?.image_url) await pushUrlRef(refs, String(row.image_url), `architecture-${type}.png`);
-        if (refs.length >= 8) break;
+        if (refs.length >= 5) break;
       }
     }
   }
 
+  if (stage === "preview" || stage === "final") await addInteriorAssetRef(admin, refs, projectId, imageType, ["preview", "technical"], false);
+  const isPlan = Boolean(INTERIOR_PLAN_LABELS[imageType]);
+  if ((isPlan && imageType !== "space_plan") || !isPlan) await addInteriorAssetRef(admin, refs, projectId, "space_plan", ["final", "preview", "technical"], true);
+  if (!isPlan && imageType !== "main_space") await addInteriorAssetRef(admin, refs, projectId, "main_space", ["final", "preview"], false);
   return refs.slice(0, 8);
-}
-
-async function resolveInteriorConsistencyAnchors(admin: SupabaseClient, projectId: string): Promise<InteriorAnchorSet> {
-  const [spacePlan, mainSpace, furniturePlan, lightingPlan] = await Promise.all([
-    latestApprovedInteriorAcrossStages(admin, projectId, "space_plan", ["final", "preview", "technical"]),
-    latestApprovedInteriorAcrossStages(admin, projectId, "main_space", ["final", "preview"]),
-    latestApprovedInteriorAcrossStages(admin, projectId, "furniture_plan", ["final", "preview", "technical"]),
-    latestApprovedInteriorAcrossStages(admin, projectId, "lighting_plan", ["final", "preview", "technical"]),
-  ]);
-  return { spacePlan, mainSpace, furniturePlan, lightingPlan };
-}
-
-async function latestApprovedInteriorAcrossStages(
-  admin: SupabaseClient,
-  projectId: string,
-  viewType: InteriorImageType,
-  stages: GenerationStage[],
-) {
-  const rows = (await Promise.all(stages.map((stage) => latestInteriorAsset(admin, projectId, viewType, stage, true)))).filter(Boolean);
-  if (!rows.length) return null;
-  return rows.sort((a: any, b: any) => new Date(String(b.created_at || 0)).getTime() - new Date(String(a.created_at || 0)).getTime())[0] || null;
 }
 
 async function addInteriorAssetRef(admin: SupabaseClient, refs: any[], projectId: string, viewType: InteriorImageType, stages: GenerationStage[], approvedOnly: boolean) {

@@ -177,12 +177,12 @@ const VISUALS: Array<{ id: VisualType; title: string; description: string }> = [
   {
     id: "focal_point",
     title: "Feature Wall & Joinery View",
-    description: "A focused view of the principal architectural or custom-joinery moment.",
+    description: "A tighter feature-focused composition where the feature wall or custom joinery dominates the frame.",
   },
   {
     id: "material_detail",
     title: "Materials & Lighting Detail",
-    description: "A closer composition showing finishes, joinery, furniture texture and layered lighting.",
+    description: "A true close-up showing material junctions, textures, joinery craftsmanship and lighting details—not another room-wide view.",
   },
   {
     id: "day_view",
@@ -530,7 +530,6 @@ function InteriorExperience() {
   const mainVisual = getInteriorAsset(assets, "main_space", "final") || getInteriorAsset(assets, "main_space", "preview");
   const loading = generatingConcept;
   const spacePlanReady = isAnyStageApproved(assets, "space_plan");
-  const mainSpaceReady = isAnyStageApproved(assets, "main_space");
   const sourcingMarket = String(form.procurementMarket || form.location || "");
 
   return (
@@ -604,7 +603,7 @@ function InteriorExperience() {
               <PlansSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenProduction={() => selectWorkspaceTab("production")} />
             )}
             {activeTab === "visuals" && (
-              <VisualsSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} spacePlanReady={spacePlanReady} mainSpaceReady={mainSpaceReady} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenPlans={() => selectWorkspaceTab("plans")} />
+              <VisualsSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} spacePlanReady={spacePlanReady} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenPlans={() => selectWorkspaceTab("plans")} />
             )}
             {activeTab === "professional-pack" && <ProfessionalPackageSection value={result.professionalPackage} />}
             {activeTab === "design-pack" && (
@@ -1215,7 +1214,6 @@ function VisualsSection({
   generating,
   approvingAssetId,
   spacePlanReady,
-  mainSpaceReady,
   onGenerate,
   onApprove,
   onEnlarge,
@@ -1225,7 +1223,6 @@ function VisualsSection({
   generating: GenerationTarget;
   approvingAssetId: string | null;
   spacePlanReady: boolean;
-  mainSpaceReady: boolean;
   onGenerate: (viewType: VisualType, stage: GenerationStage) => void;
   onApprove: (asset: ProjectAsset) => void;
   onEnlarge: (image: { url: string; title: string }) => void;
@@ -1247,27 +1244,13 @@ function VisualsSection({
         </div>
       </div>
 
-      {!spacePlanReady ? (
+      {!spacePlanReady && (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4">
           <div>
             <p className="text-sm font-black text-amber-800 dark:text-amber-200">Approve the Furniture & Space Plan first</p>
-            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">The approved plan becomes the fixed geometry source for the visual project.</p>
+            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">Once approved, all connected plans and visuals unlock immediately.</p>
           </div>
           <Button type="button" variant="secondary" onClick={onOpenPlans}><Ruler size={15} /> Open plans</Button>
-        </div>
-      ) : !mainSpaceReady ? (
-        <div className="mt-6 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4">
-          <p className="text-sm font-black text-[var(--text-primary)]">Create and approve the Main Space Perspective next</p>
-          <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
-            This first approved render becomes the project&apos;s visual anchor. Every other angle, detail, daylight and evening view will preserve its furniture, joinery, materials and lighting system.
-          </p>
-        </div>
-      ) : (
-        <div className="mt-6 rounded-2xl border border-emerald-300/60 bg-emerald-500/10 p-4">
-          <p className="text-sm font-black text-emerald-800 dark:text-emerald-200">Project visual anchor locked</p>
-          <p className="mt-1 text-xs font-semibold leading-5 text-emerald-700 dark:text-emerald-300">
-            New views are generated from the approved plan and approved Main Space Perspective so the project stays visually consistent.
-          </p>
         </div>
       )}
 
@@ -1275,9 +1258,7 @@ function VisualsSection({
         {VISUALS.map((visual) => {
           const dependency = !spacePlanReady
             ? "Generate and approve the Furniture & Space Plan first."
-            : visual.id !== "main_space" && !mainSpaceReady
-              ? "Generate and approve the Main Space Perspective first. It becomes the visual anchor for every other view."
-              : undefined;
+            : undefined;
           return (
             <InteriorWorkflowCard
               key={visual.id}
@@ -1339,7 +1320,6 @@ function InteriorWorkflowCard({
     .map((stage) => getInteriorAsset(assets, viewType, stage))
     .find((candidate): candidate is ProjectAsset => Boolean(candidate && isApprovedAsset(candidate)));
   const selectedStageApproved = Boolean(asset && isApprovedAsset(asset));
-  const isMainVisualAnchor = kind === "visual" && viewType === "main_space";
   const stageDependency = dependencyMessage;
   const isGenerating = generating?.viewType === viewType && generating.stage === selectedStage;
   const disabled = Boolean(generating) || Boolean(stageDependency);
@@ -1360,7 +1340,7 @@ function InteriorWorkflowCard({
             </button>
           ))}
         </div>
-        {approvedAsset && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[.62rem] font-black text-emerald-600"><CheckCircle2 size={13} /> {isMainVisualAnchor ? "Visual anchor" : "Approved source"}: {stageName(assetStage(approvedAsset, viewType))}</span>}
+        {approvedAsset && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[.62rem] font-black text-emerald-600"><CheckCircle2 size={13} /> Approved source: {stageName(assetStage(approvedAsset, viewType))}</span>}
       </div>
 
       <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
@@ -1393,9 +1373,7 @@ function InteriorWorkflowCard({
           </Button>
           {asset && (
             <Button className="w-full" variant={selectedStageApproved ? "secondary" : "primary"} onClick={() => onApprove(asset)} disabled={selectedStageApproved || approvingAssetId === asset.id || Boolean(generating)}>
-              {approvingAssetId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {selectedStageApproved
-                ? isMainVisualAnchor ? "Visual anchor approved" : "Approved source"
-                : kind === "plan" ? "Approve plan" : isMainVisualAnchor ? "Approve as visual anchor" : `Approve ${stageName(selectedStage)}`}
+              {approvingAssetId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {selectedStageApproved ? "Approved source" : kind === "plan" ? "Approve plan" : `Approve ${stageName(selectedStage)}`}
             </Button>
           )}
         </div>
@@ -1622,6 +1600,19 @@ function ArchitectureConnection({
 
 function FieldControl({ field, value, onChange }: { field: StudioField; value: string | string[] | undefined; onChange: (value: string | string[]) => void }) {
   const fullWidth = field.type === "textarea" || field.type === "multiselect";
+  const isPreferredStyle = field.label.trim().toLowerCase() === "preferred style";
+  const baseOptions = field.options || [];
+  const options = isPreferredStyle && !baseOptions.includes("Other") ? [...baseOptions, "Other"] : baseOptions;
+
+  const scalarValue = Array.isArray(value) ? "" : String(value || "");
+  const scalarOtherSelected = isPreferredStyle && (scalarValue === "Other" || scalarValue.startsWith("Other:"));
+  const scalarOtherText = scalarValue.startsWith("Other:") ? scalarValue.replace(/^Other:\s*/, "") : "";
+
+  const multiValue = Array.isArray(value) ? value : [];
+  const multiOtherEntry = multiValue.find((item) => item === "Other" || item.startsWith("Other:"));
+  const multiOtherSelected = isPreferredStyle && Boolean(multiOtherEntry);
+  const multiOtherText = multiOtherEntry?.startsWith("Other:") ? multiOtherEntry.replace(/^Other:\s*/, "") : "";
+
   return (
     <div className={fullWidth ? "md:col-span-2" : ""}>
       <label className="text-[.65rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">
@@ -1633,30 +1624,68 @@ function FieldControl({ field, value, onChange }: { field: StudioField; value: s
         <textarea value={String(value || "")} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value)} placeholder={field.placeholder} rows={4} className="heyy-form-field mt-2 resize-y" />
       ) : field.type === "select" ? (
         <div className="mt-2">
-          <HeyySelect value={String(value || "")} tone="interior" ariaLabel={field.label} placeholder="Select an option" options={field.options || []} onChange={(next) => onChange(next)} />
+          <HeyySelect
+            value={scalarOtherSelected ? "Other" : scalarValue}
+            tone="interior"
+            ariaLabel={field.label}
+            placeholder="Select an option"
+            options={options}
+            onChange={(next) => onChange(next)}
+          />
+          {scalarOtherSelected && (
+            <input
+              value={scalarOtherText}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                const custom = event.target.value;
+                onChange(custom.trim() ? `Other: ${custom}` : "Other");
+              }}
+              placeholder="Describe the style you want"
+              className="heyy-form-field mt-3"
+            />
+          )}
         </div>
       ) : field.type === "multiselect" ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {field.options?.map((option) => {
-            const current = Array.isArray(value) ? value : [];
-            const active = current.includes(option);
-            return (
-              <button
-                key={option}
-                type="button"
-                onClick={() => onChange(active ? current.filter((item) => item !== option) : [...current, option])}
-                className={cx(
-                  "rounded-full border px-3.5 py-2 text-xs font-black transition",
-                  active
-                    ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_8px_20px_var(--accent-soft)]"
-                    : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
-                )}
-              >
-                {active && <Check size={12} className="mr-1 inline" />}
-                {option}
-              </button>
-            );
-          })}
+        <div className="mt-3">
+          <div className="flex flex-wrap gap-2">
+            {options.map((option) => {
+              const active = option === "Other" && isPreferredStyle ? multiOtherSelected : multiValue.includes(option);
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    if (option === "Other" && isPreferredStyle) {
+                      const withoutOther = multiValue.filter((item) => item !== "Other" && !item.startsWith("Other:"));
+                      onChange(multiOtherSelected ? withoutOther : [...withoutOther, "Other"]);
+                      return;
+                    }
+                    onChange(active ? multiValue.filter((item) => item !== option) : [...multiValue, option]);
+                  }}
+                  className={cx(
+                    "rounded-full border px-3.5 py-2 text-xs font-black transition",
+                    active
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_8px_20px_var(--accent-soft)]"
+                      : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
+                  )}
+                >
+                  {active && <Check size={12} className="mr-1 inline" />}
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+          {multiOtherSelected && (
+            <input
+              value={multiOtherText}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                const custom = event.target.value;
+                const withoutOther = multiValue.filter((item) => item !== "Other" && !item.startsWith("Other:"));
+                onChange([...withoutOther, custom.trim() ? `Other: ${custom}` : "Other"]);
+              }}
+              placeholder="Describe the style you want"
+              className="heyy-form-field mt-3"
+            />
+          )}
         </div>
       ) : (
         <input value={String(value || "")} onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)} placeholder={field.placeholder} className="heyy-form-field mt-2" />
