@@ -68,6 +68,7 @@ type UploadItem = {
 
 
 const projectTypes = ARCHITECTURE_PROJECT_TYPES;
+const otherProjectType = projectTypes.find((item) => item.toLowerCase().startsWith("other")) || "Other";
 
 const architecturalStyles = [
   "Contemporary",
@@ -157,6 +158,7 @@ export default function ArchitectureStudioPage() {
   const [step, setStep] = useState(1);
   const [landStart, setLandStart] = useState<LandStart>("owned");
   const [projectType, setProjectType] = useState("");
+  const [customProjectType, setCustomProjectType] = useState("");
   const [scope, setScope] = useState("New Build");
   const [selectedStyle, setSelectedStyle] = useState("");
   const [customStyle, setCustomStyle] = useState("");
@@ -222,6 +224,7 @@ export default function ArchitectureStudioPage() {
     setUploads([]);
     setSourceBrief(initialSourceBrief);
     setProjectType("");
+    setCustomProjectType("");
     setSelectedStyle("");
     setCustomStyle("");
     setSelectedSpaces([]);
@@ -231,6 +234,7 @@ export default function ArchitectureStudioPage() {
   function changeProjectType(nextType: string) {
     const template = getArchitectureProjectTemplate(nextType);
     setProjectType(nextType);
+    if (nextType !== otherProjectType) setCustomProjectType("");
     setSelectedSpaces(template.defaultSpaces);
     setErrorMessage("");
   }
@@ -269,6 +273,9 @@ export default function ArchitectureStudioPage() {
       if (step === 1 && (!form.projectName.trim() || !projectType)) {
         return "Add a project name and select the project type.";
       }
+      if (step === 1 && projectType === otherProjectType && !customProjectType.trim()) {
+        return "Describe the custom project type before continuing.";
+      }
       if (step === 2 && landStart === "owned" && !form.country.trim()) {
         return "Add the country for the confirmed site.";
       }
@@ -286,6 +293,9 @@ export default function ArchitectureStudioPage() {
           !uploads.some((item) => item.category === "source"))
       ) {
         return "Add the project name and type, then upload at least one existing drawing, plan, sketch or model reference.";
+      }
+      if (step === 1 && projectType === otherProjectType && !customProjectType.trim()) {
+        return "Describe the custom project type before continuing.";
       }
       if (step === 2 && !sourceBrief.sourceType) {
         return "Identify the type of source you uploaded.";
@@ -413,6 +423,10 @@ export default function ArchitectureStudioPage() {
       const workflowMode = mode === "build"
         ? "build_from_scratch"
         : inferUploadedWorkflow(sourceBrief.sourceType);
+      const savedProjectType =
+        projectType === otherProjectType
+          ? customProjectType.trim() || otherProjectType
+          : projectType;
 
       const { data: project, error: projectError } = await supabase
         .from("architecture_projects")
@@ -420,7 +434,7 @@ export default function ArchitectureStudioPage() {
           user_id: user.id,
           project_name: form.projectName.trim(),
           workflow_mode: workflowMode,
-          project_type: projectType || null,
+          project_type: savedProjectType || null,
           scope: mode === "build" ? scope || null : "Existing Design",
           working_mode: workingMode,
           professional_brief: {
@@ -642,6 +656,8 @@ export default function ArchitectureStudioPage() {
                     setLandStart={setLandStart}
                     projectType={projectType}
                     setProjectType={changeProjectType}
+                    customProjectType={customProjectType}
+                    setCustomProjectType={setCustomProjectType}
                     scope={scope}
                     setScope={setScope}
                     selectedSpaces={selectedSpaces}
@@ -671,6 +687,8 @@ export default function ArchitectureStudioPage() {
                     setCustomStyle={setCustomStyle}
                     projectType={projectType}
                     setProjectType={changeProjectType}
+                    customProjectType={customProjectType}
+                    setCustomProjectType={setCustomProjectType}
                     selectedSpaces={selectedSpaces}
                     toggleSpace={toggleSpace}
                     sourceBrief={sourceBrief}
@@ -723,7 +741,10 @@ export default function ArchitectureStudioPage() {
                 <div className="summary-body">
                   <SummaryRow label="Workflow" value={modeLabel(mode)} />
                   <SummaryRow label="Working Mode" value={workingMode === "professional" ? "Professional Mode" : "Guided Mode"} />
-                  <SummaryRow label="Project Type" value={projectType || "Not selected"} />
+                  <SummaryRow
+                    label="Project Type"
+                    value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"}
+                  />
                   <SummaryRow label="Scope" value={scope || "Not selected"} />
                   <SummaryRow
                     label="Location"
@@ -786,12 +807,13 @@ function ProfessionalFields({ form, updateField }: { form: BuilderForm; updateFi
 }
 
 function BuildWorkflow({
-  step, form, updateField, landStart, setLandStart, projectType, setProjectType, scope, setScope,
+  step, form, updateField, landStart, setLandStart, projectType, setProjectType, customProjectType, setCustomProjectType, scope, setScope,
   selectedSpaces, toggleSpace, selectedStyle, setSelectedStyle, customStyle, setCustomStyle,
   planningFiles, referenceFiles, addFiles, removeFile, workingMode,
 }: {
   step: number; form: BuilderForm; updateField: (name: keyof BuilderForm, value: string) => void;
   landStart: LandStart; setLandStart: (value: LandStart) => void; projectType: string; setProjectType: (value: string) => void;
+  customProjectType: string; setCustomProjectType: (value: string) => void;
   scope: string; setScope: (value: string) => void; selectedSpaces: string[]; toggleSpace: (value: string) => void;
   selectedStyle: string; setSelectedStyle: (value: string) => void; customStyle: string; setCustomStyle: (value: string) => void;
   planningFiles: UploadItem[]; referenceFiles: UploadItem[];
@@ -804,6 +826,7 @@ function BuildWorkflow({
     <div className="info-panel"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Project Foundation</p><h3 className="mt-2 text-2xl font-black text-slate-950">Start with the purpose of the building.</h3><p className="mt-3 text-sm leading-7 text-slate-600">The selected project type changes the spaces, design priorities and future visual gallery automatically.</p></div>
     <Field label="Project Name" value={form.projectName} onChange={(value) => updateField("projectName", value)} placeholder="Example: Harbour Restaurant" />
     <div className="field"><p className="field-label">Project Type</p><div className="chip-wrap">{projectTypes.map((item) => <button key={item} type="button" className="chip" data-active={projectType === item} onClick={() => setProjectType(item)}>{item}</button>)}</div></div>
+    {projectType === otherProjectType && <Field label="Describe the Project Type" value={customProjectType} onChange={setCustomProjectType} placeholder="Example: indoor sports and wellness complex" />}
     <div className="field"><p className="field-label">Scope</p><div className="chip-wrap">{["New Build", "Renovation", "Extension", "Feasibility Study", "Concept Only"].map((item) => <button key={item} type="button" className="chip" data-active={scope === item} onClick={() => setScope(item)}>{item}</button>)}</div></div>
   </>;
 
@@ -844,17 +867,17 @@ function BuildWorkflow({
 
   return <>
     <div className="info-panel blue"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Ready to Create</p><h3 className="mt-2 text-2xl font-black text-slate-950">Your project will open as an editable Architecture workspace.</h3><p className="mt-3 text-sm leading-7 text-slate-600">Materials, colours, planning details, Space Program and all generated content remain editable after creation.</p></div>
-    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType || "Not selected"} /><SummaryRow label="Working Mode" value={workingMode === "professional" ? "Professional" : "Guided"} /><SummaryRow label="Site" value={landStart === "owned" ? "Confirmed land" : landStart === "looking" ? "Looking for land" : "Exploring without land"} /><SummaryRow label="Spaces" value={selectedSpaces.join(", ") || "Smart suggestions later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
+    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"} /><SummaryRow label="Working Mode" value={workingMode === "professional" ? "Professional" : "Guided"} /><SummaryRow label="Site" value={landStart === "owned" ? "Confirmed land" : landStart === "looking" ? "Looking for land" : "Exploring without land"} /><SummaryRow label="Spaces" value={selectedSpaces.join(", ") || "Smart suggestions later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
   </>;
 }
 
 function UploadWorkflow({
   step, form, updateField, sourceFiles, referenceFiles, addFiles, removeFile, selectedStyle, setSelectedStyle,
-  customStyle, setCustomStyle, projectType, setProjectType, selectedSpaces, toggleSpace, sourceBrief, updateSourceBrief, toggleCameraView, workingMode,
+  customStyle, setCustomStyle, projectType, setProjectType, customProjectType, setCustomProjectType, selectedSpaces, toggleSpace, sourceBrief, updateSourceBrief, toggleCameraView, workingMode,
 }: {
   step: number; form: BuilderForm; updateField: (name: keyof BuilderForm, value: string) => void; sourceFiles: UploadItem[]; referenceFiles: UploadItem[];
   addFiles: (category: FileCategory, files: FileList | null) => void; removeFile: (item: UploadItem) => void; selectedStyle: string; setSelectedStyle: (value: string) => void;
-  customStyle: string; setCustomStyle: (value: string) => void; projectType: string; setProjectType: (value: string) => void; selectedSpaces: string[]; toggleSpace: (value: string) => void; sourceBrief: SourceBriefForm; updateSourceBrief: (name: keyof SourceBriefForm, value: string | string[]) => void;
+  customStyle: string; setCustomStyle: (value: string) => void; projectType: string; setProjectType: (value: string) => void; customProjectType: string; setCustomProjectType: (value: string) => void; selectedSpaces: string[]; toggleSpace: (value: string) => void; sourceBrief: SourceBriefForm; updateSourceBrief: (name: keyof SourceBriefForm, value: string | string[]) => void;
   toggleCameraView: (view: string) => void; workingMode: WorkingMode;
 }) {
   const template = getArchitectureProjectTemplate(projectType);
@@ -862,6 +885,7 @@ function UploadWorkflow({
     <div className="info-panel"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Existing design</p><h3 className="mt-2 text-2xl font-black text-slate-950">Use the design you already have as the source of truth.</h3><p className="mt-3 text-sm leading-7 text-slate-600">Upload floor plans, elevations, sections, sketches, PDFs or model screenshots. When the source contains developed plans, Heyy Studio must preserve that geometry rather than inventing a new layout.</p></div>
     <Field label="Project Name" value={form.projectName} onChange={(value) => updateField("projectName", value)} placeholder="Example: Existing House Visualisation" />
     <div className="field"><p className="field-label">Project Type</p><div className="chip-wrap">{projectTypes.map((item) => <button key={item} type="button" className="chip" data-active={projectType === item} onClick={() => setProjectType(item)}>{item}</button>)}</div></div>
+    {projectType === otherProjectType && <Field label="Describe the Project Type" value={customProjectType} onChange={setCustomProjectType} placeholder="Example: indoor sports and wellness complex" />}
     <FilePicker category="source" title="Upload the existing design" body="Upload all relevant plans, elevations, sections or source drawings. These files remain the geometry reference for later plans and visuals." files={sourceFiles} onFiles={addFiles} onRemove={removeFile} accept="application/pdf,image/*,.dwg,.dxf" />
   </>;
   if (step === 2) return <>
@@ -892,7 +916,7 @@ function UploadWorkflow({
   </>;
   return <>
     <div className="info-panel blue"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Ready to Create</p><h3 className="mt-2 text-2xl font-black text-slate-950">Your source and development rules will become one coordinated Architecture workspace.</h3></div>
-    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType || "Not selected"} /><SummaryRow label="Source Type" value={sourceBrief.sourceType || "Not selected"} /><SummaryRow label="Development Goal" value={sourceBrief.renderTarget || "Not selected"} /><SummaryRow label="Views" value={sourceBrief.cameraViews.join(", ") || "Template views later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
+    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"} /><SummaryRow label="Source Type" value={sourceBrief.sourceType || "Not selected"} /><SummaryRow label="Development Goal" value={sourceBrief.renderTarget || "Not selected"} /><SummaryRow label="Views" value={sourceBrief.cameraViews.join(", ") || "Template views later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
   </>;
 }
 
