@@ -530,6 +530,7 @@ function InteriorExperience() {
   const mainVisual = getInteriorAsset(assets, "main_space", "final") || getInteriorAsset(assets, "main_space", "preview");
   const loading = generatingConcept;
   const spacePlanReady = isAnyStageApproved(assets, "space_plan");
+  const mainSpaceReady = isAnyStageApproved(assets, "main_space");
   const sourcingMarket = String(form.procurementMarket || form.location || "");
 
   return (
@@ -603,7 +604,7 @@ function InteriorExperience() {
               <PlansSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenProduction={() => selectWorkspaceTab("production")} />
             )}
             {activeTab === "visuals" && (
-              <VisualsSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} spacePlanReady={spacePlanReady} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenPlans={() => selectWorkspaceTab("plans")} />
+              <VisualsSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} spacePlanReady={spacePlanReady} mainSpaceReady={mainSpaceReady} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenPlans={() => selectWorkspaceTab("plans")} />
             )}
             {activeTab === "professional-pack" && <ProfessionalPackageSection value={result.professionalPackage} />}
             {activeTab === "design-pack" && (
@@ -1214,6 +1215,7 @@ function VisualsSection({
   generating,
   approvingAssetId,
   spacePlanReady,
+  mainSpaceReady,
   onGenerate,
   onApprove,
   onEnlarge,
@@ -1223,6 +1225,7 @@ function VisualsSection({
   generating: GenerationTarget;
   approvingAssetId: string | null;
   spacePlanReady: boolean;
+  mainSpaceReady: boolean;
   onGenerate: (viewType: VisualType, stage: GenerationStage) => void;
   onApprove: (asset: ProjectAsset) => void;
   onEnlarge: (image: { url: string; title: string }) => void;
@@ -1244,13 +1247,27 @@ function VisualsSection({
         </div>
       </div>
 
-      {!spacePlanReady && (
+      {!spacePlanReady ? (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4">
           <div>
             <p className="text-sm font-black text-amber-800 dark:text-amber-200">Approve the Furniture & Space Plan first</p>
-            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">Once approved, all connected plans and visuals unlock immediately.</p>
+            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">The approved plan becomes the fixed geometry source for the visual project.</p>
           </div>
           <Button type="button" variant="secondary" onClick={onOpenPlans}><Ruler size={15} /> Open plans</Button>
+        </div>
+      ) : !mainSpaceReady ? (
+        <div className="mt-6 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4">
+          <p className="text-sm font-black text-[var(--text-primary)]">Create and approve the Main Space Perspective next</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+            This first approved render becomes the project&apos;s visual anchor. Every other angle, detail, daylight and evening view will preserve its furniture, joinery, materials and lighting system.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-6 rounded-2xl border border-emerald-300/60 bg-emerald-500/10 p-4">
+          <p className="text-sm font-black text-emerald-800 dark:text-emerald-200">Project visual anchor locked</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-emerald-700 dark:text-emerald-300">
+            New views are generated from the approved plan and approved Main Space Perspective so the project stays visually consistent.
+          </p>
         </div>
       )}
 
@@ -1258,7 +1275,9 @@ function VisualsSection({
         {VISUALS.map((visual) => {
           const dependency = !spacePlanReady
             ? "Generate and approve the Furniture & Space Plan first."
-            : undefined;
+            : visual.id !== "main_space" && !mainSpaceReady
+              ? "Generate and approve the Main Space Perspective first. It becomes the visual anchor for every other view."
+              : undefined;
           return (
             <InteriorWorkflowCard
               key={visual.id}
@@ -1320,6 +1339,7 @@ function InteriorWorkflowCard({
     .map((stage) => getInteriorAsset(assets, viewType, stage))
     .find((candidate): candidate is ProjectAsset => Boolean(candidate && isApprovedAsset(candidate)));
   const selectedStageApproved = Boolean(asset && isApprovedAsset(asset));
+  const isMainVisualAnchor = kind === "visual" && viewType === "main_space";
   const stageDependency = dependencyMessage;
   const isGenerating = generating?.viewType === viewType && generating.stage === selectedStage;
   const disabled = Boolean(generating) || Boolean(stageDependency);
@@ -1340,7 +1360,7 @@ function InteriorWorkflowCard({
             </button>
           ))}
         </div>
-        {approvedAsset && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[.62rem] font-black text-emerald-600"><CheckCircle2 size={13} /> Approved source: {stageName(assetStage(approvedAsset, viewType))}</span>}
+        {approvedAsset && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[.62rem] font-black text-emerald-600"><CheckCircle2 size={13} /> {isMainVisualAnchor ? "Visual anchor" : "Approved source"}: {stageName(assetStage(approvedAsset, viewType))}</span>}
       </div>
 
       <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
@@ -1373,7 +1393,9 @@ function InteriorWorkflowCard({
           </Button>
           {asset && (
             <Button className="w-full" variant={selectedStageApproved ? "secondary" : "primary"} onClick={() => onApprove(asset)} disabled={selectedStageApproved || approvingAssetId === asset.id || Boolean(generating)}>
-              {approvingAssetId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {selectedStageApproved ? "Approved source" : kind === "plan" ? "Approve plan" : `Approve ${stageName(selectedStage)}`}
+              {approvingAssetId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {selectedStageApproved
+                ? isMainVisualAnchor ? "Visual anchor approved" : "Approved source"
+                : kind === "plan" ? "Approve plan" : isMainVisualAnchor ? "Approve as visual anchor" : `Approve ${stageName(selectedStage)}`}
             </Button>
           )}
         </div>

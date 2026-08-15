@@ -24,14 +24,18 @@ function sign(jobId: string) {
   return createHmac("sha256", secret).update(`studio-image:${jobId}`).digest("hex");
 }
 
-async function hasApprovedSpacePlan(admin: any, projectId: string) {
-  const { data } = await admin.from("project_assets").select("asset_type,metadata").eq("project_id", projectId).eq("studio", "interior_studio").order("created_at", { ascending: false }).limit(50);
+async function hasApprovedInteriorAsset(admin: any, projectId: string, viewType: "space_plan" | "main_space") {
+  const { data } = await admin.from("project_assets").select("asset_type,metadata").eq("project_id", projectId).eq("studio", "interior_studio").order("created_at", { ascending: false }).limit(80);
   return (data || []).some((asset: any) => {
     const type = String(asset.asset_type || "");
     const meta = asset.metadata && typeof asset.metadata === "object" ? asset.metadata : {};
     const view = String(meta.view_type || "");
     const approved = meta.approved === true || meta.approved === "true";
-    return approved && (view === "space_plan" || type.includes("interior_plan_space_plan"));
+    if (!approved) return false;
+    if (view === viewType) return true;
+    return viewType === "space_plan"
+      ? type.includes("interior_plan_space_plan")
+      : type.includes("interior_visual_main_space");
   });
 }
 
@@ -58,8 +62,12 @@ export async function POST(request: Request) {
     const { data: project, error: projectError } = await admin.from("studio_projects").select("id").eq("id", projectId).eq("user_id", auth.user.id).eq("studio", "interior_studio").single();
     if (projectError || !project) return NextResponse.json({ error: projectError?.message || "Interior project not found." }, { status: 404 });
 
-    if ((imageType === "furniture_plan" || imageType === "lighting_plan" || isVisual) && !(await hasApprovedSpacePlan(admin, projectId))) {
+    if ((imageType === "furniture_plan" || imageType === "lighting_plan" || isVisual) && !(await hasApprovedInteriorAsset(admin, projectId, "space_plan"))) {
       return NextResponse.json({ error: "Generate and approve the Furniture & Space Plan first." }, { status: 409 });
+    }
+
+    if (isVisual && imageType !== "main_space" && !(await hasApprovedInteriorAsset(admin, projectId, "main_space"))) {
+      return NextResponse.json({ error: "Generate and approve the Main Space Perspective first. It becomes the visual anchor for every other Interior view." }, { status: 409 });
     }
 
     const action: CreditAction = stage === "technical" ? "interiorTechnicalPlan" : stage === "preview" ? "interiorPreview" : "interiorProfessionalFinal";
