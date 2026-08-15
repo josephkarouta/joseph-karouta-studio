@@ -7,6 +7,7 @@ import { getOpenAI } from "@/lib/ai/openai-server";
 import { imageQualityForTier, type AiPlanConfig, type ImageGenerationTier } from "@/lib/ai/config";
 import { renderArchitecturalDrawingSvg } from "@/lib/ai/architecture-drawing";
 import {
+  ARCHITECTURE_PROJECT_TYPES,
   getArchitectureProjectTemplate,
   getArchitectureVisualViews,
 } from "@/lib/architecture/project-templates";
@@ -978,14 +979,43 @@ function planValidationIssues(args: {
   return issues;
 }
 
+function splitArchitectureSpaceProgram(spaceProgram: Array<Record<string, unknown>>) {
+  const normalised = spaceProgram.map((row) => ({
+    space_name: String(row.space_name || "").trim(),
+    zone: String(row.zone || "Flexible"),
+    level: String(row.level || "Ground"),
+    quantity: Math.max(1, Number(row.quantity) || 1),
+    area_each_m2: Math.max(0, Number(row.area_each_m2) || 0),
+    total_area_m2: Math.max(0, Number(row.total_area_m2) || 0),
+    priority: String(row.priority || "Required"),
+    notes: typeof row.notes === "string" ? row.notes : null,
+    is_ai_suggested: row.is_ai_suggested === true,
+  })).filter((row) => Boolean(row.space_name));
+
+  return {
+    user_defined: normalised.filter((row) => !row.is_ai_suggested),
+    ai_suggestions: normalised.filter((row) => row.is_ai_suggested),
+    all: normalised,
+  };
+}
+
+function isCustomArchitectureProjectType(projectType: string) {
+  return !ARCHITECTURE_PROJECT_TYPES.includes(projectType);
+}
+
 function architectureRequirementSource(args: {
   project: Record<string, unknown>;
   site: Record<string, unknown> | null;
   planning: Record<string, unknown> | null;
   spaceProgram: Array<Record<string, unknown>>;
 }) {
+  const program = splitArchitectureSpaceProgram(args.spaceProgram);
+  const projectType = String(args.project.project_type || "Other");
+  const customProjectType = isCustomArchitectureProjectType(projectType);
+
   return {
-    project_type: args.project.project_type || null,
+    project_type: projectType,
+    project_type_is_custom: customProjectType,
     project_name: args.project.project_name || null,
     scope: args.project.scope || null,
     architectural_style: args.project.architectural_style || null,
@@ -996,8 +1026,70 @@ function architectureRequirementSource(args: {
     source_brief: args.project.source_brief || {},
     site: args.site,
     planning: args.planning,
-    saved_space_program: args.spaceProgram,
+    saved_space_program: {
+      user_defined: program.user_defined,
+      ai_suggestions: customProjectType ? [] : program.ai_suggestions,
+      ignored_generic_suggestions: customProjectType ? program.ai_suggestions : [],
+      policy: customProjectType
+        ? "This is a custom project type. Generic template-generated Space Program rows are placeholders only and must not become hard requirements. User-defined rows remain authoritative."
+        : "AI-suggested rows are defaults only. They may guide the plan but are never hard unless independently repeated by the user. User-defined rows marked Required may become hard plan requirements.",
+    },
   };
+}
+
+function requirementLooksLikeBroadCompliance(requirement: ArchitectureRequirement) {
+  const value = `${requirement.category} ${requirement.statement} ${requirement.metric}`.toLowerCase();
+  return /\b(comply|compliance|code|regulation|regulatory|functional and safety|safety requirements|best practice|all applicable|standards?)\b/.test(value);
+}
+
+function requirementSourceLooksUserAuthored(source: string) {
+  return /project_notes|source_notes|professional_brief|user_capacity|source_brief|site\.desired_floors|planning\.|user_defined|custom|explicit/i.test(source);
+}
+
+function requirementSourceLooksSuggested(source: string) {
+  return /ai_suggestions|template|default|smart suggestion|suggested|selected_spaces/i.test(source);
+}
+
+function sanitiseArchitectureRequirementContract(args: {
+  contract: ArchitectureRequirementContract;
+  project: Record<string, unknown>;
+  site: Record<string, unknown> | null;
+  spaceProgram: Array<Record<string, unknown>>;
+}) {
+  const program = splitArchitectureSpaceProgram(args.spaceProgram);
+  const suggestedNames = program.ai_suggestions.map((row) => row.space_name.toLowerCase());
+  const customProjectType = isCustomArchitectureProjectType(String(args.project.project_type || "Other"));
+
+  const requirements = args.contract.requirements.map((requirement) => {
+    let next = { ...requirement };
+    const source = String(next.source || "");
+    const statement = next.statement.toLowerCase();
+    const suggestedMatches = suggestedNames.filter((name) => name && statement.includes(name)).length;
+    const derivedFromSuggestedProgram =
+      requirementSourceLooksSuggested(source) ||
+      (/saved_space_program/i.test(source) && !/user_defined/i.test(source)) ||
+      (suggestedMatches >= 2 && !requirementSourceLooksUserAuthored(source));
+
+    if (derivedFromSuggestedProgram) {
+      next.priority = "preferred";
+      if (customProjectType) next.source = `${source || "saved_space_program"} (generic suggestion only)`;
+    }
+
+    if (requirementLooksLikeBroadCompliance(next) && !requirementSourceLooksUserAuthored(source)) {
+      next = {
+        ...next,
+        priority: "assumption",
+        validation_scope: "project",
+        measurable: false,
+        target_value: 0,
+        comparison: "qualitative",
+      };
+    }
+
+    return next;
+  });
+
+  return { ...args.contract, requirements };
 }
 
 async function extractArchitectureRequirementContract(args: {
@@ -1017,6 +1109,9 @@ async function extractArchitectureRequirementContract(args: {
       "This must work for any project type, including custom and unusual projects. Never rely on a fixed list such as beds, hotel rooms, students or seats.",
       "Capture explicit user-authored requirements from free text, capacity fields, professional notes, site information, source rules and saved Space Program.",
       "Explicit user statements are HARD unless they are clearly preferences. AI/template defaults and unverified planning assumptions are PREFERRED or ASSUMPTION, never hard merely because they exist in a template.",
+      "Rows under saved_space_program.ai_suggestions are NEVER HARD. They are template guidance only. Rows under saved_space_program.ignored_generic_suggestions must be ignored entirely. Only saved_space_program.user_defined rows may become hard when they are marked Required.",
+      "Never convert an automatically suggested Space Program into one combined hard requirement. A custom project type must be understood from the user's project_type and free-form brief, not from generic Other-template placeholders.",
+      "The project type itself is context, not permission to invent vague obligations such as 'comply with all functional and safety requirements'. Only explicit, testable requirements from the user's inputs may block the plan stage.",
       "Do not invent requirements that the user did not state or that are not directly implied by a selected project setting.",
       "Assign validation_scope=plan only when the Canonical Plan can prove the requirement through levels, spaces, quantities, capacity, access, adjacencies, site layout, preservation or prohibition.",
       "Use validation_scope=visual for appearance/material/style requirements that a plan cannot prove. Use project for broader requirements that must be carried through the workflow but are not plan-verifiable.",
@@ -1031,7 +1126,13 @@ async function extractArchitectureRequirementContract(args: {
     },
   });
 
-  const requirements = [...result.value.requirements];
+  const sanitised = sanitiseArchitectureRequirementContract({
+    contract: result.value,
+    project: args.project,
+    site: args.site,
+    spaceProgram: args.spaceProgram,
+  });
+  const requirements = [...sanitised.requirements];
   if (requestedStoreys && !requirements.some((item) => item.category === "floor_count")) {
     requirements.unshift({
       id: "explicit-floor-count",
@@ -1050,7 +1151,7 @@ async function extractArchitectureRequirementContract(args: {
   }
 
   return {
-    contract: { ...result.value, requirements },
+    contract: { ...sanitised, requirements },
     usage: result.usage,
   };
 }
@@ -1075,9 +1176,31 @@ function textMatchesRequirementMetric(text: string, metric: string) {
   return tokens.every((token) => candidate.includes(token)) || candidate.includes(normaliseRequirementMetric(metric));
 }
 
-function observedRequirementCount(plan: CanonicalPlanSpec, requirement: ArchitectureRequirement) {
-  if (requirement.category === "floor_count" || /floor|storey|story|level/.test(normaliseRequirementMetric(requirement.metric))) {
-    return plan.levels?.length || 0;
+function planScheduleAreaForMetric(planSet: LivePlanSet, metric: string) {
+  const matches = (planSet.area_schedule || []).filter((item) =>
+    textMatchesRequirementMetric(String(item.space || ""), metric),
+  );
+  if (!matches.length) return null;
+  return matches.reduce((sum, item) => sum + Math.max(0, Number(item.approx_area_m2 || 0)), 0);
+}
+
+function deterministicObservedRequirement(
+  planSet: LivePlanSet,
+  requirement: ArchitectureRequirement,
+): { supported: boolean; observed: number; evidence: string } {
+  const plan = planSet.canonical_plan;
+  const metric = normaliseRequirementMetric(requirement.metric);
+  const unit = normaliseRequirementMetric(requirement.unit);
+
+  if (requirement.category === "floor_count" || /floor|storey|story|level/.test(metric)) {
+    return { supported: true, observed: plan.levels?.length || 0, evidence: "canonical_plan.levels.length" };
+  }
+
+  if (/m2|sqm|square metre|square meter/.test(unit) || /\barea\b/.test(metric)) {
+    const area = planScheduleAreaForMetric(planSet, requirement.metric);
+    return area === null
+      ? { supported: false, observed: 0, evidence: "No deterministic area-schedule match." }
+      : { supported: true, observed: area, evidence: "planSet.area_schedule" };
   }
 
   let capacityTotal = 0;
@@ -1097,8 +1220,16 @@ function observedRequirementCount(plan: CanonicalPlanSpec, requirement: Architec
     }
   }
 
-  if (capacityTotal > 0 || fixtureTotal > 0) return Math.max(capacityTotal, fixtureTotal);
-  return matchingRooms;
+  const countLike = /count|unit|units|room|rooms|bed|beds|seat|seats|person|people|student|staff|guest|bay|bays|space|spaces|court|courts|pen|pens|vehicle|parking/.test(`${unit} ${metric}`);
+  if (!countLike) {
+    return { supported: false, observed: 0, evidence: "Requirement is not safely countable deterministically." };
+  }
+
+  if (capacityTotal > 0 || fixtureTotal > 0) {
+    return { supported: true, observed: Math.max(capacityTotal, fixtureTotal), evidence: "canonical room capacity metadata / fixtures" };
+  }
+
+  return { supported: true, observed: matchingRooms, evidence: "countable canonical room matches" };
 }
 
 function deterministicRequirementIssues(
@@ -1110,7 +1241,10 @@ function deterministicRequirementIssues(
     if (requirement.priority !== "hard" || requirement.validation_scope !== "plan") continue;
     if (!requirement.measurable || requirement.target_value <= 0) continue;
 
-    const observed = observedRequirementCount(planSet.canonical_plan, requirement);
+    const observation = deterministicObservedRequirement(planSet, requirement);
+    if (!observation.supported) continue;
+
+    const observed = observation.observed;
     const target = requirement.target_value;
     const passes = requirement.comparison === "at_least"
       ? observed >= target
@@ -1121,9 +1255,7 @@ function deterministicRequirementIssues(
           : true;
 
     if (!passes) {
-      issues.push(
-        `${requirement.id}: ${requirement.statement} Deterministic evidence found ${observed} ${requirement.unit || requirement.metric}; target is ${requirement.comparison.replace(/_/g, " ")} ${target}.`,
-      );
+      issues.push(`${requirement.id}: ${requirement.statement} Deterministic evidence found ${observed} ${requirement.unit || requirement.metric}; target is ${requirement.comparison.replace(/_/g, " ")} ${target}. Evidence source: ${observation.evidence}.`);
     }
   }
   return issues;
@@ -1143,6 +1275,7 @@ async function auditArchitecturePlanRequirements(args: {
       "Evaluate every requirement independently. For validation_scope=plan, require concrete evidence in canonical levels, rooms, room capacity metadata, fixtures, circulation, openings, site elements, area schedule or relationships.",
       "For validation_scope=visual or project, mark pass only when the supplied plan data genuinely proves it; otherwise mark uncertain rather than inventing evidence. These non-plan requirements do not block this plan stage.",
       "For hard plan requirements, uncertain is not acceptable: if evidence is missing, use fail or uncertain and explain what is absent.",
+      "Do not audit AI/template Space Program suggestions as hard requirements. Do not turn broad code/compliance/safety language into a plan failure unless the Requirement Contract contains a specific user-authored, plan-verifiable obligation.",
       "Quantitative requirements must reconcile with explicit counts, capacity metadata or clearly countable spaces. Do not infer a number from a room name alone when the requested quantity is larger than one.",
       "Presence, absence, preservation, access and relationship requirements must point to specific rooms, openings, circulation links, levels or site elements as evidence.",
       "overall_pass means every HARD requirement with validation_scope=plan is pass.",
@@ -1339,7 +1472,12 @@ export async function generateArchitectureConcept(args: {
       site: args.site,
       planning_assumptions: args.planning,
       selected_materials: args.selectedMaterials,
-      saved_space_program: args.spaceProgram,
+      saved_space_program: architectureRequirementSource({
+        project: args.project,
+        site: args.site,
+        planning: args.planning,
+        spaceProgram: args.spaceProgram,
+      }).saved_space_program,
       hard_project_requirements: {
         capacity_text: projectCapacityText(args.project) || null,
         parsed_capacity: parseCapacityConstraint(String(args.project.project_type || "Other"), args.project),
@@ -1465,7 +1603,12 @@ export async function generateArchitecturePlanSet(args: {
     site: args.site,
     planning_assumptions: args.planning,
     selected_materials: args.selectedMaterials,
-    saved_space_program: args.spaceProgram,
+    saved_space_program: architectureRequirementSource({
+      project: args.project,
+      site: args.site,
+      planning: args.planning,
+      spaceProgram: args.spaceProgram,
+    }).saved_space_program,
     requirement_contract: requirementContract,
     hard_plan_requirements: hardPlanRequirements,
     legacy_supporting_checks: {
@@ -1516,16 +1659,20 @@ export async function generateArchitecturePlanSet(args: {
   });
   let auditFailures = hardPlanAuditFailures(requirementContract, auditResult.value);
 
-  if (deterministicIssues.length || auditFailures.length) {
+  const correctionUsages: unknown[] = [];
+  const correctionAuditUsages: unknown[] = [];
+  for (let correctionAttempt = 1; correctionAttempt <= 2 && (deterministicIssues.length || auditFailures.length); correctionAttempt += 1) {
     const allFailures = [...new Set([...deterministicIssues, ...auditFailures])];
     const corrected = await structuredCompletion<LivePlanSet>({
       plan: args.plan,
       schema: planSchema,
       system: [
         baseSystem,
-        "INDEPENDENT REQUIREMENT VALIDATION FAILED. Correct the complete Canonical Plan rather than explaining the failure.",
+        `INDEPENDENT REQUIREMENT VALIDATION FAILED (correction pass ${correctionAttempt} of 2). Correct the complete Canonical Plan rather than explaining the failure.`,
         "The previous plan failed these checks:",
         ...allFailures.map((issue, index) => `${index + 1}. ${issue}`),
+        "For quantitative failures, write explicit machine-checkable evidence into capacity_type/capacity_count, fixtures, level count and/or area_schedule as appropriate. Do not merely mention the target in prose.",
+        "If a capacity target is distributed across several spaces or floors, make the explicit capacity_count values sum to the required target without double counting the same physical capacity.",
         "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements and the selected Architecture DNA.",
       ].join(" "),
       payload: {
@@ -1533,10 +1680,11 @@ export async function generateArchitecturePlanSet(args: {
         previous_plan_to_correct: value,
         validation_failures_to_correct: allFailures,
         previous_requirement_audit: auditResult.value,
+        correction_attempt: correctionAttempt,
       },
     });
     value = corrected.value;
-    correctionUsage = corrected.usage;
+    correctionUsages.push(corrected.usage);
 
     deterministicIssues = [
       ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
@@ -1547,9 +1695,11 @@ export async function generateArchitecturePlanSet(args: {
       contract: requirementContract,
       planSet: value,
     });
-    correctionAuditUsage = auditResult.usage;
+    correctionAuditUsages.push(auditResult.usage);
     auditFailures = hardPlanAuditFailures(requirementContract, auditResult.value);
   }
+  correctionUsage = correctionUsages;
+  correctionAuditUsage = correctionAuditUsages;
 
   const unresolved = [...new Set([...deterministicIssues, ...auditFailures])];
   if (unresolved.length) {
