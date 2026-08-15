@@ -2792,7 +2792,19 @@ function BriefTab({
   saving: boolean;
   onSave: () => void;
 }) {
-  const template = getArchitectureProjectTemplate(project.project_type);
+  const otherProjectTypeOption =
+  projectTypes.find((type) => type.toLowerCase().startsWith("other")) || "Other";
+
+const isCustomProjectType =
+  project.project_type === otherProjectTypeOption ||
+  Boolean(
+    project.project_type &&
+    !projectTypes.some((type) => type === project.project_type)
+  );
+
+const template = getArchitectureProjectTemplate(
+  isCustomProjectType ? otherProjectTypeOption : project.project_type
+);
   function update<K extends keyof Project>(key: K, value: Project[K]) {
     setProject({ ...project, [key]: value });
   }
@@ -2813,10 +2825,29 @@ function BriefTab({
       </div>
       <div className="form-grid two">
         <InputField label="Project Name" value={project.project_name} onChange={(value) => update("project_name", value)} />
-        <SelectField label="Project Type" value={project.project_type || ""} options={["", ...projectTypes]} onChange={changeType} />
+        <SelectField
+  label="Project Type"
+  value={isCustomProjectType ? otherProjectTypeOption : project.project_type || ""}
+  options={["", ...projectTypes]}
+  onChange={changeType}
+/>
         <SelectField label="Scope" value={project.scope || ""} options={["", "New Build", "Renovation", "Extension", "Feasibility Study", "Concept Only"]} onChange={(value) => update("scope", value || null)} />
         <SelectField label="Architectural Style" value={isCustomStyle ? "Other / Custom" : project.architectural_style || ""} options={["", ...styles]} onChange={(value) => update("architectural_style", value || null)} />
       </div>
+      {isCustomProjectType && (
+  <InputField
+    label="Custom Project Type"
+    value={
+      project.project_type === otherProjectTypeOption
+        ? ""
+        : project.project_type || ""
+    }
+    onChange={(value) =>
+      update("project_type", value || otherProjectTypeOption)
+    }
+    placeholder="Describe the exact project type in your own words"
+  />
+)}
       {isCustomStyle && <InputField label="Custom Architectural Style" value={project.architectural_style === "Other / Custom" ? "" : project.architectural_style || ""} onChange={(value) => update("architectural_style", value || "Other / Custom")} placeholder="Describe the exact style in your own words" />}
       <div className="field-block">
         <label>{template.label} Spaces & Features</label>
