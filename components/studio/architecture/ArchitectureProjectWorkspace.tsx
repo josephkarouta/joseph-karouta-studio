@@ -4496,12 +4496,41 @@ function PlansTab({
     return Boolean(visual?.is_approved && assetPreviewUrl(visual.metadata?.technical_assets));
   });
 
+  const planDisplayOrder = [
+  "ground_floor",
+  "upper_floor",
+  "functional_zoning",
+  "site_plan",
+  "circulation",
+  "north_elevation",
+  "south_elevation",
+  "east_elevation",
+  "west_elevation",
+  "section_longitudinal",
+  "section_transverse",
+  "perspective_front",
+  "perspective_rear",
+  "perspective_aerial",
+];
+
+function planOrderIndex(type: string) {
+  const index = planDisplayOrder.indexOf(type);
+  return index === -1 ? planDisplayOrder.length : index;
+}
+
+const orderedPlanVisuals = [...planVisuals].sort(
+  (a, b) =>
+    planOrderIndex(a.visual_type) - planOrderIndex(b.visual_type),
+);
+
   function togglePlanSelection(visualId: string) {
     setSelectedPlanIds((current) => current.includes(visualId) ? current.filter((id) => id !== visualId) : [...current, visualId]);
   }
 
   async function runPlanBatch(mode: "technical" | "rendered") {
-    const queue = planVisuals.filter((visual) => selectedPlanIds.includes(visual.id));
+    const queue = orderedPlanVisuals.filter((visual) =>
+  selectedPlanIds.includes(visual.id),
+);
     if (!queue.length) return;
     setBatchRunning(mode);
     try {
@@ -4589,7 +4618,7 @@ function PlansTab({
 
       <div className="plan-view-group-legend"><span>Plans & diagrams</span><span>4 elevations</span><span>2 sections</span><span>3 perspectives</span></div>
       <div className="plan-visual-grid">
-        {planVisuals.map((visual) => (
+        {orderedPlanVisuals.map((visual) => (
           <PlanVisualCard
             key={visual.id}
             visual={visual}
@@ -6322,11 +6351,61 @@ const workspaceStyles = `
   .image-zoom-trigger { position:relative; display:block; width:100%; height:100%; border:0; background:transparent; padding:0; cursor:zoom-in; }
   .image-zoom-trigger > span { position:absolute; right:12px; bottom:12px; z-index:3; border-radius:999px; background:rgba(15,23,42,.78); color:#fff; padding:7px 10px; font-size:8px; font-weight:900; opacity:0; transform:translateY(4px); transition:all 180ms ease; }
   .image-zoom-trigger:hover > span { opacity:1; transform:none; }
-  .image-lightbox { position:fixed; inset:0; z-index:120; display:grid; place-items:center; background:rgba(2,6,23,.88); padding:24px; backdrop-filter:blur(14px); }
-  .image-lightbox-inner { position:relative; display:grid; max-width:min(1400px,96vw); max-height:94vh; gap:10px; }
-  .image-lightbox-inner img { display:block; max-width:100%; max-height:86vh; border-radius:18px; object-fit:contain; box-shadow:0 35px 90px rgba(0,0,0,.5); }
-  .image-lightbox-inner > button { position:absolute; top:12px; right:12px; z-index:2; display:grid; width:42px; height:42px; place-items:center; border:1px solid rgba(255,255,255,.35); border-radius:999px; background:rgba(15,23,42,.72); color:#fff; font-size:25px; cursor:pointer; }
-  .image-lightbox-inner > strong { color:#fff; font-size:13px; text-align:center; }
+  .image-lightbox {
+  position:fixed;
+  inset:0;
+  z-index:120;
+  display:block;
+  overflow:auto;
+  overscroll-behavior:contain;
+  background:rgba(2,6,23,.88);
+  padding:24px;
+  backdrop-filter:blur(14px);
+}
+
+.image-lightbox-inner {
+  position:relative;
+  display:grid;
+  width:min(1400px,96vw);
+  max-width:100%;
+  margin:0 auto;
+  gap:10px;
+  padding-bottom:24px;
+}
+
+.image-lightbox-inner img {
+  display:block;
+  width:100%;
+  height:auto;
+  max-width:100%;
+  max-height:none;
+  border-radius:18px;
+  object-fit:contain;
+  box-shadow:0 35px 90px rgba(0,0,0,.5);
+}
+
+.image-lightbox-inner > button {
+  position:fixed;
+  top:20px;
+  right:20px;
+  z-index:130;
+  display:grid;
+  width:42px;
+  height:42px;
+  place-items:center;
+  border:1px solid rgba(255,255,255,.35);
+  border-radius:999px;
+  background:rgba(15,23,42,.82);
+  color:#fff;
+  font-size:25px;
+  cursor:pointer;
+}
+
+.image-lightbox-inner > strong {
+  color:#fff;
+  font-size:13px;
+  text-align:center;
+}
   .direction-card-visual img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .direction-card-visual::after { position: absolute; inset: auto 0 0; height: 42%; content: ""; background: linear-gradient(180deg,transparent,rgba(13,17,25,.55)); pointer-events: none; }
   .direction-image-placeholder { display: grid; width: 100%; height: 100%; place-items: center; align-content: center; gap: 12px; color: #1769d2; text-align: center; }
