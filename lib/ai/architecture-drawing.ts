@@ -57,7 +57,15 @@ function zoneKey(zone: string) {
 
 function levelForType(plan: CanonicalPlanSpec, visualType: string) {
   const levels = Array.isArray(plan.levels) ? plan.levels : [];
-  if (visualType === "upper_floor") {
+  const value = String(visualType || "").toLowerCase();
+  if (/^level_\d+$/.test(value)) {
+    const requested = Number(value.replace("level_", ""));
+    return levels[requested]
+      || levels.find((level) => new RegExp(`level\s*${requested}`, "i").test(`${level.id} ${level.label}`))
+      || levels[requested - 1]
+      || levels[0];
+  }
+  if (value === "upper_floor") {
     return levels.find((level) => /upper|first|second|level\s*[12]/i.test(`${level.id} ${level.label}`))
       || levels[1]
       || levels[0];
@@ -66,34 +74,73 @@ function levelForType(plan: CanonicalPlanSpec, visualType: string) {
     || levels[0];
 }
 
-function fitRooms(rooms: CanonicalPlanRoom[], target: Rect): ScreenRoom[] {
-  if (!rooms.length) return [];
-  const safe = rooms.map((room) => ({
-    ...room,
-    x: clamp(room.x),
-    y: clamp(room.y),
-    width: Math.max(3, clamp(room.width, 0, 100)),
-    height: Math.max(3, clamp(room.height, 0, 100)),
-  }));
-  const minX = Math.min(...safe.map((room) => room.x));
-  const minY = Math.min(...safe.map((room) => room.y));
-  const maxX = Math.max(...safe.map((room) => room.x + room.width));
-  const maxY = Math.max(...safe.map((room) => room.y + room.height));
-  const sourceWidth = Math.max(12, maxX - minX);
-  const sourceHeight = Math.max(12, maxY - minY);
+function fallbackOutline(plan: CanonicalPlanSpec) {
+  const footprint = plan.footprint || { x: 20, y: 20, width: 60, height: 55 };
+  return [
+    { x: footprint.x, y: footprint.y },
+    { x: footprint.x + footprint.width, y: footprint.y },
+    { x: footprint.x + footprint.width, y: footprint.y + footprint.height },
+    { x: footprint.x, y: footprint.y + footprint.height },
+  ];
+}
+
+function masterOutline(plan: CanonicalPlanSpec) {
+  return Array.isArray(plan.building_outline?.points) && plan.building_outline!.points.length >= 4
+    ? plan.building_outline!.points
+    : fallbackOutline(plan);
+}
+
+function levelOutline(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined) {
+  return level && Array.isArray(level.outline) && level.outline.length >= 4
+    ? level.outline
+    : masterOutline(plan);
+}
+
+function pointBounds(points: Array<{ x: number; y: number }>) {
+  const safe = points.length ? points : [{ x: 0, y: 0 }];
+  return {
+    minX: Math.min(...safe.map((point) => clamp(point.x))),
+    minY: Math.min(...safe.map((point) => clamp(point.y))),
+    maxX: Math.max(...safe.map((point) => clamp(point.x))),
+    maxY: Math.max(...safe.map((point) => clamp(point.y))),
+  };
+}
+
+function lockedTransform(plan: CanonicalPlanSpec, target: Rect) {
+  const bounds = pointBounds(masterOutline(plan));
+  const sourceWidth = Math.max(12, bounds.maxX - bounds.minX);
+  const sourceHeight = Math.max(12, bounds.maxY - bounds.minY);
   const scale = Math.min(target.width / sourceWidth, target.height / sourceHeight);
   const fittedWidth = sourceWidth * scale;
   const fittedHeight = sourceHeight * scale;
   const offsetX = target.x + (target.width - fittedWidth) / 2;
   const offsetY = target.y + (target.height - fittedHeight) / 2;
+  return { bounds, scale, offsetX, offsetY };
+}
 
-  return safe.map((room) => ({
+function mapPoint(plan: CanonicalPlanSpec, target: Rect, point: { x: number; y: number }) {
+  const transform = lockedTransform(plan, target);
+  return {
+    x: transform.offsetX + (clamp(point.x) - transform.bounds.minX) * transform.scale,
+    y: transform.offsetY + (clamp(point.y) - transform.bounds.minY) * transform.scale,
+  };
+}
+
+function mapRooms(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined, target: Rect): ScreenRoom[] {
+  if (!level?.rooms?.length) return [];
+  const transform = lockedTransform(plan, target);
+  return level.rooms.map((room) => ({
     room,
-    x: offsetX + (room.x - minX) * scale,
-    y: offsetY + (room.y - minY) * scale,
-    width: Math.max(48, room.width * scale),
-    height: Math.max(42, room.height * scale),
+    x: transform.offsetX + (clamp(room.x) - transform.bounds.minX) * transform.scale,
+    y: transform.offsetY + (clamp(room.y) - transform.bounds.minY) * transform.scale,
+    width: Math.max(28, Math.max(2, clamp(room.width, 0, 100)) * transform.scale),
+    height: Math.max(28, Math.max(2, clamp(room.height, 0, 100)) * transform.scale),
   }));
+}
+
+function polygonSvg(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined, target: Rect) {
+  const points = levelOutline(plan, level).map((point) => mapPoint(plan, target, point));
+  return `<polygon points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${INK}" stroke-width="12" stroke-linejoin="miter"/>`;
 }
 
 
@@ -451,30 +498,104 @@ function dimensionLine(x1: number, y1: number, x2: number, y2: number, label: st
   return `<g stroke="${MID}" fill="none" stroke-width="1.4"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/><line x1="${x1}" y1="${y1 - 7}" x2="${x1}" y2="${y1 + 7}"/><line x1="${x2}" y1="${y2 - 7}" x2="${x2}" y2="${y2 + 7}"/></g><text x="${mid}" y="${y1 - 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="${MID}">${esc(label)}</text>`;
 }
 
+
+function scheduledOpeningSvg(room: ScreenRoom, opening: NonNullable<CanonicalPlanLevel["openings"]>[number]) {
+  const position = clamp(opening.position) / 100;
+  const wall = opening.wall;
+  const segmentLength = 64;
+  const boundary = wall === "north"
+    ? { edge: "top" as Edge, x: room.x + room.width * position - segmentLength / 2, y: room.y, length: segmentLength, distance: 0 }
+    : wall === "south"
+      ? { edge: "bottom" as Edge, x: room.x + room.width * position - segmentLength / 2, y: room.y + room.height, length: segmentLength, distance: 0 }
+      : wall === "west"
+        ? { edge: "left" as Edge, x: room.x, y: room.y + room.height * position - segmentLength / 2, length: segmentLength, distance: 0 }
+        : { edge: "right" as Edge, x: room.x + room.width, y: room.y + room.height * position - segmentLength / 2, length: segmentLength, distance: 0 };
+
+  if (opening.type === "door" || opening.type === "sliding_door" || opening.type === "garage_door") {
+    return doorSvg(boundary, Math.max(34, Math.min(72, Number(opening.width_m || 0.9) * 24)));
+  }
+
+  const lineWidth = Math.max(28, Math.min(92, Number(opening.width_m || 1.5) * 28));
+  if (wall === "north" || wall === "south") {
+    const x = room.x + room.width * position - lineWidth / 2;
+    const y = wall === "north" ? room.y : room.y + room.height;
+    return `<g><line x1="${x}" y1="${y}" x2="${x + lineWidth}" y2="${y}" stroke="#fff" stroke-width="13"/><line x1="${x}" y1="${y - 3}" x2="${x + lineWidth}" y2="${y - 3}" stroke="${INK}" stroke-width="2"/><line x1="${x}" y1="${y + 3}" x2="${x + lineWidth}" y2="${y + 3}" stroke="${INK}" stroke-width="2"/></g>`;
+  }
+  const x = wall === "west" ? room.x : room.x + room.width;
+  const y = room.y + room.height * position - lineWidth / 2;
+  return `<g><line x1="${x}" y1="${y}" x2="${x}" y2="${y + lineWidth}" stroke="#fff" stroke-width="13"/><line x1="${x - 3}" y1="${y}" x2="${x - 3}" y2="${y + lineWidth}" stroke="${INK}" stroke-width="2"/><line x1="${x + 3}" y1="${y}" x2="${x + 3}" y2="${y + lineWidth}" stroke="${INK}" stroke-width="2"/></g>`;
+}
+
+function verticalCoresSvg(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined, target: Rect) {
+  if (!level) return "";
+  return (plan.vertical_cores || [])
+    .filter((core) => (core.serves_level_ids || []).includes(level.id))
+    .map((core) => {
+      const p = mapPoint(plan, target, { x: core.x, y: core.y });
+      const transform = lockedTransform(plan, target);
+      const width = Math.max(38, core.width * transform.scale);
+      const height = Math.max(38, core.height * transform.scale);
+      const box = { x: p.x, y: p.y, width, height };
+      if (core.type === "stair") {
+        return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#fff" stroke="${INK}" stroke-width="5"/>${stairSvg({ ...box, room: { id: core.id, name: "Stair", zone: "circulation", x: core.x, y: core.y, width: core.width, height: core.height } })}<text x="${box.x + box.width / 2}" y="${box.y + box.height - 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="800" fill="${BLUE}">CORE ${esc(core.id)}</text></g>`;
+      }
+      const label = core.type === "service_lift" ? "SERVICE LIFT" : core.type === "lift" ? "LIFT" : "SHAFT";
+      return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#f8fafc" stroke="${INK}" stroke-width="5"/><line x1="${box.x}" y1="${box.y}" x2="${box.x + box.width}" y2="${box.y + box.height}" stroke="${MID}" stroke-width="2"/><line x1="${box.x + box.width}" y1="${box.y}" x2="${box.x}" y2="${box.y + box.height}" stroke="${MID}" stroke-width="2"/><text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 4}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="800">${label}</text></g>`;
+    }).join("");
+}
+
+function canonicalCirculationSvg(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined, target: Rect) {
+  if (!level) return "";
+  const routes = (plan.circulation_routes || []).filter((route) => (route.serves_level_ids || []).includes(level.id));
+  const routeColours: Record<string, string> = {
+    public: "#2563eb",
+    private: "#7c3aed",
+    staff: "#0f766e",
+    service: "#ea580c",
+    clinical: "#dc2626",
+    emergency: "#b91c1c",
+    mixed: "#475569",
+  };
+  return routes.map((route) => {
+    const points = route.points.map((point) => mapPoint(plan, target, point));
+    if (points.length < 2) return "";
+    const d = points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
+    const colour = routeColours[route.type] || BLUE;
+    return `<g><path d="${d}" fill="none" stroke="#fff" stroke-width="${Math.max(10, route.width_m * 6)}" stroke-linejoin="round" stroke-linecap="round" opacity="0.92"/><path d="${d}" fill="none" stroke="${colour}" stroke-width="4" stroke-dasharray="12 7" marker-end="url(#arrowBlue)"/><text x="${points[0].x + 8}" y="${points[0].y - 8}" font-family="Arial, sans-serif" font-size="9" font-weight="800" fill="${colour}">${esc(route.type.toUpperCase())}</text></g>`;
+  }).join("");
+}
+
 function renderFloorPlan(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined, visualType: string) {
   const zoning = visualType === "functional_zoning";
   const circulation = visualType === "circulation";
   const target = { x: 150, y: 170, width: 1160, height: 650 };
-  const rooms = fitRooms(level?.rooms || [], target);
+  const rooms = mapRooms(plan, level, target);
   if (!rooms.length) return `<text x="768" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" fill="${MID}">No coordinated rooms returned for this level.</text>`;
 
-  const minX = Math.min(...rooms.map((room) => room.x));
-  const minY = Math.min(...rooms.map((room) => room.y));
-  const maxX = Math.max(...rooms.map((room) => room.x + room.width));
-  const maxY = Math.max(...rooms.map((room) => room.y + room.height));
-  const planWidthM = Math.max(4, Number(plan.site?.width_m || 24) * (Math.max(...rooms.map((r) => r.room.x + r.room.width)) - Math.min(...rooms.map((r) => r.room.x))) / 100);
-  const planDepthM = Math.max(4, Number(plan.site?.depth_m || 30) * (Math.max(...rooms.map((r) => r.room.y + r.room.height)) - Math.min(...rooms.map((r) => r.room.y))) / 100);
+  const mappedOutline = levelOutline(plan, level).map((point) => mapPoint(plan, target, point));
+  const minX = Math.min(...mappedOutline.map((point) => point.x));
+  const minY = Math.min(...mappedOutline.map((point) => point.y));
+  const maxX = Math.max(...mappedOutline.map((point) => point.x));
+  const maxY = Math.max(...mappedOutline.map((point) => point.y));
+  const outlineBounds = pointBounds(levelOutline(plan, level));
+  const planWidthM = Math.max(4, Number(plan.site?.width_m || 24) * (outlineBounds.maxX - outlineBounds.minX) / 100);
+  const planDepthM = Math.max(4, Number(plan.site?.depth_m || 30) * (outlineBounds.maxY - outlineBounds.minY) / 100);
 
   const roomBodies = rooms.map((item) => `<g opacity="${circulation ? 0.36 : 1}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="${zoning ? zoneFill[zoneKey(item.room.zone)] : "#fff"}" stroke="${INK}" stroke-width="9" stroke-linejoin="miter"/>${!zoning && !circulation ? fixtureSvg(item) : ""}${roomLabelSvg(plan, item)}</g>`).join("");
 
-  const doors = (level?.circulation || []).map((link) => {
+  const scheduledOpenings = (level?.openings || []).map((opening) => {
+    const room = rooms.find((item) => item.room.id === opening.room_id);
+    return room ? scheduledOpeningSvg(room, opening) : "";
+  }).join("");
+
+  const fallbackDoors = !level?.openings?.length ? (level?.circulation || []).map((link) => {
     const from = rooms.find((room) => room.room.id === link.from_room_id);
     const to = rooms.find((room) => room.room.id === link.to_room_id);
     if (!from || !to) return "";
     return doorSvg(sharedBoundary(from, to));
-  }).join("");
+  }).join("") : "";
 
-  const windows = !zoning && !circulation ? rooms.map((room) => {
+  const fallbackWindows = !zoning && !circulation && !level?.openings?.length ? rooms.map((room) => {
     const name = room.room.name.toLowerCase();
     if (/garage|storage|pantry|closet/.test(name)) return "";
     return (["top", "right", "bottom", "left"] as Edge[])
@@ -484,17 +605,19 @@ function renderFloorPlan(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | un
       .join("");
   }).join("") : "";
 
-  const circulationPaths = circulation ? (level?.circulation || []).map((link, index) => {
-    const from = rooms.find((room) => room.room.id === link.from_room_id);
-    const to = rooms.find((room) => room.room.id === link.to_room_id);
-    if (!from || !to) return "";
-    const x1 = from.x + from.width / 2;
-    const y1 = from.y + from.height / 2;
-    const x2 = to.x + to.width / 2;
-    const y2 = to.y + to.height / 2;
-    const bend = index % 2 ? 34 : -34;
-    return `<path d="M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2 + bend}, ${x2} ${(y1 + y2) / 2 + bend}, ${x2} ${y2}" fill="none" stroke="${BLUE}" stroke-width="5" marker-end="url(#arrowBlue)"/><text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 + bend - 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="${BLUE}">${esc(link.label)}</text>`;
-  }).join("") : "";
+  const circulationPaths = circulation
+    ? canonicalCirculationSvg(plan, level, target) || (level?.circulation || []).map((link, index) => {
+        const from = rooms.find((room) => room.room.id === link.from_room_id);
+        const to = rooms.find((room) => room.room.id === link.to_room_id);
+        if (!from || !to) return "";
+        const x1 = from.x + from.width / 2;
+        const y1 = from.y + from.height / 2;
+        const x2 = to.x + to.width / 2;
+        const y2 = to.y + to.height / 2;
+        const bend = index % 2 ? 34 : -34;
+        return `<path d="M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2 + bend}, ${x2} ${(y1 + y2) / 2 + bend}, ${x2} ${y2}" fill="none" stroke="${BLUE}" stroke-width="5" marker-end="url(#arrowBlue)"/><text x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 + bend - 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="${BLUE}">${esc(link.label)}</text>`;
+      }).join("")
+    : "";
 
   const poolX = Math.min(1390, maxX + 30);
   const pool = plan.pool?.present && (visualType === "ground_floor" || zoning)
@@ -505,7 +628,8 @@ function renderFloorPlan(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | un
 
   return `<g>
     <rect x="115" y="145" width="1305" height="735" fill="#fff" stroke="#cfd5de" stroke-width="2"/>
-    ${roomBodies}${doors}${windows}${entryDoorSvg(plan, rooms)}${circulationPaths}${pool}
+    ${polygonSvg(plan, level, target)}
+    ${roomBodies}${scheduledOpenings}${fallbackDoors}${fallbackWindows}${verticalCoresSvg(plan, level, target)}${level === plan.levels?.[0] ? entryDoorSvg(plan, rooms) : ""}${circulationPaths}${pool}
     ${!zoning && !circulation ? sectionCutMarkersSvg(plan, level, rooms) : ""}
     ${dimensionLine(minX, maxY + 60, maxX, maxY + 60, `APPROX. ${planWidthM.toFixed(1)} m`)}
     ${dimensionLine(minX - 60, minY, minX - 60, maxY, `APPROX. ${planDepthM.toFixed(1)} m`, true)}
@@ -530,7 +654,7 @@ function facadeRooms(level: CanonicalPlanLevel, orientation: string) {
 
 function renderElevation(plan: CanonicalPlanSpec, visualType: string, dna?: ArchitectureDna | null) {
   const orientation = visualType.replace("_elevation", "");
-  const levels = (plan.levels || []).slice(0, 4);
+  const levels = (plan.levels || []).slice(0, 12);
   const storeys = Math.max(1, levels.length || Number(dna?.storeys || 1));
   const x = 180;
   const width = 1170;
@@ -612,7 +736,7 @@ function renderSection(plan: CanonicalPlanSpec, visualType: string, dna?: Archit
   const longitudinal = visualType === "section_longitudinal";
   const cuts = resolveSectionCuts(plan);
   const cut = cuts.find((item) => item.orientation === (longitudinal ? "longitudinal" : "transverse")) || cuts[0];
-  const levels = (plan.levels || []).slice(0, 4);
+  const levels = (plan.levels || []).slice(0, 12);
   const storeys = Math.max(1, levels.length);
   const x = 205;
   const width = 1080;
@@ -696,9 +820,19 @@ function normaliseSiteElement(element: { x: number; y: number; width: number; he
 function renderSitePlan(plan: CanonicalPlanSpec) {
   const site = { x: 190, y: 165, width: 1120, height: 660 };
   const footprint = normaliseSiteElement(plan.footprint || { x: 20, y: 20, width: 60, height: 55 }, site);
+  const outline = masterOutline(plan).map((point) => ({
+    x: site.x + clamp(point.x) / 100 * site.width,
+    y: site.y + clamp(point.y) / 100 * site.height,
+  }));
+  const outlineBounds = {
+    minX: Math.min(...outline.map((point) => point.x)),
+    minY: Math.min(...outline.map((point) => point.y)),
+    maxX: Math.max(...outline.map((point) => point.x)),
+    maxY: Math.max(...outline.map((point) => point.y)),
+  };
   const pool = normaliseSiteElement(plan.pool || { x: 68, y: 28, width: 18, height: 35 }, site);
   const driveway = normaliseSiteElement(plan.driveway || { x: 8, y: 66, width: 22, height: 25 }, site);
-  return `<g><rect x="115" y="145" width="1305" height="735" fill="#fff" stroke="#cfd5de" stroke-width="2"/><rect x="${site.x}" y="${site.y}" width="${site.width}" height="${site.height}" fill="#fff" stroke="${INK}" stroke-width="5"/><rect x="${site.x + 45}" y="${site.y + 45}" width="${site.width - 90}" height="${site.height - 90}" fill="none" stroke="${MID}" stroke-width="2" stroke-dasharray="9 7"/><text x="${site.x + 55}" y="${site.y + 72}" font-family="Arial, sans-serif" font-size="11" fill="${MID}">CONCEPTUAL SETBACK</text><rect x="${footprint.x}" y="${footprint.y}" width="${footprint.width}" height="${footprint.height}" fill="#f7f7f7" stroke="${INK}" stroke-width="6"/><text x="${footprint.x + footprint.width / 2}" y="${footprint.y + footprint.height / 2}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="800">BUILDING FOOTPRINT</text>${plan.pool?.present ? `<rect x="${pool.x}" y="${pool.y}" width="${pool.width}" height="${pool.height}" fill="#eef8ff" stroke="${INK}" stroke-width="3"/><text x="${pool.x + pool.width / 2}" y="${pool.y + pool.height / 2}" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700">POOL</text>` : ""}${plan.driveway?.present ? `<rect x="${driveway.x}" y="${driveway.y}" width="${driveway.width}" height="${driveway.height}" fill="#f2f2f2" stroke="${INK}" stroke-width="3"/><text x="${driveway.x + driveway.width / 2}" y="${driveway.y + driveway.height / 2}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700">DRIVEWAY</text>` : ""}${dimensionLine(site.x, site.y + site.height + 35, site.x + site.width, site.y + site.height + 35, `${Number(plan.site?.width_m || 0).toFixed(1)} m`)}${dimensionLine(site.x - 36, site.y, site.x - 36, site.y + site.height, `${Number(plan.site?.depth_m || 0).toFixed(1)} m`, true)}<g transform="translate(1330 180)"><path d="M0 68 L26 0 L52 68 L26 51 Z" fill="${INK}"/><text x="26" y="92" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="800">${esc(plan.site?.north_label || "N")}</text></g></g>`;
+  return `<g><rect x="115" y="145" width="1305" height="735" fill="#fff" stroke="#cfd5de" stroke-width="2"/><rect x="${site.x}" y="${site.y}" width="${site.width}" height="${site.height}" fill="#fff" stroke="${INK}" stroke-width="5"/><rect x="${site.x + 45}" y="${site.y + 45}" width="${site.width - 90}" height="${site.height - 90}" fill="none" stroke="${MID}" stroke-width="2" stroke-dasharray="9 7"/><text x="${site.x + 55}" y="${site.y + 72}" font-family="Arial, sans-serif" font-size="11" fill="${MID}">CONCEPTUAL SETBACK</text><polygon points="${outline.map((point) => `${point.x},${point.y}`).join(" ")}" fill="#f7f7f7" stroke="${INK}" stroke-width="6" stroke-linejoin="miter"/><text x="${(outlineBounds.minX + outlineBounds.maxX) / 2}" y="${(outlineBounds.minY + outlineBounds.maxY) / 2}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="800">BUILDING FOOTPRINT</text>${plan.pool?.present ? `<rect x="${pool.x}" y="${pool.y}" width="${pool.width}" height="${pool.height}" fill="#eef8ff" stroke="${INK}" stroke-width="3"/><text x="${pool.x + pool.width / 2}" y="${pool.y + pool.height / 2}" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700">POOL</text>` : ""}${plan.driveway?.present ? `<rect x="${driveway.x}" y="${driveway.y}" width="${driveway.width}" height="${driveway.height}" fill="#f2f2f2" stroke="${INK}" stroke-width="3"/><text x="${driveway.x + driveway.width / 2}" y="${driveway.y + driveway.height / 2}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700">DRIVEWAY</text>` : ""}${dimensionLine(site.x, site.y + site.height + 35, site.x + site.width, site.y + site.height + 35, `${Number(plan.site?.width_m || 0).toFixed(1)} m`)}${dimensionLine(site.x - 36, site.y, site.x - 36, site.y + site.height, `${Number(plan.site?.depth_m || 0).toFixed(1)} m`, true)}<g transform="translate(1330 180)"><path d="M0 68 L26 0 L52 68 L26 51 Z" fill="${INK}"/><text x="26" y="92" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="800">${esc(plan.site?.north_label || "N")}</text></g></g>`;
 }
 
 function renderPerspectiveGuide(plan: CanonicalPlanSpec, visualType: string) {
