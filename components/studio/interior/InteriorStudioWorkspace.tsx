@@ -454,28 +454,42 @@ function InteriorExperience() {
     }
   }
 
-  async function approveAsset(asset: ProjectAsset) {
-    if (!project?.id || !asset.id) return;
-    setApprovingAssetId(asset.id);
-    setError("");
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Your session expired. Sign in again.");
-      const response = await fetch("/api/studios/interior/assets/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ projectId: project.id, assetId: asset.id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Approval failed.");
-      await loadAssets(project.id);
-    } catch (approvalError) {
-      setError(approvalError instanceof Error ? approvalError.message : "Approval failed.");
-    } finally {
-      setApprovingAssetId(null);
+ async function approveAsset(asset: ProjectAsset) {
+  if (!project?.id || !asset.id || !user?.id) return;
+
+  setApprovingAssetId(asset.id);
+  setError("");
+
+  try {
+    const nextMetadata = {
+      ...(asset.metadata || {}),
+      approved: true,
+      approved_at: new Date().toISOString(),
+    };
+
+    const { error: approvalError } = await supabase
+      .from("project_assets")
+      .update({ metadata: nextMetadata })
+      .eq("id", asset.id)
+      .eq("project_id", project.id)
+      .eq("user_id", user.id)
+      .eq("studio", config.databaseId);
+
+    if (approvalError) {
+      throw new Error(approvalError.message || "Approval failed.");
     }
+
+    await loadAssets(project.id);
+  } catch (approvalError) {
+    setError(
+      approvalError instanceof Error
+        ? approvalError.message
+        : "Approval failed.",
+    );
+  } finally {
+    setApprovingAssetId(null);
   }
+}
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
     setActiveTab(tab);
@@ -1088,7 +1102,7 @@ function ProductRecommendationGrid({
         </label>
       </div>
 
-      <div className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-7 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
         {items.map((item, index) => {
           const query = preciseSourcingQuery(item, domain, market);
           const DomainIcon = domain === "materials" ? Layers3 : domain === "furniture" ? Armchair : LampFloor;
@@ -1168,7 +1182,7 @@ function PlansSection({
         </div>
       )}
 
-      <div className="mt-7 grid gap-5 xl:grid-cols-3">
+      <div className="mt-7 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
         {PLAN_VIEWS.map((plan) => {
           const dependency = plan.id !== "space_plan" && !spacePlanApproved
             ? "Generate and approve the Furniture & Space Plan first."
@@ -1240,7 +1254,7 @@ function VisualsSection({
         </div>
       )}
 
-      <div className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-7 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
         {VISUALS.map((visual) => {
           const dependency = !spacePlanReady
             ? "Generate and approve the Furniture & Space Plan first."
@@ -1351,7 +1365,7 @@ function InteriorWorkflowCard({
         <p className="text-lg font-black">{title}</p>
         <p className="mt-2 min-h-10 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{description}</p>
         {stageDependency && <p className="mt-3 rounded-xl bg-amber-500/10 p-3 text-[.68rem] font-bold leading-5 text-amber-700 dark:text-amber-300">{stageDependency}</p>}
-        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <div className="mt-5 grid gap-2 2xl:grid-cols-2">
           <Button className="w-full" onClick={() => onGenerate(selectedStage)} disabled={disabled}>
             {imageUrl ? <RefreshCcw size={15} /> : <Sparkles size={15} />} {kind === "plan"
               ? `${imageUrl ? "Regenerate" : "Generate"} ${selectedStage === "preview" ? "Plan Preview" : "Professional Final"} · ${cost} credits`

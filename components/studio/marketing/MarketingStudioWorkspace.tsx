@@ -485,28 +485,42 @@ function MarketingExperience() {
     }
   }
 
-  async function approveAsset(asset: ProjectAsset) {
-    if (!project?.id || !asset.id) return;
-    setApprovingAssetId(asset.id);
-    setError("");
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Your session expired. Sign in again.");
-      const response = await fetch("/api/studios/marketing/assets/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ projectId: project.id, assetId: asset.id }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Approval failed.");
-      await loadAssets(project.id);
-    } catch (approvalError) {
-      setError(approvalError instanceof Error ? approvalError.message : "Approval failed.");
-    } finally {
-      setApprovingAssetId(null);
+async function approveAsset(asset: ProjectAsset) {
+  if (!project?.id || !asset.id || !user?.id) return;
+
+  setApprovingAssetId(asset.id);
+  setError("");
+
+  try {
+    const nextMetadata = {
+      ...(asset.metadata || {}),
+      approved: true,
+      approved_at: new Date().toISOString(),
+    };
+
+    const { error: approvalError } = await supabase
+      .from("project_assets")
+      .update({ metadata: nextMetadata })
+      .eq("id", asset.id)
+      .eq("project_id", project.id)
+      .eq("user_id", user.id)
+      .eq("studio", config.databaseId);
+
+    if (approvalError) {
+      throw new Error(approvalError.message || "Approval failed.");
     }
+
+    await loadAssets(project.id);
+  } catch (approvalError) {
+    setError(
+      approvalError instanceof Error
+        ? approvalError.message
+        : "Approval failed.",
+    );
+  } finally {
+    setApprovingAssetId(null);
   }
+}
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
     setActiveTab(tab);
