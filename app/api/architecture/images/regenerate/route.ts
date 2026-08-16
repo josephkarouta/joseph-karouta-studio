@@ -9,6 +9,11 @@ import { getAiMode, resolveAiPlan, type ImageGenerationTier } from "@/lib/ai/con
 import { assertRateLimit } from "@/lib/ai/rate-limit";
 import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
 import type { CreditAction } from "@/lib/credits/config";
+import {
+  architectureFloorGenerationRole,
+  buildArchitectureReferenceBundle,
+  type ArchitectureFloorGenerationRole,
+} from "@/lib/architecture/reference-bundle";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -21,6 +26,7 @@ type RegenerateRequest = {
   targetId?: string;
   quality?: ImageGenerationTier;
   planMode?: "technical" | "rendered";
+  generationIntent?: ArchitectureFloorGenerationRole;
 };
 
 function requiredEnvironment(name: string) {
@@ -176,6 +182,31 @@ export async function POST(request: Request) {
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
 
+    let generationIntent: ArchitectureFloorGenerationRole = "normal";
+    if (targetType === "visual" && planMode === "technical") {
+      const { data: targetVisual, error: targetVisualError } = await supabase
+        .from("architecture_visuals")
+        .select("visual_type,metadata")
+        .eq("id", targetId)
+        .eq("project_id", projectId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (targetVisualError || !targetVisual) {
+        throw new Error(targetVisualError?.message || "Architecture visual not found.");
+      }
+      generationIntent = architectureFloorGenerationRole(String(targetVisual.visual_type || ""));
+      if (generationIntent !== "normal") {
+        // Validate the connected reference chain before reserving credits. The
+        // background worker validates again immediately before provider work.
+        await buildArchitectureReferenceBundle({
+          admin,
+          userId: user.id,
+          projectId,
+          targetVisualType: String(targetVisual.visual_type || ""),
+        });
+      }
+    }
+
     const mode = process.env.NEXT_PUBLIC_MOCK_IMAGES === "true" ? "demo" : getAiMode();
     let credits = 0;
     if (mode !== "demo") {
@@ -190,6 +221,7 @@ export async function POST(request: Request) {
           target_id: targetId,
           quality,
           plan_mode: planMode,
+          generation_intent: generationIntent,
         },
       });
       reservationId = reservation.id;
@@ -212,6 +244,7 @@ export async function POST(request: Request) {
           targetId,
           quality,
           planMode,
+          generationIntent,
           planName: resolveAiPlan(user),
           credits,
         },

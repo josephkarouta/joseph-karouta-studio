@@ -9,6 +9,12 @@ import {
   type CanonicalPlanSpec,
 } from "@/lib/ai/architecture";
 import { getAiMode, getAiPlanConfig, type AiPlan, type ImageGenerationTier } from "@/lib/ai/config";
+import {
+  buildArchitectureReferenceBundle,
+  floorIndexFromArchitectureVisualType,
+  type ArchitectureFloorGenerationRole,
+  type ArchitectureReferenceDescriptor,
+} from "@/lib/architecture/reference-bundle";
 
 type ImageTarget = "direction" | "concept" | "visual";
 
@@ -18,6 +24,7 @@ type RegenerateRequest = {
   targetId?: string;
   quality?: ImageGenerationTier;
   planMode?: "technical" | "rendered";
+  generationIntent?: ArchitectureFloorGenerationRole;
 };
 
 type GeneratedAsset = {
@@ -216,6 +223,14 @@ function uniqueReferences(values: Array<ArchitectureImageReference | null>) {
     seen.add(key);
     return true;
   }).slice(0, 6);
+}
+
+function connectedFloorReference(reference: ArchitectureReferenceDescriptor) {
+  return imageReference({
+    label: `APPROVED LOCKED ${reference.title}. This is a geometry continuity anchor from the same building. Preserve its orientation, vertical-core position, perimeter relationships and stacking logic.`,
+    storagePath: reference.storagePath,
+    url: reference.url,
+  });
 }
 
 type SourceDocumentRecord = Record<string, unknown>;
@@ -734,7 +749,37 @@ export async function executeArchitectureImageGeneration(args: {
         "section_longitudinal", "section_transverse",
       ].includes(String(row.visual_type || "")));
 
+    const visualType = String(visual.visual_type || "ground_floor");
+    const targetFloorIndex = floorIndexFromArchitectureVisualType(visualType);
+    const connectedReferenceBundle = targetFloorIndex !== null
+      ? await buildArchitectureReferenceBundle({
+          admin: supabase,
+          userId: authenticatedUserId,
+          projectId,
+          targetVisualType: visualType,
+        })
+      : null;
+    const approvedFloorReferences = connectedReferenceBundle
+      ? connectedReferenceBundle.approvedFloors.map(connectedFloorReference)
+      : [];
+    const generationRole: ArchitectureFloorGenerationRole = connectedReferenceBundle?.generationRole || "normal";
+    const connectedLineage = connectedReferenceBundle
+      ? {
+          direction_id: connectedReferenceBundle.direction.id,
+          direction_image_storage_path: connectedReferenceBundle.direction.storagePath,
+          approved_floor_ids: connectedReferenceBundle.approvedFloors.map((floor) => floor.id),
+          approved_floor_storage_paths: connectedReferenceBundle.approvedFloors
+            .map((floor) => floor.storagePath)
+            .filter((value): value is string => Boolean(value)),
+          generation_role: generationRole,
+          target_floor_index: connectedReferenceBundle.targetFloorIndex,
+        }
+      : null;
+
     if (planMode === "rendered") {
+      if (targetFloorIndex !== null && (visual.is_approved !== true || visualMetadata.stale === true)) {
+        throw new Error(`Approve the ${visualType.replace(/_/g, " ")} detailed plan before generating its preview.`);
+      }
       const renderedAssetKey = `rendered_${quality}_assets`;
       assetMetadataKey = renderedAssetKey;
       previousAssetMetadata = visualMetadata[renderedAssetKey];
@@ -744,12 +789,18 @@ export async function executeArchitectureImageGeneration(args: {
         storagePath: currentRendered.master_storage_path,
         url: currentRendered.preview_url,
       });
+      const targetTechnical = metadataRecord(visualMetadata.technical_assets);
+      const targetTechnicalReference = imageReference({
+        label: "APPROVED DETAILED PLAN FOR THIS TARGET. Preserve its walls, openings, stair/core and room geometry exactly while creating the rendered preview.",
+        storagePath: targetTechnical.master_storage_path,
+        url: targetTechnical.preview_url,
+      });
       const generated = await paidGenerate(quality === "final" ? "architectureProfessionalFinal" : "architectureVisual", { target: "rendered_plan", quality, plan_mode: "rendered" }, () => generateAndStoreRenderedPlanImage({
         supabase,
         userId: authenticatedUserId,
         projectId,
         filenamePrefix: String(visual.visual_type || "rendered-plan"),
-        visualType: String(visual.visual_type || "ground_floor"),
+        visualType,
         title: String(visual.title || "Rendered Concept Plan"),
         projectName: project.project_name,
         canonicalPlan,
@@ -757,7 +808,12 @@ export async function executeArchitectureImageGeneration(args: {
         areaSchedule: Array.isArray(planSet.area_schedule) ? planSet.area_schedule : [],
         plan,
         tier: quality,
-        referenceImages: uniqueReferences([masterReference, currentRenderedReference]),
+        referenceImages: uniqueReferences([
+          masterReference,
+          ...approvedFloorReferences,
+          targetTechnicalReference,
+          currentRenderedReference,
+        ]),
         sourceGeometryReferences: sourceDrawingReferences,
         preserveSourceGeometry: sourceGeometryLocked,
       }));
@@ -775,6 +831,7 @@ export async function executeArchitectureImageGeneration(args: {
         image_tier: quality,
         image_quality: generated.quality,
         active_plan_view: "rendered",
+        ...(connectedLineage ? { lineage: connectedLineage } : {}),
         [renderedAssetKey]: assetRecord(generated),
       };
     } else {
@@ -785,19 +842,6 @@ export async function executeArchitectureImageGeneration(args: {
         label: "Current detailed concept plan. Preserve approved geometry while improving only missing architectural detail.",
         storagePath: currentTechnical.master_storage_path,
         url: currentTechnical.preview_url,
-      });
-      const visualType = String(visual.visual_type || "ground_floor");
-      const coordinatedFloorReferences = ["ground_floor", "upper_floor"].map((floorType) => {
-        const floor = siblingPlans.find((row) => String(row.visual_type || "") === floorType);
-        const floorMetadata = metadataRecord(floor?.metadata);
-        const floorTechnical = metadataRecord(floorMetadata.technical_assets);
-        return floor
-          ? imageReference({
-              label: `${floorType.replace(/_/g, " ")} of the same project. Align footprint, stairs, wet cores, facade openings and vertical structure where relevant.`,
-              storagePath: floorTechnical.master_storage_path,
-              url: floorTechnical.preview_url || floor.image_url,
-            })
-          : null;
       });
       const generated = await paidGenerate(
         quality === "final" ? "architectureProfessionalFinal" : "architectureTechnicalPlan",
@@ -816,11 +860,13 @@ export async function executeArchitectureImageGeneration(args: {
           tier: quality,
           referenceImages: uniqueReferences([
             masterReference,
+            ...approvedFloorReferences,
             currentTechnicalReference,
-            ...coordinatedFloorReferences,
           ]),
           sourceGeometryReferences: sourceDrawingReferences,
           preserveSourceGeometry: sourceGeometryLocked,
+          generationRole,
+          approvedFloorReferenceCount: approvedFloorReferences.filter(Boolean).length,
         }),
       );
       imageUrl = generated.imageUrl;
@@ -837,6 +883,12 @@ export async function executeArchitectureImageGeneration(args: {
         image_tier: quality,
         image_quality: generated.quality,
         active_plan_view: "technical",
+        ...(connectedLineage ? {
+          lineage: connectedLineage,
+          anchor_status: "candidate",
+          stale: false,
+          stale_reason: null,
+        } : {}),
         technical_assets: assetRecord(generated),
       };
     }
