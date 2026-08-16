@@ -1,9 +1,20 @@
-
 import OpenAI from "openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export type SpatialPosition =
+  | "front_left"
+  | "front_center"
+  | "front_right"
+  | "left_side"
+  | "right_side"
+  | "rear_left"
+  | "rear_center"
+  | "rear_right"
+  | "courtyard"
+  | "unknown";
+
 export type DirectionSpatialBrief = {
-  version: 1;
+  version: 2;
   source_storage_path: string | null;
   extracted_at: string;
   site_condition: string;
@@ -21,6 +32,20 @@ export type DirectionSpatialBrief = {
   must_preserve: string[];
   unknown_or_hidden: string[];
   confidence: number;
+
+  // Machine-checkable visual anchors. These are intentionally simple so
+  // downstream plan validation can reject a plan that ignores obvious cues.
+  pool_visible: boolean;
+  pool_position: SpatialPosition;
+  entry_visible: boolean;
+  entry_position: SpatialPosition;
+  approach_steps_visible: boolean;
+  approach_position: SpatialPosition;
+  outdoor_living_visible: boolean;
+  outdoor_living_position: SpatialPosition;
+  terracing_visible: boolean;
+  garage_visible: boolean;
+  garage_position: SpatialPosition;
 };
 
 type DirectionRecord = Record<string, unknown>;
@@ -37,8 +62,26 @@ function cleanString(value: unknown, fallback = "unknown") {
 
 function cleanList(value: unknown) {
   return Array.isArray(value)
-    ? value.map((item) => cleanString(item, "")).filter(Boolean).slice(0, 12)
+    ? value.map((item) => cleanString(item, "")).filter(Boolean).slice(0, 16)
     : [];
+}
+
+function cleanBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return /^(true|yes|visible|present)$/i.test(value.trim());
+  return Boolean(value);
+}
+
+const positions = new Set<SpatialPosition>([
+  "front_left", "front_center", "front_right",
+  "left_side", "right_side",
+  "rear_left", "rear_center", "rear_right",
+  "courtyard", "unknown",
+]);
+
+function cleanPosition(value: unknown): SpatialPosition {
+  const raw = cleanString(value).toLowerCase().replace(/[\s-]+/g, "_") as SpatialPosition;
+  return positions.has(raw) ? raw : "unknown";
 }
 
 function clampConfidence(value: unknown) {
@@ -52,7 +95,7 @@ function normalizeSpatialBrief(
   sourceStoragePath: string | null,
 ): DirectionSpatialBrief {
   return {
-    version: 1,
+    version: 2,
     source_storage_path: sourceStoragePath,
     extracted_at: new Date().toISOString(),
     site_condition: cleanString(raw.site_condition),
@@ -70,6 +113,17 @@ function normalizeSpatialBrief(
     must_preserve: cleanList(raw.must_preserve),
     unknown_or_hidden: cleanList(raw.unknown_or_hidden),
     confidence: clampConfidence(raw.confidence),
+    pool_visible: cleanBoolean(raw.pool_visible),
+    pool_position: cleanPosition(raw.pool_position),
+    entry_visible: cleanBoolean(raw.entry_visible),
+    entry_position: cleanPosition(raw.entry_position),
+    approach_steps_visible: cleanBoolean(raw.approach_steps_visible),
+    approach_position: cleanPosition(raw.approach_position),
+    outdoor_living_visible: cleanBoolean(raw.outdoor_living_visible),
+    outdoor_living_position: cleanPosition(raw.outdoor_living_position),
+    terracing_visible: cleanBoolean(raw.terracing_visible),
+    garage_visible: cleanBoolean(raw.garage_visible),
+    garage_position: cleanPosition(raw.garage_position),
   };
 }
 
@@ -80,7 +134,7 @@ function cachedBrief(direction: DirectionRecord) {
     ? direction.image_storage_path
     : null;
   if (
-    cached.version === 1 &&
+    cached.version === 2 &&
     cached.source_storage_path === storagePath &&
     Array.isArray(cached.must_preserve)
   ) {
@@ -132,30 +186,33 @@ export async function extractDirectionSpatialBrief(args: {
   if (cached) return cached;
 
   const image = await directionImageBytes(args.supabase, args.direction);
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is required for Direction spatial analysis.");
   }
-
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const model = process.env.OPENAI_TEXT_MODEL?.trim() || "gpt-4.1-mini";
   const dataUrl = `data:${image.mimeType};base64,${image.bytes.toString("base64")}`;
+
   const completion = await openai.chat.completions.create({
     model,
     response_format: { type: "json_object" },
-    max_completion_tokens: 1800,
+    max_completion_tokens: 2200,
     messages: [
       {
         role: "system",
         content: [
           "You are Heyy Studio's architectural spatial analyst.",
-          "Analyze the supplied SELECTED DIRECTION IMAGE as a visual spatial brief for the SAME project that will later receive floor plans.",
-          "Extract only relationships that are genuinely visible or strongly implied by the image. Never invent hidden room layouts.",
-          "Your job is to stop the plan generator from turning the selected direction into a different property.",
-          "Return JSON only.",
-          "Use concise natural-language values rather than long prose.",
-          "Pay special attention to the visible building footprint/massing family, entry side and approach, exterior steps/terraces, pool location relative to the house, outdoor dining/living location, garage relationship if visible, site slope/terracing, upper-level setbacks/projections and courtyard/wing relationships.",
-          "For must_preserve, list only spatial relationships that a later ground-floor/upper-floor plan should visibly respect.",
-          "For unknown_or_hidden, explicitly list information that cannot be inferred from this perspective so later planning can solve it from the user's brief rather than hallucinating it.",
+          "Analyze the SELECTED DIRECTION IMAGE as a spatial reference for the exact same project that will later receive floor plans.",
+          "Extract only relationships that are genuinely visible or strongly implied. Never invent hidden room layouts.",
+          "The goal is to stop the floor-plan generator from turning the selected direction into a different property.",
+          "Return JSON only and include every requested key.",
+          "Use concise natural-language descriptions for descriptive keys.",
+          "For machine-checkable position keys, use ONLY one of: front_left, front_center, front_right, left_side, right_side, rear_left, rear_center, rear_right, courtyard, unknown.",
+          "'Front' means the visible primary facade / foreground side in the direction image, not geographic north.",
+          "Set *_visible to true only when the feature is actually visible or unmistakably implied.",
+          "Pay particular attention to pool placement relative to the house, main entry, approach steps/terraces, outdoor dining/living, garage, site terracing, footprint/massing family and upper-level setbacks/projections.",
+          "For must_preserve, list the visible spatial relationships that a later ground-floor or upper-floor plan must retain.",
+          "For unknown_or_hidden, explicitly list information that cannot be inferred from this camera view.",
         ].join(" "),
       },
       {
@@ -167,7 +224,7 @@ export async function extractDirectionSpatialBrief(args: {
               `Project type: ${cleanString(args.project.project_type, "Architecture project")}.`,
               `Project notes: ${cleanString(args.project.notes, "not supplied")}.`,
               "Return exactly these JSON keys:",
-              "site_condition, footprint_family, building_orientation_read, main_entry_position, primary_approach, garage_relationship, pool_relationship, outdoor_living_relationship, landscape_terracing, massing_character, upper_level_relationship, visible_spatial_notes, must_preserve, unknown_or_hidden, confidence.",
+              "site_condition, footprint_family, building_orientation_read, main_entry_position, primary_approach, garage_relationship, pool_relationship, outdoor_living_relationship, landscape_terracing, massing_character, upper_level_relationship, visible_spatial_notes, must_preserve, unknown_or_hidden, confidence, pool_visible, pool_position, entry_visible, entry_position, approach_steps_visible, approach_position, outdoor_living_visible, outdoor_living_position, terracing_visible, garage_visible, garage_position.",
               "confidence is a number from 0 to 1 for the overall spatial read.",
             ].join("\n"),
           },

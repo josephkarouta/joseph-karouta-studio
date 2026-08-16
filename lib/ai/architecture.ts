@@ -129,6 +129,16 @@ export type CanonicalPlanLevel = {
   }>;
 };
 
+export type CanonicalSiteFeature = {
+  id: string;
+  type: "steps" | "terrace" | "outdoor_living" | "path" | "garden" | "courtyard";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+};
+
 export type CanonicalPlanSpec = {
   site: {
     width_m: number;
@@ -142,6 +152,7 @@ export type CanonicalPlanSpec = {
   circulation_routes?: CanonicalCirculationRoute[];
   pool: { present: boolean; x: number; y: number; width: number; height: number };
   driveway: { present: boolean; x: number; y: number; width: number; height: number };
+  site_features?: CanonicalSiteFeature[];
   entry: { x: number; y: number; label: string };
   section_cuts?: CanonicalPlanSectionCut[];
   levels: CanonicalPlanLevel[];
@@ -385,7 +396,7 @@ const planSchema = {
       canonical_plan: {
         type: "object",
         additionalProperties: false,
-        required: ["site", "footprint", "building_outline", "vertical_cores", "circulation_routes", "pool", "driveway", "entry", "section_cuts", "levels"],
+        required: ["site", "footprint", "building_outline", "vertical_cores", "circulation_routes", "pool", "driveway", "site_features", "entry", "section_cuts", "levels"],
         properties: {
           site: {
             type: "object",
@@ -494,6 +505,24 @@ const planSchema = {
               y: coordinateProperty,
               width: coordinateProperty,
               height: coordinateProperty,
+            },
+          },
+          site_features: {
+            type: "array",
+            maxItems: 18,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["id", "type", "x", "y", "width", "height", "label"],
+              properties: {
+                id: { type: "string" },
+                type: { type: "string", enum: ["steps", "terrace", "outdoor_living", "path", "garden", "courtyard"] },
+                x: coordinateProperty,
+                y: coordinateProperty,
+                width: coordinateProperty,
+                height: coordinateProperty,
+                label: { type: "string" },
+              },
             },
           },
           entry: {
@@ -1143,6 +1172,138 @@ function roomsShareOpeningWall(
   }
   return Math.abs(sourceX2 - Number(target.x)) <= tolerance
     && canonicalOverlap(Number(source.y), sourceY2, Number(target.y), targetY2) > 0.75;
+}
+
+
+function rectDistance(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  const ax2 = Number(a.x || 0) + Number(a.width || 0);
+  const ay2 = Number(a.y || 0) + Number(a.height || 0);
+  const bx2 = Number(b.x || 0) + Number(b.width || 0);
+  const by2 = Number(b.y || 0) + Number(b.height || 0);
+  const dx = Math.max(Number(a.x || 0) - bx2, Number(b.x || 0) - ax2, 0);
+  const dy = Math.max(Number(a.y || 0) - by2, Number(b.y || 0) - ay2, 0);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+type CanonicalSide = "north" | "south" | "east" | "west";
+
+function nearestOutlineSide(
+  point: { x: number; y: number },
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+): CanonicalSide {
+  const distances: Array<[CanonicalSide, number]> = [
+    ["north", Math.abs(point.y - bounds.minY)],
+    ["south", Math.abs(point.y - bounds.maxY)],
+    ["west", Math.abs(point.x - bounds.minX)],
+    ["east", Math.abs(point.x - bounds.maxX)],
+  ];
+  distances.sort((a, b) => a[1] - b[1]);
+  return distances[0][0];
+}
+
+function positionMatchesFrontAnchor(
+  rect: { x: number; y: number; width: number; height: number },
+  position: string,
+  frontSide: CanonicalSide,
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+) {
+  if (!/^front_(left|center|right)$/.test(position)) return true;
+  const cx = Number(rect.x || 0) + Number(rect.width || 0) / 2;
+  const cy = Number(rect.y || 0) + Number(rect.height || 0) / 2;
+  const mx = (bounds.minX + bounds.maxX) / 2;
+  const my = (bounds.minY + bounds.maxY) / 2;
+  const frontTolerance = 8;
+  const isFront = frontSide === "north"
+    ? cy <= my + frontTolerance
+    : frontSide === "south"
+      ? cy >= my - frontTolerance
+      : frontSide === "west"
+        ? cx <= mx + frontTolerance
+        : cx >= mx - frontTolerance;
+  if (!isFront) return false;
+  const lateral = position.replace("front_", "");
+  if (lateral === "center") return true;
+  if (frontSide === "north") return lateral === "right" ? cx <= mx + 8 : cx >= mx - 8;
+  if (frontSide === "south") return lateral === "right" ? cx >= mx - 8 : cx <= mx + 8;
+  if (frontSide === "west") return lateral === "right" ? cy >= my - 8 : cy <= my + 8;
+  return lateral === "right" ? cy <= my + 8 : cy >= my - 8;
+}
+
+function directionSpatialLockIssues(
+  planSet: LivePlanSet,
+  directionSpatialBrief?: Record<string, unknown> | null,
+) {
+  const brief = directionSpatialBrief || {};
+  if (Number(brief.version || 0) < 2) return [];
+
+  const issues: string[] = [];
+  const plan = planSet.canonical_plan;
+  if (!plan) return ["Direction Spatial Lock cannot be checked because the Canonical Plan is missing."];
+
+  const masterOutline = Array.isArray(plan.building_outline?.points) && plan.building_outline!.points.length >= 4
+    ? plan.building_outline!.points
+    : canonicalOutlineForLevel(plan, plan.levels?.[0]);
+  const masterBounds = pointBounds(masterOutline);
+  const frontSide = nearestOutlineSide(
+    { x: Number(plan.entry?.x || 0), y: Number(plan.entry?.y || 0) },
+    masterBounds,
+  );
+
+  const poolVisible = brief.pool_visible === true;
+  if (poolVisible && plan.pool?.present !== true) {
+    issues.push("Direction Spatial Lock: the selected Direction visibly contains a pool, but canonical_plan.pool.present is false. Add the pool in the same visible relationship to the house before generating the Ground Floor.");
+  }
+  if (
+    poolVisible && plan.pool?.present &&
+    !positionMatchesFrontAnchor(plan.pool, String(brief.pool_position || "unknown"), frontSide, masterBounds)
+  ) {
+    issues.push(`Direction Spatial Lock: the pool is not in the visible ${String(brief.pool_position || "front").replace(/_/g, " ")} relationship shown by the selected Direction. Reposition the pool relative to the main-entry/front side without changing the user's programme.`);
+  }
+
+  const features = Array.isArray(plan.site_features) ? plan.site_features : [];
+  if (brief.approach_steps_visible === true && !features.some((feature) => feature.type === "steps")) {
+    issues.push("Direction Spatial Lock: the selected Direction visibly contains an exterior stepped approach, but canonical_plan.site_features contains no steps feature. Model the visible approach steps explicitly beside the entry.");
+  }
+  if (brief.terracing_visible === true && !features.some((feature) => feature.type === "terrace" || feature.type === "steps")) {
+    issues.push("Direction Spatial Lock: the selected Direction visibly uses terracing/level changes, but the Canonical Plan contains no terrace or steps site feature.");
+  }
+  if (brief.outdoor_living_visible === true) {
+    const ground = plan.levels?.[0];
+    const outdoorRoom = (ground?.rooms || []).find((room) => /outdoor\s*(living|dining)|terrace|patio|deck/i.test(room.name));
+    const outdoorFeature = features.find((feature) => feature.type === "outdoor_living" || feature.type === "terrace");
+    if (!outdoorRoom && !outdoorFeature) {
+      issues.push("Direction Spatial Lock: the selected Direction visibly contains an outdoor living/dining zone, but the Ground Floor model contains no outdoor-living room or site feature.");
+    }
+    const relationship = String(brief.outdoor_living_relationship || "").toLowerCase();
+    if (poolVisible && plan.pool?.present && /pool|adjacent|beside|next to|alongside/.test(relationship)) {
+      const candidate = outdoorFeature || outdoorRoom;
+      if (candidate && rectDistance(plan.pool, candidate) > 18) {
+        issues.push("Direction Spatial Lock: the Direction shows outdoor living directly beside/adjacent to the pool, but the Canonical Plan separates them. Move the outdoor-living zone next to the pool.");
+      }
+    }
+  }
+
+  if (brief.approach_steps_visible === true) {
+    const steps = features.find((feature) => feature.type === "steps");
+    if (steps) {
+      const entryBox = { x: Number(plan.entry?.x || 0) - 1, y: Number(plan.entry?.y || 0) - 1, width: 2, height: 2 };
+      if (rectDistance(steps, entryBox) > 28) {
+        issues.push("Direction Spatial Lock: the visible approach steps are not connected closely enough to the canonical main entry. Place the stepped approach on the entry route.");
+      }
+    }
+  }
+
+  const mustPreserve = Array.isArray(brief.must_preserve)
+    ? brief.must_preserve.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (mustPreserve.length && !planSet.planning_assumptions.some((item) => /direction spatial lock/i.test(String(item)))) {
+    issues.push(`Direction Spatial Lock: copy the visible spatial anchors into planning_assumptions as a concise "Direction Spatial Lock:" statement so downstream image prompts retain them. Required anchors: ${mustPreserve.join("; ")}`);
+  }
+
+  return issues;
 }
 
 function geometryCoordinationIssues(args: {
@@ -1940,9 +2101,11 @@ export async function generateArchitecturePlanSet(args: {
     "At least one section cut must pass through the principal vertical circulation so the section can show floor-to-floor relationships.",
     "All levels must align vertically and describe one single building represented by the selected Architecture Direction and Architecture DNA.",
     args.directionSpatialBrief
-      ? "DIRECTION SPATIAL LOCK IS ACTIVE. The supplied direction_spatial_brief was extracted from the actual selected Direction image. Treat its must_preserve relationships as hard spatial intent unless they physically conflict with an explicit user requirement. The Ground Floor must visibly belong to that Direction image: preserve the visible pool/house relationship, entry side and approach, exterior steps/terracing, outdoor-living relationship, footprint/massing family and upper-level relationship described by the lock. Do not reduce this visual reference to style only."
+      ? "DIRECTION SPATIAL LOCK IS ACTIVE. The supplied direction_spatial_brief was extracted from the actual selected Direction image. Treat its must_preserve relationships and version-2 machine-checkable anchors as hard visible spatial intent unless they physically conflict with an explicit user requirement. If pool_visible=true, canonical_plan.pool.present MUST be true. If approach_steps_visible=true, add a canonical site_features item with type='steps' on the main entry route. If terracing_visible=true, model the visible level change with steps and/or terrace site_features. If outdoor_living_visible=true, model an outdoor-living/dining room or site feature in the described relationship, especially beside the pool when the brief says so. The Ground Floor must visibly belong to that Direction image. Do not reduce this visual reference to style only."
       : "No Direction Spatial Lock is available. Use the saved Direction and Architecture DNA conservatively and do not invent a visibly different site arrangement.",
     "Never infer hidden rooms from the Direction image. Use the user Requirement Contract and Space Program for hidden/internal programme while using the Direction Spatial Lock for visible site, footprint, approach, pool, outdoor and massing relationships.",
+    "For visible external elements from the Direction Spatial Lock, model them explicitly in canonical_plan.pool, canonical_plan.entry and canonical_plan.site_features. Do not hide them only in prose.",
+    "Add one concise planning_assumptions item beginning exactly with 'Direction Spatial Lock:' that lists the visible must-preserve relationships. This statement is carried into later plan and visual generation.",
     "Translate architecture_dna.massing, roof_form, entry_expression and visual_prompt_anchor into one explicit canonical building_outline polygon. The master outline is the geometry lock for the building massing; do not let each floor invent its own unrelated perimeter.",
     "Every level must return level.outline. The ground-floor outline should normally match the master building_outline. Upper floors may step back or omit wings only when that is consistent with the selected Direction massing; they must remain inside the master outline.",
     "Create canonical_plan.vertical_cores as master coordinates for stairs, lifts and shafts. These are NOT level-specific suggestions. Every served floor must use the exact same x, y, width and height for the same core.",
@@ -2006,7 +2169,8 @@ export async function generateArchitecturePlanSet(args: {
       room_geometry: "No overlapping room rectangles. Shared walls should align. Keep coordinates and dimensions practical and readable.",
       requirement_evidence: "Every hard plan requirement must have explicit evidence in the canonical model. Quantities use capacity_type/capacity_count or countable rooms/fixtures; relationships use circulation/openings/level placement/site elements.",
       same_property_rule: "Every level and diagram is the same property and uses one locked master building outline, one site arrangement and one coordinated massing logic derived from the selected Direction.",
-      direction_spatial_lock: "When direction_spatial_brief is present, its must_preserve list is the visible-site/massing source of truth. Encode those relationships into footprint, entry, pool, driveway, outdoor spaces, level outlines and approach geometry instead of creating a generic unrelated plan.",
+      direction_spatial_lock: "When direction_spatial_brief is present, its must_preserve list and version-2 boolean/position anchors are the visible-site/massing source of truth. Encode them into footprint, entry, pool, driveway, site_features, outdoor spaces, level outlines and approach geometry instead of creating a generic unrelated plan.",
+      site_feature_rules: "Use canonical_plan.site_features for visible external steps, terraces, outdoor-living platforms, paths, gardens and courtyards. Features extracted from the selected Direction must be represented here so the technical-plan image receives the same site composition.",
       building_outline_rules: "building_outline is the master massing footprint polygon. Every level.outline is coordinated to it; ground normally matches it and upper levels may only step back within it when consistent with the selected Architecture DNA and Direction Spatial Lock.",
       opening_rules: "Every enclosed room has an explicit door in level.openings and a valid circulation/access path; occupied rooms have appropriate exterior openings where relevant; required access/separation is explicit.",
       vertical_rules: "vertical_cores are master coordinates. The same stair/lift/shaft has identical x, y, width and height on every served level; level.stairs mirrors master stair cores exactly.",
@@ -2032,6 +2196,7 @@ export async function generateArchitecturePlanSet(args: {
   let deterministicIssues = [
     ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
     ...geometryCoordinationIssues({ planSet: value, project: args.project }),
+    ...directionSpatialLockIssues(value, args.directionSpatialBrief),
     ...deterministicRequirementIssues(value, requirementContract),
   ];
   let auditResult = await auditArchitecturePlanRequirements({
@@ -2054,7 +2219,8 @@ export async function generateArchitecturePlanSet(args: {
         "The previous plan failed these checks:",
         ...allFailures.map((issue, index) => `${index + 1}. ${issue}`),
         "For quantitative failures, write explicit machine-checkable evidence into capacity_type/capacity_count, fixtures, level count and/or area_schedule as appropriate. Do not merely mention the target in prose.",
-        "For geometry failures, repair the canonical geometry itself: building_outline, level.outline, master vertical_cores, mirrored level.stairs, circulation_routes, room coordinates and explicit openings. Do not explain that they should align; make the coordinates align.",
+        "For geometry failures, repair the canonical geometry itself: building_outline, level.outline, master vertical_cores, mirrored level.stairs, circulation_routes, room coordinates, explicit openings, pool, entry and site_features. Do not explain that they should align; make the coordinates and visible site relationships align.",
+        "For Direction Spatial Lock failures, obey the extracted visible anchors literally: restore a visible pool when pool_visible=true, model approach steps/terracing when visible, and place outdoor living in the same relationship to the pool/house. Do not solve these failures by deleting the feature or changing the spatial brief.",
         "If a room is inaccessible, add or correct a real opening and circulation connection. If a stair/core moves between levels, move the level stair back onto the exact master-core coordinates.",
         "If a capacity target is distributed across several spaces or floors, make the explicit capacity_count values sum to the required target without double counting the same physical capacity.",
         "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements and the selected Architecture DNA.",
@@ -2072,6 +2238,8 @@ export async function generateArchitecturePlanSet(args: {
 
     deterministicIssues = [
       ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
+      ...directionSpatialLockIssues(value, args.directionSpatialBrief),
       ...deterministicRequirementIssues(value, requirementContract),
     ];
     auditResult = await auditArchitecturePlanRequirements({
@@ -2975,7 +3143,7 @@ function architectureDocumentPrompt(args: {
     "When a final floor-plan style reference image is supplied, use only its drawing quality, line hierarchy, symbols, fixtures and level of detail. Ignore its project title, exact layout, room count, dimensions and geometry.",
     args.sourceGeometryLocked
       ? "Preserve the uploaded design exactly; use the saved project information only to clarify labels or presentation where it does not conflict with the source."
-      : "Preserve the canonical geometry exactly: same master building outline, same level outline, same wall locations, same entry side, same pool and driveway, identical vertical-core coordinates on every served floor, same openings and same circulation relationships.",
+      : "For a new design, preserve one connected project. Approved lower-floor plans are the geometry authority for anything already established. The selected Direction image plus the Direction Spatial Lock are the authority for VISIBLE site relationships and architectural identity (pool, approach, terraces, outdoor living, entry expression and massing family). The canonical guide controls the hidden/internal room programme and coordinated technical layout. If a simplified guide conflicts with an obvious visible Direction Spatial Lock feature, preserve the Direction feature rather than deleting or relocating it.",
     "Use crisp black-and-white architectural linework on a clean white drawing sheet, with subtle grey poche/hatching only where professionally appropriate.",
     "No coloured zoning blocks, no floating room boxes, no perspective distortion, no photorealistic render, no decorative poster layout and no invented unrelated building.",
     "All text must be readable English. Do not add logos, watermarks, long paragraphs or fake consultant stamps.",
@@ -2985,7 +3153,7 @@ function architectureDocumentPrompt(args: {
   if (isFloorPlan) {
     return [
       "Create a highly detailed, presentation-quality architectural floor plan in true top-down orthographic view.",
-      "REFERENCE PRIORITY FOR CONNECTED NEW DESIGNS: the earliest supplied reference images are the selected direction and any already approved floor plans of the same project. They define the same building identity and continuity. The final supplied guide image is the technical room-program and geometry guide. Reconcile them into one coherent plan that still feels like the same building shown in the selected direction.",
+      "REFERENCE PRIORITY FOR CONNECTED NEW DESIGNS: Reference 1 is the selected Direction image unless explicitly labelled otherwise. It is not just a style sample: preserve its obvious visible site composition, including pool placement, entry/approach, exterior steps/terracing, outdoor-living relationship and massing family as stated in the Direction Spatial Lock. Any approved lower-floor references that follow are locked geometry anchors. The final canonical guide is the technical room-program guide. Reconcile all references into one coherent plan of the SAME project.",
       "Do not copy the guide image's simplified graphic appearance. Upgrade it into a polished architect-quality plan while preserving its intended room layout and the connected project identity. Doors must sit in wall openings and swing from real wall jambs; never draw a floating door symbol.",
       `Required room programme for this level: ${JSON.stringify(roomProgram)}.`,
       "Show a clear main entrance and foyer/entry sequence connected to internal circulation. Every enclosed room must have a logical door and must be reachable without passing through unrelated private rooms.",

@@ -863,7 +863,7 @@ export async function executeArchitectureImageGeneration(args: {
           referenceImages: uniqueReferences([
             masterReference,
             ...planWorkflowReferences,
-            currentTechnicalReference,
+            ...(targetFloorIndex === null ? [currentTechnicalReference] : []),
           ]),
           sourceGeometryReferences: sourceDrawingReferences,
           preserveSourceGeometry: sourceGeometryLocked,
