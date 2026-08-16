@@ -18,6 +18,7 @@ type RegenerateRequest = {
   targetId?: string;
   quality?: ImageGenerationTier;
   planMode?: "technical" | "rendered";
+  generationIntent?: "ground_floor_from_direction" | "upper_floor_from_ground" | "normal";
 };
 
 type GeneratedAsset = {
@@ -740,6 +741,10 @@ export async function executeArchitectureImageGeneration(args: {
     }
 
     const planJson = metadataRecord(planSet.generation_json);
+    const planSpatialBrief = metadataRecord(planJson.direction_spatial_brief);
+    const directionSpatialBrief = Object.keys(planSpatialBrief).length
+      ? planSpatialBrief
+      : metadataRecord(masterDirectionJson.direction_spatial_brief);
     const canonicalPlan = canonicalPlanFrom(planJson);
     if (!canonicalPlan) {
       throw new Error("This project has no Canonical Plan Specification. Click Refresh Plan Content & Prompts first.");
@@ -806,6 +811,7 @@ export async function executeArchitectureImageGeneration(args: {
         projectName: project.project_name,
         canonicalPlan,
         architectureDna,
+        directionSpatialBrief,
         areaSchedule: Array.isArray(planSet.area_schedule) ? planSet.area_schedule : [],
         plan,
         tier: quality,
@@ -851,6 +857,7 @@ export async function executeArchitectureImageGeneration(args: {
           projectName: project.project_name,
           canonicalPlan,
           architectureDna,
+          directionSpatialBrief,
           plan,
           tier: quality,
           referenceImages: uniqueReferences([
@@ -916,6 +923,10 @@ export async function executeArchitectureImageGeneration(args: {
     const canonicalPlan =
       canonicalPlanFrom(visualMetadata) ||
       canonicalPlanFrom(planJson);
+    const planSpatialBrief = metadataRecord(planJson.direction_spatial_brief);
+    const directionSpatialBrief = Object.keys(planSpatialBrief).length
+      ? planSpatialBrief
+      : metadataRecord(masterDirectionJson.direction_spatial_brief);
 
     if (!canonicalPlan && !sourceGeometryLocked) {
       throw new Error("Prepare and approve the connected floor plans before generating architectural visuals.");
@@ -1027,6 +1038,10 @@ export async function executeArchitectureImageGeneration(args: {
           ].filter(Boolean).join("\n\n")
         : [
             prompt,
+            "CONNECTED PROJECT RULE: reconstruct this visual as another view of the SAME building represented by the selected Direction and approved floor plans. Approved plans control footprint topology, stair/core stacking, level relationships, pool/site placement, openings and circulation. The selected Direction controls architectural identity, roof/façade language, materials, landscape and atmosphere. Never change a linear/L/U/courtyard footprint into a different footprint family.",
+            Object.keys(directionSpatialBrief).length
+              ? `DIRECTION SPATIAL LOCK extracted from the selected Direction image: ${JSON.stringify(directionSpatialBrief)}. Preserve its must_preserve relationships in this view, especially pool location, entry/approach, terraces/steps, outdoor living relationship, massing family and upper-level relationship.`
+              : "",
             group === "tour"
               ? "TOUR OUTPUT RULES: create one immersive room panorama with a level horizon, camera at eye height and strong continuity at the left and right edges. Preserve all approved door, window and circulation positions. This is one node in a connected room-to-room tour, not an unrelated interior redesign."
               : "",
@@ -1054,7 +1069,7 @@ export async function executeArchitectureImageGeneration(args: {
         ? `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. Style references may affect materials, colour, landscape and lighting only.`
         : group === "tour"
           ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the same locked property. Keep the room navigable and visually continuous with adjacent tour nodes.`
-          : `Generate only the ${String(visual.title || visual.visual_type)} view of the same locked property.`,
+          : `Generate only the ${String(visual.title || visual.visual_type)} view of the same locked property. Treat approved floor plans as geometry anchors and the selected Direction as the architectural identity anchor.`,
       tier: quality,
     }));
     imageUrl = generated.imageUrl;
@@ -1062,6 +1077,7 @@ export async function executeArchitectureImageGeneration(args: {
     imageMetadata = {
       architecture_dna: architectureDna,
       canonical_plan: canonicalPlan,
+      direction_spatial_brief: directionSpatialBrief,
       image_usage: generated.usage,
       image_reference_count: generated.referenceCount,
       image_generation_method: generated.generationMethod,

@@ -9,6 +9,7 @@ import {
   type LiveVisualPrompt,
 } from "@/lib/ai/architecture";
 import { getAiPlanConfig, type AiPlan } from "@/lib/ai/config";
+import { extractDirectionSpatialBrief, type DirectionSpatialBrief } from "@/lib/architecture/direction-spatial-brief";
 
 export type ArchitectureStage = "concept" | "plans" | "visuals" | "design-pack" | "all";
 
@@ -214,6 +215,34 @@ async function runArchitectureStage(args: {
       });
   const architectureDna = dnaResult.architectureDna;
   const masterDirectionStoragePath = typeof direction.image_storage_path === "string" ? direction.image_storage_path : null;
+  let directionSpatialBrief: DirectionSpatialBrief | null = null;
+
+  if ((stage === "plans" || stage === "all") && project.workflow_mode !== "plan_to_render") {
+    if (!masterDirectionStoragePath && !direction.image_url) {
+      throw new Error("Generate the selected Direction visual before preparing Plans. The Ground Floor must be based on that visual.");
+    }
+    directionSpatialBrief = await extractDirectionSpatialBrief({
+      supabase: admin,
+      direction,
+      project: project as unknown as Record<string, unknown>,
+    });
+
+    const directionGenerationJson = metadataRecord(direction.generation_json);
+    const { error: directionBriefError } = await admin
+      .from("architecture_directions")
+      .update({
+        generation_json: {
+          ...directionGenerationJson,
+          direction_spatial_brief: directionSpatialBrief,
+          direction_spatial_brief_model: process.env.OPENAI_TEXT_MODEL?.trim() || "gpt-4.1-mini",
+          direction_spatial_brief_updated_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", project.selected_direction_id)
+      .eq("project_id", project.id)
+      .eq("user_id", project.user_id);
+    if (directionBriefError) throw new Error(directionBriefError.message);
+  }
 
   if (stage === "concept" || stage === "all") {
     const generated = await generateArchitectureConcept({
@@ -277,6 +306,7 @@ async function runArchitectureStage(args: {
       planning,
       selectedMaterials,
       spaceProgram,
+      directionSpatialBrief,
     });
     const { plan_images, canonical_plan, ...planFields } = generated.planSet;
     const { data: savedPlan, error: planError } = await admin
@@ -297,6 +327,7 @@ async function runArchitectureStage(args: {
             visual_continuity_version: 2,
             master_direction_id: project.selected_direction_id,
             master_direction_storage_path: masterDirectionStoragePath,
+            direction_spatial_brief: directionSpatialBrief,
             selected_materials: selectedMaterials,
             saved_space_program: spaceProgram,
             prepared_at: new Date().toISOString(),

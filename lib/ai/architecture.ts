@@ -1888,6 +1888,7 @@ export async function generateArchitecturePlanSet(args: {
   planning: Record<string, unknown> | null;
   selectedMaterials: Array<Record<string, unknown>>;
   spaceProgram: Array<Record<string, unknown>>;
+  directionSpatialBrief?: Record<string, unknown> | null;
   existingPlan?: LivePlanSet;
   adjustmentInstruction?: string;
   adjustmentScope?: "local_area" | "current_floor" | "all_connected";
@@ -1938,6 +1939,10 @@ export async function generateArchitecturePlanSet(args: {
     "Define at least two perpendicular architectural section cuts in canonical_plan.section_cuts. Label them A—A and B—B, specify the cut axis and viewing direction, and list the rooms crossed by each cut.",
     "At least one section cut must pass through the principal vertical circulation so the section can show floor-to-floor relationships.",
     "All levels must align vertically and describe one single building represented by the selected Architecture Direction and Architecture DNA.",
+    args.directionSpatialBrief
+      ? "DIRECTION SPATIAL LOCK IS ACTIVE. The supplied direction_spatial_brief was extracted from the actual selected Direction image. Treat its must_preserve relationships as hard spatial intent unless they physically conflict with an explicit user requirement. The Ground Floor must visibly belong to that Direction image: preserve the visible pool/house relationship, entry side and approach, exterior steps/terracing, outdoor-living relationship, footprint/massing family and upper-level relationship described by the lock. Do not reduce this visual reference to style only."
+      : "No Direction Spatial Lock is available. Use the saved Direction and Architecture DNA conservatively and do not invent a visibly different site arrangement.",
+    "Never infer hidden rooms from the Direction image. Use the user Requirement Contract and Space Program for hidden/internal programme while using the Direction Spatial Lock for visible site, footprint, approach, pool, outdoor and massing relationships.",
     "Translate architecture_dna.massing, roof_form, entry_expression and visual_prompt_anchor into one explicit canonical building_outline polygon. The master outline is the geometry lock for the building massing; do not let each floor invent its own unrelated perimeter.",
     "Every level must return level.outline. The ground-floor outline should normally match the master building_outline. Upper floors may step back or omit wings only when that is consistent with the selected Direction massing; they must remain inside the master outline.",
     "Create canonical_plan.vertical_cores as master coordinates for stairs, lifts and shafts. These are NOT level-specific suggestions. Every served floor must use the exact same x, y, width and height for the same core.",
@@ -1974,6 +1979,7 @@ export async function generateArchitecturePlanSet(args: {
     site: args.site,
     planning_assumptions: args.planning,
     selected_materials: args.selectedMaterials,
+    direction_spatial_brief: args.directionSpatialBrief || null,
     saved_space_program: architectureRequirementSource({
       project: args.project,
       site: args.site,
@@ -2000,7 +2006,8 @@ export async function generateArchitecturePlanSet(args: {
       room_geometry: "No overlapping room rectangles. Shared walls should align. Keep coordinates and dimensions practical and readable.",
       requirement_evidence: "Every hard plan requirement must have explicit evidence in the canonical model. Quantities use capacity_type/capacity_count or countable rooms/fixtures; relationships use circulation/openings/level placement/site elements.",
       same_property_rule: "Every level and diagram is the same property and uses one locked master building outline, one site arrangement and one coordinated massing logic derived from the selected Direction.",
-      building_outline_rules: "building_outline is the master massing footprint polygon. Every level.outline is coordinated to it; ground normally matches it and upper levels may only step back within it when consistent with the selected Architecture DNA.",
+      direction_spatial_lock: "When direction_spatial_brief is present, its must_preserve list is the visible-site/massing source of truth. Encode those relationships into footprint, entry, pool, driveway, outdoor spaces, level outlines and approach geometry instead of creating a generic unrelated plan.",
+      building_outline_rules: "building_outline is the master massing footprint polygon. Every level.outline is coordinated to it; ground normally matches it and upper levels may only step back within it when consistent with the selected Architecture DNA and Direction Spatial Lock.",
       opening_rules: "Every enclosed room has an explicit door in level.openings and a valid circulation/access path; occupied rooms have appropriate exterior openings where relevant; required access/separation is explicit.",
       vertical_rules: "vertical_cores are master coordinates. The same stair/lift/shaft has identical x, y, width and height on every served level; level.stairs mirrors master stair cores exactly.",
       circulation_geometry: "circulation_routes contain geometric route spines on the same 0-100 grid so circulation is coordinated across floors instead of being redrawn independently.",
@@ -2928,6 +2935,7 @@ function architectureDocumentPrompt(args: {
   projectName: string;
   canonicalPlan: CanonicalPlanSpec;
   architectureDna: ArchitectureDna;
+  directionSpatialBrief?: Record<string, unknown> | null;
   sourceGeometryLocked?: boolean;
 }) {
   const visualType = args.visualType;
@@ -2958,6 +2966,9 @@ function architectureDocumentPrompt(args: {
     `Document: ${args.title}.`,
     `Architecture direction: ${JSON.stringify(args.architectureDna)}.`,
     `Canonical connected project model: ${JSON.stringify(args.canonicalPlan)}.`,
+    args.directionSpatialBrief
+      ? `CONFIRMED DIRECTION SPATIAL LOCK FROM THE SELECTED DIRECTION IMAGE: ${JSON.stringify(args.directionSpatialBrief)}.`
+      : "",
     args.sourceGeometryLocked
       ? "Clean and professionally redraw the uploaded source without changing its design."
       : "CONNECTED WORKFLOW LOCK: earlier supplied references may include the selected direction image and already approved floor plans from the same project. Use them as the primary identity and continuity anchors. The final supplied canonical guide image is the technical program and room-layout guide. Preserve the building family across all of them: same overall shape language, same entry side, same outdoor relationships, same stair/core stack, and the same circulation logic. Improve graphic presentation; never redesign the project into a different building.",
@@ -3053,6 +3064,7 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
   projectName: string;
   canonicalPlan: CanonicalPlanSpec;
   architectureDna: ArchitectureDna;
+  directionSpatialBrief?: Record<string, unknown> | null;
   plan: AiPlanConfig;
   tier?: ImageGenerationTier;
   referenceImages?: ArchitectureImageReference[];
@@ -3129,6 +3141,7 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
       projectName: args.projectName,
       canonicalPlan: args.canonicalPlan,
       architectureDna: args.architectureDna,
+      directionSpatialBrief: args.directionSpatialBrief,
       sourceGeometryLocked,
     }),
     size: imageSize,
@@ -3207,6 +3220,7 @@ function renderedDocumentationPrompt(args: {
   visualType: string;
   title: string;
   architectureDna: ArchitectureDna;
+  directionSpatialBrief?: Record<string, unknown> | null;
   sourceGeometryLocked?: boolean;
 }) {
   const common = [
@@ -3216,6 +3230,9 @@ function renderedDocumentationPrompt(args: {
     args.sourceGeometryLocked
       ? "Do not change the footprint, room layout, stairs, openings, level relationships or facade geometry shown in the uploaded source. Add only materials, lighting, furniture, landscape and presentation treatment."
       : "Earlier reference images define the exact same property's architecture, materials, roof, openings, landscape and identity.",
+    args.directionSpatialBrief
+      ? `Direction spatial lock from the selected Direction image: ${JSON.stringify(args.directionSpatialBrief)}.`
+      : "",
     `Architecture DNA: ${JSON.stringify(args.architectureDna)}`,
     `Target documentation view: ${args.title}.`,
     "Do not invent another property, another floor count, another roof or unrelated facade geometry.",
@@ -3348,6 +3365,7 @@ export async function generateAndStoreRenderedPlanImage(args: {
   projectName: string;
   canonicalPlan: CanonicalPlanSpec;
   architectureDna: ArchitectureDna;
+  directionSpatialBrief?: Record<string, unknown> | null;
   areaSchedule: Array<{ space: string; level: string; approx_area_m2: number }>;
   plan: AiPlanConfig;
   tier?: ImageGenerationTier;
@@ -3397,6 +3415,7 @@ export async function generateAndStoreRenderedPlanImage(args: {
     visualType: args.visualType,
     title: args.title,
     architectureDna: args.architectureDna,
+    directionSpatialBrief: args.directionSpatialBrief,
     sourceGeometryLocked,
   });
   const provider = resolveArchitectureRenderProvider();
