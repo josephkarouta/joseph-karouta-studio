@@ -2275,13 +2275,13 @@ function continuityPrompt(args: {
   return [
     sourceLocked
       ? "EXISTING DESIGN MODE. THE SOURCE DRAWINGS ARE THE ABSOLUTE GEOMETRY SOURCE OF TRUTH."
-      : "VISUAL CONTINUITY IS THE HIGHEST PRIORITY.",
+      : "CONNECTED NEW-DESIGN MODE. PRESERVE ONE COHERENT PROJECT ACROSS DIRECTION, PLANS AND VISUALS.",
     sourceList,
     referenceList,
     sourceLocked
       ? "The SOURCE GEOMETRY references come first and override every later style, direction, concept or previous-render reference if there is any conflict. Preserve the visible footprint, storey count, floor relationships, stairs, external walls, openings, roof/profile information, setbacks and spatial arrangement. Do not copy geometry from STYLE / CONTINUITY references."
       : args.referenceImages.length
-        ? "Reference 1 is the Master Architecture Reference unless explicitly labelled otherwise. Preserve the same property identity."
+        ? "Follow the labels of the STYLE / CONTINUITY references strictly. Any reference labelled as an approved floor plan or geometry anchor has higher priority for layout, footprint, stair/core stacking, circulation, openings and level relationships. The selected Direction / Master Architecture Reference defines the same project identity, massing family, roof language, facade rhythm, material palette, entry expression, pool relationship and landscape language. Current target or previous-view references are continuity aids only and must never override approved floor plans or the selected direction."
         : "",
     sourceLocked
       ? "Use later references only for materials, colour, landscape character, lighting, atmosphere and camera continuity. They are NEVER permission to redesign the building."
@@ -2291,7 +2291,7 @@ function continuityPrompt(args: {
     args.targetRole ? `TARGET ROLE — ${args.targetRole}` : "",
     sourceLocked
       ? "Translate the existing technical drawings into the requested architectural visual. If information is not shown in the drawings, keep the interpretation conservative and do not invent a different building."
-      : "Do not invent a new house. Preserve the same massing, storey count, roof geometry, facade rhythm, window proportions, material placement, terraces, entry expression, pool relationship and landscape language.",
+      : "Do not invent a different building. The result must feel like the same project developed step-by-step: direction image → approved floor plans → derived visuals.",
     "Only change the requested camera, diagram role, lighting, atmosphere or presentation treatment.",
     args.prompt,
     "Professional architecture presentation, coherent geometry, realistic scale and materials, refined lighting. No text, labels, logo, signature or watermark inside photorealistic images.",
@@ -2929,8 +2929,6 @@ function architectureDocumentPrompt(args: {
   canonicalPlan: CanonicalPlanSpec;
   architectureDna: ArchitectureDna;
   sourceGeometryLocked?: boolean;
-  generationRole?: "ground_floor_from_direction" | "upper_floor_from_approved_floor" | "level_from_approved_floors" | "normal";
-  approvedFloorReferenceCount?: number;
 }) {
   const visualType = args.visualType;
   const isFloorPlan = isFloorPlanVisualType(visualType);
@@ -2939,8 +2937,6 @@ function architectureDocumentPrompt(args: {
   const isElevation = /_elevation$/.test(visualType);
   const isSection = /^section_/.test(visualType);
   const level = levelForType(args.canonicalPlan, visualType);
-  const generationRole = args.generationRole || "normal";
-  const approvedFloorReferenceCount = Math.max(0, Number(args.approvedFloorReferenceCount || 0));
   const roomProgram = (level?.rooms || []).map((room) => ({
     name: room.name,
     zone: room.zone,
@@ -2964,11 +2960,7 @@ function architectureDocumentPrompt(args: {
     `Canonical connected project model: ${JSON.stringify(args.canonicalPlan)}.`,
     args.sourceGeometryLocked
       ? "Clean and professionally redraw the uploaded source without changing its design."
-      : generationRole === "ground_floor_from_direction"
-        ? "CONNECTED GROUND FLOOR: Reference 1 is the SELECTED DIRECTION IMAGE and is the master visual/massing identity. Reference 2 is the canonical Ground Floor planning guide and supplies the required room programme, adjacency, access and conceptual geometry. Build the Ground Floor as the plan of the architecture visible in Reference 1: preserve its recognisable envelope/projections, orientation, entry character and pool/site relationship wherever visible, while satisfying the programme from Reference 2. Do not create an unrelated generic plan."
-        : generationRole === "upper_floor_from_approved_floor" || generationRole === "level_from_approved_floors"
-          ? `CONNECTED UPPER LEVEL: Reference 1 is the SELECTED DIRECTION IMAGE. The next ${approvedFloorReferenceCount} reference image${approvedFloorReferenceCount === 1 ? " is" : "s are"} APPROVED LOWER-FLOOR GEOMETRY ANCHORS and are the physical source of truth for stacking, orientation and vertical circulation. The following canonical guide supplies the target level programme and intended room relationships. Preserve the approved stair/core position, perimeter stacking, voids, projections and structural logic. The target floor must read as the next level of exactly the same building, never a separately designed plan.`
-          : "CANONICAL GEOMETRY LOCK: Reference 1 is the supplied canonical drawing and is the geometry source of truth, not a loose spatial guide. Preserve every wall endpoint, outline, stair/core position, opening, corridor relationship, room position, site element and level relationship exactly. Improve graphic presentation without redesigning the plan.",
+      : "CONNECTED WORKFLOW LOCK: earlier supplied references may include the selected direction image and already approved floor plans from the same project. Use them as the primary identity and continuity anchors. The final supplied canonical guide image is the technical program and room-layout guide. Preserve the building family across all of them: same overall shape language, same entry side, same outdoor relationships, same stair/core stack, and the same circulation logic. Improve graphic presentation; never redesign the project into a different building.",
     "When a final floor-plan style reference image is supplied, use only its drawing quality, line hierarchy, symbols, fixtures and level of detail. Ignore its project title, exact layout, room count, dimensions and geometry.",
     args.sourceGeometryLocked
       ? "Preserve the uploaded design exactly; use the saved project information only to clarify labels or presentation where it does not conflict with the source."
@@ -2982,12 +2974,8 @@ function architectureDocumentPrompt(args: {
   if (isFloorPlan) {
     return [
       "Create a highly detailed, presentation-quality architectural floor plan in true top-down orthographic view.",
-      generationRole === "ground_floor_from_direction"
-        ? "REFERENCE PRIORITY: Reference 1 = selected Direction and must control the recognisable building envelope/massing relationship. Reference 2 = canonical Ground Floor planning guide and must control required spaces, adjacency, access and stair/core intent. Translate the selected exterior architecture into a credible Ground Floor rather than redrawing a generic canonical box."
-        : generationRole === "upper_floor_from_approved_floor" || generationRole === "level_from_approved_floors"
-          ? "REFERENCE PRIORITY: Reference 1 = selected Direction identity; subsequent approved lower-floor references = LOCKED cross-level geometry anchors; the canonical target-floor guide follows them and supplies target-level room/programme intent. The approved lower floor(s) override the canonical guide wherever necessary to keep the stair/core, building orientation, stacking, setbacks, roof-below zones, voids and balconies physically coherent."
-          : "REFERENCE PRIORITY: for a new design, the FIRST supplied image is the canonical geometry drawing. Treat its walls, room extents, stair/core position, openings, entry and outline as fixed geometry.",
-      "Do not copy the canonical guide's simplified graphic appearance. Upgrade it into a polished architect-quality plan while preserving its geometry. Doors must sit in wall openings and swing from real wall jambs; never draw a floating door symbol.",
+      "REFERENCE PRIORITY FOR CONNECTED NEW DESIGNS: the earliest supplied reference images are the selected direction and any already approved floor plans of the same project. They define the same building identity and continuity. The final supplied guide image is the technical room-program and geometry guide. Reconcile them into one coherent plan that still feels like the same building shown in the selected direction.",
+      "Do not copy the guide image's simplified graphic appearance. Upgrade it into a polished architect-quality plan while preserving its intended room layout and the connected project identity. Doors must sit in wall openings and swing from real wall jambs; never draw a floating door symbol.",
       `Required room programme for this level: ${JSON.stringify(roomProgram)}.`,
       "Show a clear main entrance and foyer/entry sequence connected to internal circulation. Every enclosed room must have a logical door and must be reachable without passing through unrelated private rooms.",
       "Show realistic external windows embedded in exterior walls, sized and positioned for daylight and ventilation. Show glazed doors or hinged doors providing real access to terraces, balconies, gardens, patios, pool decks and other outdoor spaces where relevant.",
@@ -2996,6 +2984,7 @@ function architectureDocumentPrompt(args: {
       "For any room with capacity_count greater than zero, visibly represent that capacity in a believable architectural way. In bed-based healthcare wards, subdivide large ward zones into patient rooms/bays as needed and show the correct number of beds distributed across them instead of drawing one empty rectangle.",
       "Label each room clearly and add plausible room dimensions in metres beneath the room name. Add selected overall dimensions, hall widths, north arrow and a simple 0–5 m scale bar.",
       "Keep wet/service areas coordinated, circulation practical, furniture clear of door swings, and operational relationships obvious.",
+      "When approved lower-floor references are supplied, stack stairs and cores directly, keep the circulation family consistent, and make the upper plan clearly belong to the lower plan of the same building.",
       "The result should visually match the standard of a polished professional architect's concept floor plan appropriate to this building type, not a residential template.",
       ...shared,
     ].join("\n\n");
@@ -3069,8 +3058,6 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
   referenceImages?: ArchitectureImageReference[];
   sourceGeometryReferences?: ArchitectureImageReference[];
   preserveSourceGeometry?: boolean;
-  generationRole?: "ground_floor_from_direction" | "upper_floor_from_approved_floor" | "level_from_approved_floors" | "normal";
-  approvedFloorReferenceCount?: number;
 }) {
   const tier = args.tier || "preview";
   const guideSvg = renderCanonicalPlanSvg({
@@ -3086,7 +3073,8 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
     .toBuffer();
 
   // The deterministic renderer remains an internal geometry source, not the customer-facing final plan.
-  // Detailed plans are professionally redrawn from that locked guide with the guide supplied as Reference 1.
+  // For new designs, earlier references establish the selected direction / connected plan workflow,
+  // and the generated guide remains a technical support reference rather than the visual identity driver.
 
   const sourceAssets = (
     await Promise.all(
@@ -3111,46 +3099,19 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
     filename: `canonical-guide-${safeFilePart(args.visualType)}.png`,
   };
   const sourceGeometryLocked = Boolean(args.preserveSourceGeometry && sourceAssets.length);
-  const connectedReferenceAssets = (() => {
-    if (sourceGeometryLocked) {
-      return [
-        ...sourceAssets,
-        ...referenceAssets,
-        ...(styleReference ? [styleReference] : []),
-      ];
-    }
-
-    if (args.generationRole === "ground_floor_from_direction" && referenceAssets.length) {
-      const [directionAsset, ...remaining] = referenceAssets;
-      return [
-        directionAsset,
-        guideAsset,
-        ...remaining,
-        ...(styleReference ? [styleReference] : []),
-      ];
-    }
-
-    if ((args.generationRole === "upper_floor_from_approved_floor" || args.generationRole === "level_from_approved_floors") && referenceAssets.length) {
-      const directionAsset = referenceAssets[0];
-      const approvedCount = Math.max(0, Number(args.approvedFloorReferenceCount || 0));
-      const approvedAssets = referenceAssets.slice(1, 1 + approvedCount);
-      const remaining = referenceAssets.slice(1 + approvedCount);
-      return [
-        directionAsset,
-        ...approvedAssets,
-        guideAsset,
-        ...remaining,
-        ...(styleReference ? [styleReference] : []),
-      ];
-    }
-
-    return [
-      guideAsset,
-      ...referenceAssets,
-      ...(styleReference ? [styleReference] : []),
-    ];
-  })();
-  const allAssets = connectedReferenceAssets.filter(Boolean).slice(0, 6);
+  const allAssets = (
+    sourceGeometryLocked
+      ? [
+          ...sourceAssets,
+          ...referenceAssets,
+          ...(styleReference ? [styleReference] : []),
+        ]
+      : [
+          ...referenceAssets,
+          guideAsset,
+          ...(styleReference ? [styleReference] : []),
+        ]
+  ).slice(0, 6);
   const openai = getOpenAI();
   const referenceFiles = await Promise.all(
     allAssets.map((asset) => toFile(asset.bytes, asset.filename, { type: asset.mimeType })),
@@ -3169,8 +3130,6 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
       canonicalPlan: args.canonicalPlan,
       architectureDna: args.architectureDna,
       sourceGeometryLocked,
-      generationRole: args.generationRole,
-      approvedFloorReferenceCount: args.approvedFloorReferenceCount,
     }),
     size: imageSize,
     quality,
