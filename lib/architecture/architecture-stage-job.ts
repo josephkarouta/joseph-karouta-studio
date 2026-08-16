@@ -225,6 +225,10 @@ async function runArchitectureStage(args: {
       supabase: admin,
       direction,
       project: project as unknown as Record<string, unknown>,
+      site,
+      planning,
+      spaceProgram,
+      architectureDna: architectureDna as unknown as Record<string, unknown>,
     });
 
     const directionGenerationJson = metadataRecord(direction.generation_json);
@@ -234,7 +238,8 @@ async function runArchitectureStage(args: {
         generation_json: {
           ...directionGenerationJson,
           direction_spatial_brief: directionSpatialBrief,
-          direction_spatial_brief_model: process.env.OPENAI_TEXT_MODEL?.trim() || "gpt-4.1-mini",
+          direction_spatial_brief_model: directionSpatialBrief.analysis_model,
+          direction_spatial_brief_version: directionSpatialBrief.version,
           direction_spatial_brief_updated_at: new Date().toISOString(),
         },
       })

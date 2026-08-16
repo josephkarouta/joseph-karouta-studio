@@ -1232,6 +1232,58 @@ function positionMatchesFrontAnchor(
   return lateral === "right" ? cy <= my + 8 : cy >= my - 8;
 }
 
+function skeletonPointDistance(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const dx = Number(a.x || 0) - Number(b.x || 0);
+  const dy = Number(a.y || 0) - Number(b.y || 0);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function skeletonRectFrom(value: unknown) {
+  const row = objectRecord(value);
+  return {
+    present: row.present === true,
+    x: Number(row.x || 0),
+    y: Number(row.y || 0),
+    width: Number(row.width || 0),
+    height: Number(row.height || 0),
+    confidence: Number(row.confidence || 0),
+  };
+}
+
+function rectCentre(value: { x: number; y: number; width: number; height: number }) {
+  return {
+    x: Number(value.x || 0) + Number(value.width || 0) / 2,
+    y: Number(value.y || 0) + Number(value.height || 0) / 2,
+  };
+}
+
+function outlineSimilarityIssue(
+  label: string,
+  actual: CanonicalPlanPoint[],
+  expectedValue: unknown,
+  tolerance = 18,
+) {
+  const expected = Array.isArray(expectedValue)
+    ? expectedValue.map((item) => objectRecord(item)).map((point) => ({ x: Number(point.x || 0), y: Number(point.y || 0) }))
+    : [];
+  if (expected.length < 4 || actual.length < 4) return null;
+  const actualBounds = pointBounds(actual);
+  const expectedBounds = pointBounds(expected);
+  const actualCentre = { x: (actualBounds.minX + actualBounds.maxX) / 2, y: (actualBounds.minY + actualBounds.maxY) / 2 };
+  const expectedCentre = { x: (expectedBounds.minX + expectedBounds.maxX) / 2, y: (expectedBounds.minY + expectedBounds.maxY) / 2 };
+  const actualWidth = actualBounds.maxX - actualBounds.minX;
+  const actualHeight = actualBounds.maxY - actualBounds.minY;
+  const expectedWidth = expectedBounds.maxX - expectedBounds.minX;
+  const expectedHeight = expectedBounds.maxY - expectedBounds.minY;
+  const centreDistance = skeletonPointDistance(actualCentre, expectedCentre);
+  const widthDelta = Math.abs(actualWidth - expectedWidth);
+  const heightDelta = Math.abs(actualHeight - expectedHeight);
+  if (centreDistance > tolerance || widthDelta > tolerance + 8 || heightDelta > tolerance + 8) {
+    return `Direction Plan Skeleton: ${label} has drifted away from the visual-to-plan skeleton inferred from the selected Direction. Rebuild the envelope around the supplied skeleton instead of inventing a new footprint.`;
+  }
+  return null;
+}
+
 function directionSpatialLockIssues(
   planSet: LivePlanSet,
   directionSpatialBrief?: Record<string, unknown> | null,
@@ -1292,6 +1344,60 @@ function directionSpatialLockIssues(
       const entryBox = { x: Number(plan.entry?.x || 0) - 1, y: Number(plan.entry?.y || 0) - 1, width: 2, height: 2 };
       if (rectDistance(steps, entryBox) > 28) {
         issues.push("Direction Spatial Lock: the visible approach steps are not connected closely enough to the canonical main entry. Place the stepped approach on the entry route.");
+      }
+    }
+  }
+
+  if (Number(brief.version || 0) >= 3) {
+    const skeleton = objectRecord(brief.plan_skeleton);
+    const groundOutline = canonicalOutlineForLevel(plan, plan.levels?.[0]);
+    const groundIssue = outlineSimilarityIssue("ground-floor envelope", groundOutline, skeleton.ground_outline, 20);
+    if (groundIssue) issues.push(groundIssue);
+
+    const upperExpected = Array.isArray(skeleton.upper_outline) ? skeleton.upper_outline : [];
+    if (plan.levels?.[1] && upperExpected.length >= 4) {
+      const upperIssue = outlineSimilarityIssue(
+        "upper-floor envelope",
+        canonicalOutlineForLevel(plan, plan.levels[1]),
+        upperExpected,
+        22,
+      );
+      if (upperIssue) issues.push(upperIssue);
+    }
+
+    const skeletonPool = skeletonRectFrom(skeleton.pool);
+    if (skeletonPool.present && skeletonPool.confidence >= 0.45 && plan.pool?.present) {
+      if (skeletonPointDistance(rectCentre(plan.pool), rectCentre(skeletonPool)) > 24) {
+        issues.push("Direction Plan Skeleton: the pool centre has moved too far from the position inferred from the selected Direction image. Keep the pool in the same side/front relationship instead of redesigning the site.");
+      }
+    }
+
+    const skeletonEntry = objectRecord(skeleton.entry);
+    if (skeletonEntry.present === true && Number(skeletonEntry.confidence || 0) >= 0.45) {
+      if (skeletonPointDistance(
+        { x: Number(plan.entry?.x || 0), y: Number(plan.entry?.y || 0) },
+        { x: Number(skeletonEntry.x || 0), y: Number(skeletonEntry.y || 0) },
+      ) > 24) {
+        issues.push("Direction Plan Skeleton: the main entry has moved too far from the visible entry position inferred from the selected Direction. Keep the approach and entry on the same side of the building.");
+      }
+    }
+
+    const groundRooms = plan.levels?.[0]?.rooms || [];
+    const garageRoom = groundRooms.find((room) => /garage|carport|parking/i.test(room.name));
+    const skeletonGarage = skeletonRectFrom(skeleton.garage);
+    if (skeletonGarage.present && skeletonGarage.confidence >= 0.5 && garageRoom) {
+      if (skeletonPointDistance(rectCentre(garageRoom), rectCentre(skeletonGarage)) > 28) {
+        issues.push("Direction Plan Skeleton: the garage/car zone has moved to a different side of the project than the selected Direction implies.");
+      }
+    }
+
+    const skeletonOutdoor = skeletonRectFrom(skeleton.outdoor_living);
+    if (skeletonOutdoor.present && skeletonOutdoor.confidence >= 0.45) {
+      const outdoorRoom = groundRooms.find((room) => /outdoor\s*(living|dining)|terrace|patio|deck/i.test(room.name));
+      const outdoorFeature = features.find((feature) => feature.type === "outdoor_living" || feature.type === "terrace");
+      const candidate = outdoorFeature || outdoorRoom;
+      if (candidate && skeletonPointDistance(rectCentre(candidate), rectCentre(skeletonOutdoor)) > 28) {
+        issues.push("Direction Plan Skeleton: the outdoor living/dining zone has drifted away from its visible relationship in the selected Direction image.");
       }
     }
   }
@@ -2101,9 +2207,12 @@ export async function generateArchitecturePlanSet(args: {
     "At least one section cut must pass through the principal vertical circulation so the section can show floor-to-floor relationships.",
     "All levels must align vertically and describe one single building represented by the selected Architecture Direction and Architecture DNA.",
     args.directionSpatialBrief
-      ? "DIRECTION SPATIAL LOCK IS ACTIVE. The supplied direction_spatial_brief was extracted from the actual selected Direction image. Treat its must_preserve relationships and version-2 machine-checkable anchors as hard visible spatial intent unless they physically conflict with an explicit user requirement. If pool_visible=true, canonical_plan.pool.present MUST be true. If approach_steps_visible=true, add a canonical site_features item with type='steps' on the main entry route. If terracing_visible=true, model the visible level change with steps and/or terrace site_features. If outdoor_living_visible=true, model an outdoor-living/dining room or site feature in the described relationship, especially beside the pool when the brief says so. The Ground Floor must visibly belong to that Direction image. Do not reduce this visual reference to style only."
-      : "No Direction Spatial Lock is available. Use the saved Direction and Architecture DNA conservatively and do not invent a visibly different site arrangement.",
-    "Never infer hidden rooms from the Direction image. Use the user Requirement Contract and Space Program for hidden/internal programme while using the Direction Spatial Lock for visible site, footprint, approach, pool, outdoor and massing relationships.",
+      ? "DIRECTION PLAN SKELETON IS ACTIVE. The supplied direction_spatial_brief was created by a multimodal model that actually inspected the selected Direction image. Treat direction_spatial_brief.plan_skeleton as the starting geometry for the visible project, not as descriptive inspiration. Begin with its ground_outline on the same 0-100 grid, preserve high-confidence site anchors, and fit the user's hidden room programme INSIDE that visual-to-plan skeleton. For a second storey, begin with upper_outline when supplied and keep it vertically coordinated with the Ground Floor. Do not independently invent a different footprint family."
+      : "No Direction Plan Skeleton is available. Use the saved Direction and Architecture DNA conservatively and do not invent a visibly different site arrangement.",
+    args.directionSpatialBrief
+      ? "If plan_skeleton.pool.present=true, canonical_plan.pool must remain in approximately that location and relation to the building. If plan_skeleton.entry.present=true, keep the main entry near that anchor. If plan_skeleton.outdoor_living or garage is present, preserve its side/adjacency. Follow plan_skeleton.approach points for visible steps/terracing. Low-confidence hidden edges may be refined to fit the programme, but high-confidence visible anchors must not move to another side of the project."
+      : "",
+    "Never infer hidden rooms from the Direction image. Use the user Requirement Contract and Space Program for hidden/internal programme while using the Direction Plan Skeleton for visible site, footprint, approach, pool, outdoor and massing relationships.",
     "For visible external elements from the Direction Spatial Lock, model them explicitly in canonical_plan.pool, canonical_plan.entry and canonical_plan.site_features. Do not hide them only in prose.",
     "Add one concise planning_assumptions item beginning exactly with 'Direction Spatial Lock:' that lists the visible must-preserve relationships. This statement is carried into later plan and visual generation.",
     "Translate architecture_dna.massing, roof_form, entry_expression and visual_prompt_anchor into one explicit canonical building_outline polygon. The master outline is the geometry lock for the building massing; do not let each floor invent its own unrelated perimeter.",
@@ -2169,7 +2278,7 @@ export async function generateArchitecturePlanSet(args: {
       room_geometry: "No overlapping room rectangles. Shared walls should align. Keep coordinates and dimensions practical and readable.",
       requirement_evidence: "Every hard plan requirement must have explicit evidence in the canonical model. Quantities use capacity_type/capacity_count or countable rooms/fixtures; relationships use circulation/openings/level placement/site elements.",
       same_property_rule: "Every level and diagram is the same property and uses one locked master building outline, one site arrangement and one coordinated massing logic derived from the selected Direction.",
-      direction_spatial_lock: "When direction_spatial_brief is present, its must_preserve list and version-2 boolean/position anchors are the visible-site/massing source of truth. Encode them into footprint, entry, pool, driveway, site_features, outdoor spaces, level outlines and approach geometry instead of creating a generic unrelated plan.",
+      direction_spatial_lock: "When direction_spatial_brief is present, plan_skeleton is the visual-to-plan geometry seed. Start canonical ground/upper outlines from its polygons and keep its high-confidence entry, pool, garage, outdoor-living, terrace and approach anchors on the same side/relationship. The must_preserve list remains mandatory. Do not create a generic unrelated plan and then merely add the same materials.",
       site_feature_rules: "Use canonical_plan.site_features for visible external steps, terraces, outdoor-living platforms, paths, gardens and courtyards. Features extracted from the selected Direction must be represented here so the technical-plan image receives the same site composition.",
       building_outline_rules: "building_outline is the master massing footprint polygon. Every level.outline is coordinated to it; ground normally matches it and upper levels may only step back within it when consistent with the selected Architecture DNA and Direction Spatial Lock.",
       opening_rules: "Every enclosed room has an explicit door in level.openings and a valid circulation/access path; occupied rooms have appropriate exterior openings where relevant; required access/separation is explicit.",
@@ -2436,6 +2545,7 @@ function continuityPrompt(args: {
   referenceImages: ArchitectureImageReference[];
   targetRole?: string;
   preserveSourceGeometry?: boolean;
+  geometryReferenceMode?: "existing_design" | "approved_plans";
 }) {
   const sourceReferences = args.sourceGeometryReferences || [];
   const sourceList = sourceReferences
@@ -2446,26 +2556,36 @@ function continuityPrompt(args: {
     .join(" ");
 
   const sourceLocked = Boolean(args.preserveSourceGeometry && sourceReferences.length);
+  const geometryMode = args.geometryReferenceMode || "existing_design";
+  const approvedPlanGeometry = sourceLocked && geometryMode === "approved_plans";
 
   return [
     sourceLocked
-      ? "EXISTING DESIGN MODE. THE SOURCE DRAWINGS ARE THE ABSOLUTE GEOMETRY SOURCE OF TRUTH."
+      ? approvedPlanGeometry
+        ? "CONNECTED PROJECT GEOMETRY LOCK. THE APPROVED FLOOR PLAN REFERENCES ARE THE GEOMETRY SOURCE OF TRUTH FOR THIS SAME NEW DESIGN."
+        : "EXISTING DESIGN MODE. THE SOURCE DRAWINGS ARE THE ABSOLUTE GEOMETRY SOURCE OF TRUTH."
       : "CONNECTED NEW-DESIGN MODE. PRESERVE ONE COHERENT PROJECT ACROSS DIRECTION, PLANS AND VISUALS.",
     sourceList,
     referenceList,
     sourceLocked
-      ? "The SOURCE GEOMETRY references come first and override every later style, direction, concept or previous-render reference if there is any conflict. Preserve the visible footprint, storey count, floor relationships, stairs, external walls, openings, roof/profile information, setbacks and spatial arrangement. Do not copy geometry from STYLE / CONTINUITY references."
+      ? approvedPlanGeometry
+        ? "The APPROVED PLAN GEOMETRY references come first. Reconstruct the requested camera/view from those exact approved plans: preserve footprint family, room/outdoor topology, stair/core stacking, level relationships, pool/site placement and opening/circulation logic. The selected Direction image that follows controls facade/roof/material/landscape identity but is never permission to change the approved plan geometry."
+        : "The SOURCE GEOMETRY references come first and override every later style, direction, concept or previous-render reference if there is any conflict. Preserve the visible footprint, storey count, floor relationships, stairs, external walls, openings, roof/profile information, setbacks and spatial arrangement. Do not copy geometry from STYLE / CONTINUITY references."
       : args.referenceImages.length
         ? "Follow the labels of the STYLE / CONTINUITY references strictly. Any reference labelled as an approved floor plan or geometry anchor has higher priority for layout, footprint, stair/core stacking, circulation, openings and level relationships. The selected Direction / Master Architecture Reference defines the same project identity, massing family, roof language, facade rhythm, material palette, entry expression, pool relationship and landscape language. Current target or previous-view references are continuity aids only and must never override approved floor plans or the selected direction."
         : "",
     sourceLocked
-      ? "Use later references only for materials, colour, landscape character, lighting, atmosphere and camera continuity. They are NEVER permission to redesign the building."
+      ? approvedPlanGeometry
+        ? "Use the selected Direction/style reference to resolve the building's architectural appearance while keeping the approved plan geometry fixed. Never turn a linear, L-shaped, U-shaped, courtyard or stepped plan into a different footprint family."
+        : "Use later references only for materials, colour, landscape character, lighting, atmosphere and camera continuity. They are NEVER permission to redesign the building."
       : args.architectureDna
         ? `ARCHITECTURE DNA — ${JSON.stringify(args.architectureDna)}`
         : "",
     args.targetRole ? `TARGET ROLE — ${args.targetRole}` : "",
     sourceLocked
-      ? "Translate the existing technical drawings into the requested architectural visual. If information is not shown in the drawings, keep the interpretation conservative and do not invent a different building."
+      ? approvedPlanGeometry
+        ? "Translate the approved connected floor plans into the requested architectural view of the same selected Direction. If a facade detail is not fixed by the plans, resolve it from the Direction reference conservatively without altering plan topology."
+        : "Translate the existing technical drawings into the requested architectural visual. If information is not shown in the drawings, keep the interpretation conservative and do not invent a different building."
       : "Do not invent a different building. The result must feel like the same project developed step-by-step: direction image → approved floor plans → derived visuals.",
     "Only change the requested camera, diagram role, lighting, atmosphere or presentation treatment.",
     args.prompt,
@@ -2585,6 +2705,7 @@ export async function generateAndStoreArchitectureImage(args: {
   referenceImages?: ArchitectureImageReference[];
   sourceGeometryReferences?: ArchitectureImageReference[];
   preserveSourceGeometry?: boolean;
+  geometryReferenceMode?: "existing_design" | "approved_plans";
   targetRole?: string;
 }) {
   const openai = getOpenAI();
@@ -2610,6 +2731,7 @@ export async function generateAndStoreArchitectureImage(args: {
     sourceGeometryReferences: sourceGeometryReferences.slice(0, sourceFiles.length),
     referenceImages: referenceImages.slice(0, styleFiles.length),
     preserveSourceGeometry: args.preserveSourceGeometry,
+    geometryReferenceMode: args.geometryReferenceMode,
     targetRole: args.targetRole,
   });
   const quality = imageQualityForTier(args.plan, tier);
@@ -3133,13 +3255,22 @@ function architectureDocumentPrompt(args: {
     `Project: ${args.projectName}.`,
     `Document: ${args.title}.`,
     `Architecture direction: ${JSON.stringify(args.architectureDna)}.`,
-    `Canonical connected project model: ${JSON.stringify(args.canonicalPlan)}.`,
+    isFloorPlan
+      ? `PROGRAM SUPPORT ONLY — do not let this text override the supplied Direction/approved-plan images: ${JSON.stringify({
+          site: args.canonicalPlan.site,
+          required_level: level?.label || null,
+          vertical_cores: args.canonicalPlan.vertical_cores || [],
+          pool_required: args.canonicalPlan.pool?.present === true,
+          driveway_required: args.canonicalPlan.driveway?.present === true,
+          entry_label: args.canonicalPlan.entry?.label || "Main Entry",
+        })}.`
+      : `Canonical connected project model: ${JSON.stringify(args.canonicalPlan)}.`,
     args.directionSpatialBrief
       ? `CONFIRMED DIRECTION SPATIAL LOCK FROM THE SELECTED DIRECTION IMAGE: ${JSON.stringify(args.directionSpatialBrief)}.`
       : "",
     args.sourceGeometryLocked
       ? "Clean and professionally redraw the uploaded source without changing its design."
-      : "CONNECTED WORKFLOW LOCK: earlier supplied references may include the selected direction image and already approved floor plans from the same project. Use them as the primary identity and continuity anchors. The final supplied canonical guide image is the technical program and room-layout guide. Preserve the building family across all of them: same overall shape language, same entry side, same outdoor relationships, same stair/core stack, and the same circulation logic. Improve graphic presentation; never redesign the project into a different building.",
+      : "CONNECTED WORKFLOW LOCK: the supplied reference images are the actual visual anchors for this project. For Ground Floor, the selected Direction image is the primary spatial reference. For later floors, the selected Direction plus already approved lower-floor plan images are the primary references. The canonical JSON supplies room/program constraints in text. Preserve one building: same footprint family, entry side, pool/outdoor relationships, stair/core stack and circulation logic. Never redesign the project into a different building.",
     "When a final floor-plan style reference image is supplied, use only its drawing quality, line hierarchy, symbols, fixtures and level of detail. Ignore its project title, exact layout, room count, dimensions and geometry.",
     args.sourceGeometryLocked
       ? "Preserve the uploaded design exactly; use the saved project information only to clarify labels or presentation where it does not conflict with the source."
@@ -3153,8 +3284,8 @@ function architectureDocumentPrompt(args: {
   if (isFloorPlan) {
     return [
       "Create a highly detailed, presentation-quality architectural floor plan in true top-down orthographic view.",
-      "REFERENCE PRIORITY FOR CONNECTED NEW DESIGNS: Reference 1 is the selected Direction image unless explicitly labelled otherwise. It is not just a style sample: preserve its obvious visible site composition, including pool placement, entry/approach, exterior steps/terracing, outdoor-living relationship and massing family as stated in the Direction Spatial Lock. Any approved lower-floor references that follow are locked geometry anchors. The final canonical guide is the technical room-program guide. Reconcile all references into one coherent plan of the SAME project.",
-      "Do not copy the guide image's simplified graphic appearance. Upgrade it into a polished architect-quality plan while preserving its intended room layout and the connected project identity. Doors must sit in wall openings and swing from real wall jambs; never draw a floating door symbol.",
+      "REFERENCE PRIORITY FOR CONNECTED NEW DESIGNS: Reference 1 is the selected Direction image unless explicitly labelled otherwise. Treat it as the actual project being translated into plan, not as a style sample. Preserve its visible pool placement, entry/approach, steps/terracing, outdoor-living relationship, frontage and massing family. Any approved lower-floor references that follow are locked geometry anchors and must control stair/core stacking and level relationships. Use the canonical JSON and room programme in this prompt to solve hidden/internal spaces without replacing the visible project geometry.",
+      "Produce a polished architect-quality plan directly from these connected project references. Do not substitute a generic villa template. Doors must sit in real wall openings and swing from real wall jambs; never draw a floating door symbol.",
       `Required room programme for this level: ${JSON.stringify(roomProgram)}.`,
       "Show a clear main entrance and foyer/entry sequence connected to internal circulation. Every enclosed room must have a logical door and must be reachable without passing through unrelated private rooms.",
       "Show realistic external windows embedded in exterior walls, sized and positioned for daylight and ventilation. Show glazed doors or hinged doors providing real access to terraces, balconies, gardens, patios, pool decks and other outdoor spaces where relevant.",
@@ -3270,7 +3401,9 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
       ),
     )
   ).filter((asset): asset is ArchitectureReferenceAsset => Boolean(asset));
-  const styleReference = isFloorPlanVisualType(args.visualType)
+  const sourceGeometryLocked = Boolean(args.preserveSourceGeometry && sourceAssets.length);
+  const connectedNewFloorPlan = !sourceGeometryLocked && isFloorPlanVisualType(args.visualType);
+  const styleReference = !connectedNewFloorPlan && isFloorPlanVisualType(args.visualType)
     ? await loadBundledFloorPlanStyleReference()
     : null;
   const guideAsset: ArchitectureReferenceAsset = {
@@ -3278,7 +3411,6 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
     mimeType: "image/png",
     filename: `canonical-guide-${safeFilePart(args.visualType)}.png`,
   };
-  const sourceGeometryLocked = Boolean(args.preserveSourceGeometry && sourceAssets.length);
   const allAssets = (
     sourceGeometryLocked
       ? [
@@ -3286,12 +3418,19 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
           ...referenceAssets,
           ...(styleReference ? [styleReference] : []),
         ]
-      : [
-          ...referenceAssets,
-          guideAsset,
-          ...(styleReference ? [styleReference] : []),
-        ]
+      : connectedNewFloorPlan
+        ? [
+            ...referenceAssets,
+          ]
+        : [
+            ...referenceAssets,
+            guideAsset,
+            ...(styleReference ? [styleReference] : []),
+          ]
   ).slice(0, 6);
+  if (connectedNewFloorPlan && !allAssets.length) {
+    throw new Error("Connected floor-plan generation requires the selected Direction image as a real reference.");
+  }
   const openai = getOpenAI();
   const referenceFiles = await Promise.all(
     allAssets.map((asset) => toFile(asset.bytes, asset.filename, { type: asset.mimeType })),
@@ -3338,7 +3477,9 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
     usage: result.usage || null,
     generationMethod: sourceGeometryLocked
       ? "openai-existing-source-faithful-document-edit"
-      : "openai-detailed-concept-document-reference-edit",
+      : connectedNewFloorPlan
+        ? "openai-connected-reference-floor-plan-edit"
+        : "openai-detailed-concept-document-reference-edit",
   };
 }
 

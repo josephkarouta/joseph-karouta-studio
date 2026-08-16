@@ -961,12 +961,6 @@ export async function executeArchitectureImageGeneration(args: {
       storagePath: preferredMasterPath(visualMetadata, visual.storage_path),
       url: visual.image_url,
     });
-    const conceptReference = imageReference({
-      label: "Approved Concept reference for the same property.",
-      storagePath: preferredMasterPath(conceptJson, conceptJson.image_storage_path),
-      url: concept?.image_url,
-    });
-
     const rows = (relatedVisuals || []) as Array<Record<string, unknown>>;
     const relevantSourceReferences = sourceGeometryLocked
       ? sourceReferencesForVisual(orderedSourceDocuments, visualType)
@@ -985,6 +979,10 @@ export async function executeArchitectureImageGeneration(args: {
               })
             : null;
         });
+    const connectedApprovedPlanReferences = approvedPlanReferences
+      .filter((reference): reference is ArchitectureImageReference => Boolean(reference));
+    const directionPlanSkeleton = metadataRecord(directionSpatialBrief.plan_skeleton);
+
     const tourPreviousType = group === "tour" && typeof visualMetadata.tour_previous_visual_type === "string"
       ? visualMetadata.tour_previous_visual_type
       : null;
@@ -1014,10 +1012,6 @@ export async function executeArchitectureImageGeneration(args: {
     const currentGroundedReference = !sourceGeometryLocked || sourceGrounded(visualMetadata, sourceFingerprint)
       ? currentTargetReference
       : null;
-    const conceptGroundedReference = !sourceGeometryLocked || sourceGrounded(conceptJson, sourceFingerprint)
-      ? conceptReference
-      : null;
-
     const generated = await paidGenerate(quality === "final" ? "architectureProfessionalFinal" : "architectureVisual", { target: "visual", quality, visual_type: visual.visual_type }, () => generateAndStoreArchitectureImage({
       supabase,
       userId: authenticatedUserId,
@@ -1038,33 +1032,34 @@ export async function executeArchitectureImageGeneration(args: {
           ].filter(Boolean).join("\n\n")
         : [
             prompt,
-            "CONNECTED PROJECT RULE: reconstruct this visual as another view of the SAME building represented by the selected Direction and approved floor plans. Approved plans control footprint topology, stair/core stacking, level relationships, pool/site placement, openings and circulation. The selected Direction controls architectural identity, roof/façade language, materials, landscape and atmosphere. Never change a linear/L/U/courtyard footprint into a different footprint family.",
-            Object.keys(directionSpatialBrief).length
-              ? `DIRECTION SPATIAL LOCK extracted from the selected Direction image: ${JSON.stringify(directionSpatialBrief)}. Preserve its must_preserve relationships in this view, especially pool location, entry/approach, terraces/steps, outdoor living relationship, massing family and upper-level relationship.`
+            "CHATGPT-LIKE CONNECTED REFERENCE RULE: create this requested view from the actual supplied project images. The APPROVED FLOOR PLAN images are the geometry source of truth for footprint topology, stair/core stacking, level relationships, pool/site placement, openings and circulation. The SELECTED DIRECTION image is the identity source of truth for massing character, roof/façade language, materials, landscape and atmosphere. Do not create a new building between views.",
+            Object.keys(directionPlanSkeleton).length
+              ? `Direction-derived conceptual plan skeleton: ${JSON.stringify(directionPlanSkeleton)}. Use it only to clarify the visible relationship already present in the Direction and approved plans; the approved plan images remain the strongest geometry references.`
               : "",
             group === "tour"
               ? "TOUR OUTPUT RULES: create one immersive room panorama with a level horizon, camera at eye height and strong continuity at the left and right edges. Preserve all approved door, window and circulation positions. This is one node in a connected room-to-room tour, not an unrelated interior redesign."
               : "",
-            canonicalPlan
-              ? `Canonical site and plan relationship: ${JSON.stringify(canonicalPlan)}`
-              : "",
           ].filter(Boolean).join("\n\n"),
       plan,
       architectureDna: sourceGeometryLocked ? null : architectureDna,
-      sourceGeometryReferences: relevantSourceReferences,
-      preserveSourceGeometry: sourceGeometryLocked,
+      sourceGeometryReferences: sourceGeometryLocked
+        ? relevantSourceReferences
+        : connectedApprovedPlanReferences,
+      preserveSourceGeometry: sourceGeometryLocked || connectedApprovedPlanReferences.length > 0,
+      geometryReferenceMode: sourceGeometryLocked ? "existing_design" : "approved_plans",
       referenceImages: sourceGeometryLocked
         ? uniqueReferences([
             currentGroundedReference,
             relatedReference,
           ])
-        : uniqueReferences([
-            ...approvedPlanReferences,
-            masterReference,
-            currentTargetReference,
-            relatedReference,
-            conceptGroundedReference,
-          ]),
+        : group === "tour"
+          ? uniqueReferences([
+              masterReference,
+              relatedReference,
+            ])
+          : uniqueReferences([
+              masterReference,
+            ]),
       targetRole: sourceGeometryLocked
         ? `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. Style references may affect materials, colour, landscape and lighting only.`
         : group === "tour"
