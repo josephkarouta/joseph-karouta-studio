@@ -2097,10 +2097,40 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         status?: "processing" | "succeeded" | "failed";
         jobId?: string;
         error?: string;
+        reusedExistingJob?: boolean;
         direction?: Direction;
         concept?: ArchitectureConcept;
         visual?: ArchitectureVisual;
       };
+
+      async function architectureAccessToken(forceRefresh = false) {
+        if (forceRefresh) {
+          const { data, error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError || !data.session?.access_token) {
+            throw new Error("Your session expired. Please sign in again.");
+          }
+          return data.session.access_token;
+        }
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.access_token) return data.session.access_token;
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !refreshed.session?.access_token) {
+          throw new Error("Your session expired. Please sign in again.");
+        }
+        return refreshed.session.access_token;
+      }
+
+      async function architectureApiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+        const requestWithToken = async (forceRefresh = false) => {
+          const token = await architectureAccessToken(forceRefresh);
+          const headers = new Headers(init.headers || {});
+          headers.set("Authorization", `Bearer ${token}`);
+          return fetch(input, { ...init, headers });
+        };
+        let response = await requestWithToken(false);
+        if (response.status === 401) response = await requestWithToken(true);
+        return response;
+      }
 
       async function readArchitectureImageResponse(
         response: Response,
@@ -2121,7 +2151,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         }
       }
 
-      const response = await fetch("/api/architecture/images/regenerate", {
+      const response = await architectureApiFetch("/api/architecture/images/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2140,6 +2170,9 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
       if (!response.ok || !started.success || !started.jobId) {
         throw new Error(started.error || "Architecture image generation could not be started.");
       }
+      if (started.reusedExistingJob) {
+        setGenerationStatus("This image is already generating in the background — reconnecting to the existing job");
+      }
 
       let payload: ArchitectureImageResponse | null = null;
       for (let attempt = 0; attempt < 180; attempt += 1) {
@@ -2147,7 +2180,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
           await new Promise<void>((resolve) => window.setTimeout(resolve, 2500));
         }
 
-        const statusResponse = await fetch(
+        const statusResponse = await architectureApiFetch(
           `/api/architecture/images/status?job=${encodeURIComponent(started.jobId)}`,
           { cache: "no-store" },
         );
