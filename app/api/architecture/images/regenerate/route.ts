@@ -132,40 +132,44 @@ export async function POST(request: Request) {
 
     admin = authenticatedAdmin;
 
-    // Reuse an already queued/processing job for the exact same target.
-    // Closing/reloading the browser does not cancel a Netlify background job,
-    // so retries must not create duplicate paid generations.
-    const activeSince = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const { data: activeJobs, error: activeJobError } = await admin
-      .from("generation_jobs")
-      .select("id,status,input,created_at")
-      .eq("user_id", user.id)
-      .eq("project_id", projectId)
-      .eq("tool", "architecture_image")
-      .in("status", ["queued", "processing"])
-      .gte("created_at", activeSince)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    // Reuse queued/processing jobs only for connected technical PLAN visuals.
+    // Direction and Concept images must never reconnect to an orphaned image job:
+    // those targets existed before the connected-floor workflow and should keep
+    // their original start behavior. A failed background bundle must not trap a
+    // Direction preview in a stale queued job for 30 minutes.
+    if (targetType === "visual" && planMode === "technical") {
+      const activeSince = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: activeJobs, error: activeJobError } = await admin
+        .from("generation_jobs")
+        .select("id,status,input,created_at")
+        .eq("user_id", user.id)
+        .eq("project_id", projectId)
+        .eq("tool", "architecture_image")
+        .in("status", ["queued", "processing"])
+        .gte("created_at", activeSince)
+        .order("created_at", { ascending: false })
+        .limit(20);
 
-    if (activeJobError) {
-      console.error("Architecture active-job lookup failed:", activeJobError.message);
-    } else {
-      const existingActive = (activeJobs || []).find((row) => {
-        const input = metadataRecord(row.input);
-        return String(input.targetType || "") === targetType
-          && String(input.targetId || "") === targetId
-          && String(input.quality || "preview") === quality
-          && String(input.planMode || "technical") === planMode;
-      });
-      if (existingActive) {
-        const input = metadataRecord(existingActive.input);
-        return NextResponse.json({
-          success: true,
-          jobId: String(existingActive.id),
-          status: "processing",
-          reusedExistingJob: true,
-          creditsReserved: Number(input.credits || 0),
+      if (activeJobError) {
+        console.error("Architecture active-job lookup failed:", activeJobError.message);
+      } else {
+        const existingActive = (activeJobs || []).find((row) => {
+          const input = metadataRecord(row.input);
+          return String(input.targetType || "") === targetType
+            && String(input.targetId || "") === targetId
+            && String(input.quality || "preview") === quality
+            && String(input.planMode || "technical") === planMode;
         });
+        if (existingActive) {
+          const input = metadataRecord(existingActive.input);
+          return NextResponse.json({
+            success: true,
+            jobId: String(existingActive.id),
+            status: "processing",
+            reusedExistingJob: true,
+            creditsReserved: Number(input.credits || 0),
+          });
+        }
       }
     }
 
