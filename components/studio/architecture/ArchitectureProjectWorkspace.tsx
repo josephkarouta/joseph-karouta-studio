@@ -4542,6 +4542,7 @@ function PlansTab({
   const existingDesignSource = false;
 
   const planVisualTypes = [
+    "plan_foundation_sheet",
     "functional_zoning", "site_plan", "circulation",
     "north_elevation", "south_elevation", "east_elevation", "west_elevation",
     "section_longitudinal", "section_transverse",
@@ -4586,6 +4587,7 @@ function PlansTab({
   }
 
   const planDisplayOrder = [
+    "plan_foundation_sheet",
     ...requiredFloorPlanTypes,
     "functional_zoning",
     "site_plan",
@@ -4617,7 +4619,9 @@ function PlansTab({
 
   async function runPlanBatch(mode: "technical" | "rendered") {
     const queue = orderedPlanVisuals.filter((visual) =>
-      selectedPlanIds.includes(visual.id),
+      selectedPlanIds.includes(visual.id) &&
+      visual.visual_type !== "plan_foundation_sheet" &&
+      !isCanonicalFloorVisualType(visual.visual_type),
     );
     if (!queue.length) return;
     setBatchRunning(mode);
@@ -4681,22 +4685,22 @@ function PlansTab({
             ? "Uploaded plans are the geometry source of truth"
             : requiredFloorPlansReady
               ? "Approved floor plans are connected"
-              : "Generate and approve the floor plans first"}</strong>
+              : "Review and approve the coordinated floor plans"}</strong>
           <span>{existingDesignSource
             ? "Visuals and optional redraws use the uploaded source drawings first. Heyy Studio must preserve the existing footprint, layout, stairs, openings and level relationships."
             : requiredFloorPlansReady
               ? "Previews, professional finals, elevations, sections and project visuals can now use the approved floor-plan geometry."
-              : `Workflow: detailed plan → approval → preview → professional final. Required floor plans: ${requiredFloorPlanTypes.map((item) => floorPlanDisplayName(item, canonicalLevels)).join(", ")}.`}</span>
+              : `All required floors were rendered together from one canonical model. Review them, then approve the required floor plans. Required floors: ${requiredFloorPlanTypes.map((item) => floorPlanDisplayName(item, canonicalLevels)).join(", ")}.`}</span>
         </div>
         <div className="credit-legend">
-          <span>Detailed plan · {ARCHITECTURE_CREDIT_COSTS.technicalPlan} credits</span>
-          <span>Preview · {ARCHITECTURE_CREDIT_COSTS.renderedPlanPreview} credits</span>
+          <span>Canonical floor plans · included with Plan Foundation</span>
+          <span>Other derived views · generated separately</span>
           <b>{existingDesignSource ? "Source geometry locked" : requiredFloorPlansReady ? "Plans approved" : "Approval required"}</b>
         </div>
       </div>
 
       <div className="plan-batch-panel surface-card">
-        <div><strong>Generate several views</strong><span>Select any cards below. Heyy Studio will place them in a safe queue and generate them one after another, so you do not need to wait and click each card manually.</span></div>
+        <div><strong>Generate derived documentation</strong><span>The coordinated floor plans above are already locked to one canonical model. Use batch generation only for additional diagrams, elevations, sections and perspectives.</span></div>
         <div className="plan-batch-actions">
           <button type="button" className="secondary-action" disabled={!selectedPlanIds.length || batchRunning !== null || regeneratingImage !== null} onClick={() => void runPlanBatch("technical")}>{batchRunning === "technical" ? "Generating Queue..." : `Generate Selected Detailed Plans · ${ARCHITECTURE_CREDIT_COSTS.technicalPlan} each`}</button>
           <button type="button" className="primary-action" disabled={!selectedPlanIds.length || batchRunning !== null || regeneratingImage !== null} onClick={() => void runPlanBatch("rendered")}>{batchRunning === "rendered" ? "Generating Queue..." : `Generate Selected Previews · ${ARCHITECTURE_CREDIT_COSTS.renderedPlanPreview} each`}</button>
@@ -5089,6 +5093,9 @@ function PlanVisualCard({
   onApprove: () => void;
 }) {
   const metadata = recordValue(visual.metadata);
+  const canonicalFloor = isCanonicalFloorVisualType(visual.visual_type);
+  const foundationSheet = visual.visual_type === "plan_foundation_sheet";
+  const lockedCanonicalPlanView = canonicalFloor || foundationSheet;
   const renderedOnly = /^perspective_/.test(visual.visual_type);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const technicalUrl = assetPreviewUrl(metadata.technical_assets);
@@ -5118,10 +5125,10 @@ function PlanVisualCard({
     <article className="plan-visual-card generation-image-card" data-selected={selected}>
       <div className="plan-card-toolbar">
         <div className="plan-view-tabs">
-          {!renderedOnly && <button type="button" data-active={viewMode === "technical"} disabled={!technicalUrl} onClick={() => setViewMode("technical")}>{sourceLocked ? "Faithful redraw" : "Detailed plan"}</button>}
-          <button type="button" data-active={viewMode === "rendered"} disabled={!renderedUrl} onClick={() => setViewMode("rendered")}>{renderedOnly ? "Preview" : "Preview"}</button>
+          {!renderedOnly && <button type="button" data-active={viewMode === "technical"} disabled={!technicalUrl} onClick={() => setViewMode("technical")}>{foundationSheet ? "Coordinated sheet" : canonicalFloor ? "Canonical plan" : sourceLocked ? "Faithful redraw" : "Detailed plan"}</button>}
+          {!lockedCanonicalPlanView && <button type="button" data-active={viewMode === "rendered"} disabled={!renderedUrl} onClick={() => setViewMode("rendered")}>Preview</button>}
         </div>
-        <button type="button" className="plan-select-toggle" data-selected={selected} disabled={Boolean(generationLockReason)} onClick={onToggleSelected}>{generationLockReason ? "Locked" : selected ? "Selected for batch ✓" : "Select for batch"}</button>
+        <button type="button" className="plan-select-toggle" data-selected={selected} disabled={lockedCanonicalPlanView || Boolean(generationLockReason)} onClick={onToggleSelected}>{lockedCanonicalPlanView ? "Foundation locked" : generationLockReason ? "Locked" : selected ? "Selected for batch ✓" : "Select for batch"}</button>
       </div>
       {displayUrl ? (
         <button type="button" className="plan-image-zoom" onClick={() => setLightbox(displayUrl)} aria-label={`Enlarge ${visual.title || visual.visual_type}`}><img src={displayUrl} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" /><span>Click to enlarge</span></button>
@@ -5130,11 +5137,15 @@ function PlanVisualCard({
       )}
       {loading && <ImageGenerationOverlay title={viewMode === "rendered" ? "Generating rendered plan" : "Generating detailed concept plan"} detail={generationStatus} />}
       <div className="plan-card-copy">
-        <span>{viewMode === "rendered" ? "Rendered Preview" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
+        <span>{foundationSheet ? "One coordinated building model" : canonicalFloor ? "Deterministic canonical floor" : viewMode === "rendered" ? "Rendered Preview" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
         <h3>{visual.title || visual.visual_type}</h3>
       </div>
       <div className="plan-card-actions">
-        {!renderedOnly && generationLockReason && !technicalUrl ? (
+        {foundationSheet ? (
+          <button type="button" className="image-regenerate-button plan-generation-locked" disabled>
+            Rebuild with Refresh Plan Foundation
+          </button>
+        ) : canonicalFloor ? null : !renderedOnly && generationLockReason && !technicalUrl ? (
           <button type="button" className="image-regenerate-button plan-generation-locked" disabled>
             {generationLockReason}
           </button>
@@ -5145,7 +5156,10 @@ function PlanVisualCard({
               : technicalUrl ? "Regenerate Detailed Plan" : "Generate Detailed Plan"} · {ARCHITECTURE_CREDIT_COSTS.technicalPlan} credits
           </button>
         ) : null}
-        {!renderedOnly && technicalUrl && <button type="button" className="visual-approve-button" data-approved={visual.is_approved ? "true" : "false"} disabled={anyGenerating || approving} onClick={onApprove}>
+        {canonicalFloor && technicalUrl && <button type="button" className="visual-approve-button" data-approved={visual.is_approved ? "true" : "false"} disabled={anyGenerating || approving} onClick={onApprove}>
+          {approving ? "Saving..." : visual.is_approved ? "Approved Foundation Floor ✓" : "Approve Foundation Floor"}
+        </button>}
+        {!lockedCanonicalPlanView && !renderedOnly && technicalUrl && <button type="button" className="visual-approve-button" data-approved={visual.is_approved ? "true" : "false"} disabled={anyGenerating || approving} onClick={onApprove}>
           {approving ? "Saving..." : visual.is_approved ? (sourceLocked ? "Redraw approved ✓" : "Approved Plan ✓") : (sourceLocked ? "Approve Redraw" : "Approve Plan")}
         </button>}
         {renderedOnly && !plansReady && (
@@ -5153,7 +5167,7 @@ function PlanVisualCard({
             Approve Required Floor Plans to Unlock Preview
           </button>
         )}
-        {(renderedOnly ? plansReady : Boolean(technicalUrl && visual.is_approved)) && (
+        {!lockedCanonicalPlanView && (renderedOnly ? plansReady : Boolean(technicalUrl && visual.is_approved)) && (
           <button type="button" className="image-regenerate-button" disabled={anyGenerating} onClick={() => { setViewMode("rendered"); void onGenerate("rendered", "preview"); }}>
             {renderedPreviewUrl ? "Regenerate Preview" : "Generate Preview"} · {ARCHITECTURE_CREDIT_COSTS.renderedPlanPreview} credits
           </button>

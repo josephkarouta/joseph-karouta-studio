@@ -4,6 +4,8 @@ import {
   generateArchitectureDna,
   generateArchitecturePlanSet,
   generateArchitectureVisualPrompts,
+  generateAndStoreCanonicalPlanImage,
+  generateAndStorePlanFoundationSheetImage,
   type ArchitectureDna,
   type CanonicalPlanSpec,
   type LiveVisualPrompt,
@@ -265,6 +267,35 @@ async function ensurePlanAssociationDirection(args: {
   return String(data.id);
 }
 
+function canonicalFloorVisualType(index: number) {
+  if (index <= 0) return "ground_floor";
+  if (index === 1) return "upper_floor";
+  return `level_${index}_floor`;
+}
+
+function deterministicAssetRecord(asset: {
+  imageUrl: string;
+  storagePath: string;
+  masterImageUrl: string;
+  masterStoragePath: string;
+  thumbnailImageUrl: string;
+  thumbnailStoragePath: string;
+}) {
+  return {
+    preview_url: asset.imageUrl,
+    preview_storage_path: asset.storagePath,
+    master_url: asset.masterImageUrl,
+    master_storage_path: asset.masterStoragePath,
+    thumbnail_url: asset.thumbnailImageUrl,
+    thumbnail_storage_path: asset.thumbnailStoragePath,
+    quality: "deterministic",
+    tier: "preview",
+    provider: "heyy-renderer",
+    model: "canonical-plan-renderer-v1",
+    generated_at: new Date().toISOString(),
+  };
+}
+
 async function runArchitectureStage(args: {
   admin: SupabaseClient;
   userId: string;
@@ -398,6 +429,66 @@ async function runArchitectureStage(args: {
       const { error } = await admin.from("architecture_visuals").upsert(planRows, { onConflict: "direction_id,visual_type" });
       if (error) throw new Error(error.message);
     }
+
+    // Build every canonical floor from one canonical model during the Plan Foundation job.
+    // These are deterministic renders, not separate GPT Image interpretations.
+    const canonicalLevels = Array.isArray(canonical_plan.levels) ? canonical_plan.levels : [];
+    const deterministicTargets = [
+      { visualType: "plan_foundation_sheet", title: "Coordinated Plan Foundation" },
+      ...canonicalLevels.map((level, index) => ({
+        visualType: canonicalFloorVisualType(index),
+        title: String(level.label || (index === 0 ? "Ground Floor Plan" : index === 1 ? "Upper Floor Plan" : `Level ${index} Plan`)),
+      })),
+    ];
+
+    for (const target of deterministicTargets) {
+      const generatedAsset = target.visualType === "plan_foundation_sheet"
+        ? await generateAndStorePlanFoundationSheetImage({
+            supabase: admin,
+            userId: project.user_id,
+            projectId: project.id,
+            filenamePrefix: "plan-foundation-sheet",
+            projectName: project.project_name,
+            canonicalPlan: canonical_plan,
+            architectureDna: foundationDna,
+          })
+        : await generateAndStoreCanonicalPlanImage({
+            supabase: admin,
+            userId: project.user_id,
+            projectId: project.id,
+            filenamePrefix: target.visualType,
+            visualType: target.visualType,
+            title: target.title,
+            projectName: project.project_name,
+            canonicalPlan: canonical_plan,
+            architectureDna: foundationDna,
+          });
+
+      const row = planRows.find((item) => item.visual_type === target.visualType);
+      const baseMetadata = metadataRecord(row?.metadata);
+      const { error: renderSaveError } = await admin
+        .from("architecture_visuals")
+        .update({
+          image_url: generatedAsset.imageUrl,
+          storage_path: generatedAsset.storagePath,
+          is_approved: false,
+          metadata: {
+            ...baseMetadata,
+            canonical_plan,
+            architecture_dna: foundationDna,
+            active_plan_view: "technical",
+            deterministic_geometry: true,
+            plan_foundation_version: 1,
+            technical_assets: deterministicAssetRecord(generatedAsset),
+          },
+        })
+        .eq("project_id", project.id)
+        .eq("user_id", project.user_id)
+        .eq("direction_id", associationDirectionId)
+        .eq("visual_type", target.visualType);
+      if (renderSaveError) throw new Error(renderSaveError.message);
+    }
+
     nextCompletion = Math.max(nextCompletion, 64);
     nextStatus = "Plan Foundation Ready";
   }

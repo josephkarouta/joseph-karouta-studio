@@ -1869,6 +1869,7 @@ function expandedPlanViews(planSet: LivePlanSet, architectureDna: ArchitectureDn
   }));
 
   const views: LivePlanSet["plan_images"] = [
+    { visual_type: "plan_foundation_sheet", title: "Coordinated Plan Foundation", prompt: "One deterministic coordinated sheet containing every canonical floor from the same building model." },
     ...floorViews,
     { visual_type: "functional_zoning", title: "Functional Zoning", prompt: "Colour-coded functional zones derived from the same canonical multi-floor geometry." },
     { visual_type: "site_plan", title: "Site Plan", prompt: "Coordinated site plan showing the same footprint, access, driveway, pool, landscape, orientation and conceptual setbacks." },
@@ -2029,7 +2030,7 @@ export async function generateArchitecturePlanSet(args: {
       healthcare_coordination: "Hospital plans explicitly model public/service/clinical circulation logic and inpatient bedroom-to-ensuite access. User-requested 1/2/3-bed room mixes are represented as real patient bedrooms, not aggregate empty ward rectangles.",
       section_rules: "Provide perpendicular A—A and B—B section cuts. At least one passes through vertical circulation; both are marked on floor plans and produce true vertical sections with level and height information.",
       fixture_rules: "Include representative project-specific fixtures/equipment so usability and measurable requirements can be audited and visibly represented.",
-      diagram_renderer: "GPT Image 2 detailed concept drawing using the canonical model as the source",
+      diagram_renderer: "Deterministic Heyy Studio technical renderer. Floor-plan geometry, labels, dimensions and alignment are rendered directly from the canonical model; GPT Image must not redraw canonical floor plans.",
     },
   };
 
@@ -2089,6 +2090,7 @@ export async function generateArchitecturePlanSet(args: {
 
     deterministicIssues = [
       ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
       ...deterministicRequirementIssues(value, requirementContract),
     ];
     auditResult = await auditArchitecturePlanRequirements({
@@ -3067,6 +3069,80 @@ function architectureDocumentPrompt(args: {
   ].join("\n\n");
 }
 
+
+export async function generateAndStorePlanFoundationSheetImage(args: {
+  supabase: SupabaseClient;
+  userId: string;
+  projectId: string;
+  filenamePrefix?: string;
+  projectName: string;
+  canonicalPlan: CanonicalPlanSpec;
+  architectureDna?: ArchitectureDna | null;
+}) {
+  const levels = Array.isArray(args.canonicalPlan.levels) ? args.canonicalPlan.levels : [];
+  if (!levels.length) throw new Error("The Plan Foundation has no canonical floors to render.");
+
+  const floorPngs = await Promise.all(levels.map(async (level, index) => {
+    const visualType = floorVisualTypeForIndex(index);
+    const title = floorPlanTitle(level, index);
+    const svg = renderCanonicalPlanSvg({
+      plan: args.canonicalPlan,
+      visualType,
+      title,
+      projectName: args.projectName,
+      architectureDna: args.architectureDna,
+    });
+    return sharp(Buffer.from(svg, "utf8"), { density: 150 })
+      .flatten({ background: "#FFFFFF" })
+      .resize({ width: 1180, height: 800, fit: "contain", background: "#FFFFFF" })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+  }));
+
+  const columns = levels.length === 1 ? 1 : 2;
+  const rows = Math.ceil(levels.length / columns);
+  const cardWidth = 1180;
+  const cardHeight = 800;
+  const gap = 40;
+  const margin = 70;
+  const header = 150;
+  const footer = 100;
+  const width = margin * 2 + columns * cardWidth + (columns - 1) * gap;
+  const height = header + margin + rows * cardHeight + (rows - 1) * gap + footer;
+
+  const titleSvg = Buffer.from(`
+    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#ffffff"/>
+      <text x="${margin}" y="58" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#2563eb" letter-spacing="2">HEYY STUDIO · PLAN FOUNDATION</text>
+      <text x="${margin}" y="108" font-family="Arial, sans-serif" font-size="38" font-weight="800" fill="#111827">${escapeXml(args.projectName)}</text>
+      <text x="${width - margin}" y="105" text-anchor="end" font-family="Arial, sans-serif" font-size="18" fill="#475569">${levels.length} coordinated floor${levels.length === 1 ? "" : "s"} · one canonical building model</text>
+      <line x1="${margin}" y1="130" x2="${width - margin}" y2="130" stroke="#e2e8f0" stroke-width="2"/>
+      <line x1="${margin}" y1="${height - 70}" x2="${width - margin}" y2="${height - 70}" stroke="#e2e8f0" stroke-width="2"/>
+      <text x="${margin}" y="${height - 32}" font-family="Arial, sans-serif" font-size="16" fill="#64748b">All floors are deterministic renders of the same canonical coordinates. Concept only · not for construction.</text>
+    </svg>
+  `);
+
+  const composites = floorPngs.map((input, index) => ({
+    input,
+    left: margin + (index % columns) * (cardWidth + gap),
+    top: header + margin + Math.floor(index / columns) * (cardHeight + gap),
+  }));
+  const sheetPng = await sharp(titleSvg)
+    .composite(composites)
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  return storeArchitectureImageVariants({
+    supabase: args.supabase,
+    userId: args.userId,
+    projectId: args.projectId,
+    folder: "plans",
+    filenamePrefix: args.filenamePrefix || "plan-foundation-sheet",
+    sourceBytes: sheetPng,
+    tier: "preview",
+  });
+}
+
 export async function generateAndStoreArchitectureDocumentImage(args: {
   supabase: SupabaseClient;
   userId: string;
@@ -3084,6 +3160,34 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
   preserveSourceGeometry?: boolean;
 }) {
   const tier = args.tier || "preview";
+
+  // Canonical floor plans are technical truth in Plan Foundation mode. Never send them
+  // through an image model for a cosmetic redraw because that can move walls, stairs,
+  // pools, doors or level relationships. The deterministic renderer is the final plan.
+  if (!args.preserveSourceGeometry && isFloorPlanVisualType(args.visualType)) {
+    const deterministic = await generateAndStoreCanonicalPlanImage({
+      supabase: args.supabase,
+      userId: args.userId,
+      projectId: args.projectId,
+      filenamePrefix: args.filenamePrefix,
+      visualType: args.visualType,
+      title: args.title,
+      projectName: args.projectName,
+      canonicalPlan: args.canonicalPlan,
+      architectureDna: args.architectureDna,
+    });
+    return {
+      ...deterministic,
+      tier: "preview" as const,
+      quality: "deterministic",
+      provider: "heyy-renderer" as const,
+      model: "canonical-plan-renderer-v1",
+      referenceCount: 0,
+      usage: null,
+      generationMethod: "deterministic-canonical-plan-render",
+    };
+  }
+
   const guideSvg = renderCanonicalPlanSvg({
     plan: args.canonicalPlan,
     visualType: args.visualType,
