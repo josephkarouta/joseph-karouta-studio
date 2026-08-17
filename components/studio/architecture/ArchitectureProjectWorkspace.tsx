@@ -378,35 +378,42 @@ type ProjectEstimate = {
 
 type TabId =
   | "overview"
-  | "brief"
+  | "setup"
   | "source"
-  | "site"
-  | "planning"
   | "program"
-  | "materials"
-  | "directions"
-  | "concept"
   | "plans"
+  | "design-direction"
   | "visuals"
   | "design-pack"
   | "estimate"
-  | "production";
+  | "production"
+  // Legacy deep-link aliases kept so old saved URLs still open the right section.
+  | "brief"
+  | "site"
+  | "planning"
+  | "materials"
+  | "directions"
+  | "concept";
 
 const tabs: Array<{ id: TabId; label: string; phase?: string }> = [
   { id: "overview", label: "Overview" },
-  { id: "brief", label: "Project Brief" },
+  { id: "setup", label: "Project Setup" },
   { id: "source", label: "Source Input" },
-  { id: "site", label: "Land & Site" },
-  { id: "planning", label: "Planning Guide" },
   { id: "program", label: "Space Program" },
   { id: "plans", label: "Plan Foundation" },
-  { id: "materials", label: "Materials" },
-  { id: "directions", label: "Directions" },
-  { id: "visuals", label: "Visuals" },
-  { id: "estimate", label: "Estimate" },
-  { id: "design-pack", label: "Design Pack" },
-  { id: "production", label: "Production" },
+  { id: "design-direction", label: "Design Direction" },
+  { id: "visuals", label: "Concept Visuals" },
+  { id: "design-pack", label: "Concept Pack" },
+  { id: "estimate", label: "Budget Guide" },
+  { id: "production", label: "Expert Development" },
 ];
+
+function canonicalArchitectureTab(tab: TabId | null): TabId {
+  if (tab === "brief" || tab === "site" || tab === "planning") return "setup";
+  if (tab === "materials" || tab === "directions") return "design-direction";
+  if (tab === "concept") return "design-pack";
+  return tab && tabs.some((item) => item.id === tab) ? tab : "overview";
+}
 
 const projectTypes = ARCHITECTURE_PROJECT_TYPES;
 
@@ -557,12 +564,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
   const [preparingEstimate, setPreparingEstimate] = useState(false);
 
   const requestedTab = searchParams.get("tab") as TabId | null;
-  const requestedActiveTab = tabs.some((tab) => tab.id === requestedTab)
-    ? (requestedTab as TabId)
-    : "overview";
-  const activeTab: TabId = requestedActiveTab === "planning" && (site?.land_start !== "owned" || project?.working_mode !== "professional")
-    ? "site"
-    : requestedActiveTab;
+  const activeTab: TabId = canonicalArchitectureTab(requestedTab);
 
   const loadProject = useCallback(async () => {
     setLoading(true);
@@ -827,7 +829,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
 
   function switchTab(tab: TabId) {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("tab", tab);
+    params.set("tab", canonicalArchitectureTab(tab));
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
@@ -1683,7 +1685,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     if (
       changingDirection &&
       !window.confirm(
-        "Changing the Architecture Direction will keep the approved Plan Foundation, but reset generated architectural Visuals and the Design Pack so two styles are not mixed. Continue?",
+        "Changing the Design Direction will keep the approved Plan Foundation, but reset generated concept visuals and the Concept Pack so two design routes are not mixed. Continue?",
       )
     ) {
       return;
@@ -1799,8 +1801,8 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     if (!user) return;
 
     if (stage !== "plans" && !projectDraft?.selected_direction_id) {
-      setError("Select an Architecture Direction before preparing Visuals or the Design Pack.");
-      switchTab("directions");
+      setError("Select a Design Direction before preparing Concept Visuals or the Concept Pack.");
+      switchTab("design-direction");
       return;
     }
 
@@ -1915,14 +1917,14 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         concept: "Internal architecture strategy prepared.",
         plans: "Plan Foundation prepared. Generate and approve the required floor plans before moving to Materials and Directions.",
         visuals: "Visual prompts are ready. Approved floor plans control geometry and the selected Direction controls architectural expression.",
-        "design-pack": "Architecture Design Pack prepared from the approved plans, selected Direction and generated Visuals.",
+        "design-pack": "Architecture Concept Pack prepared from the approved Plan Foundation, selected Design Direction and concept visuals.",
         all: "Architecture content prepared.",
       };
       const demoLabels: Record<DemoStage, string> = {
         concept: "Architecture Concept prepared with demo content.",
         plans: "Concept Plans prepared with demo content.",
-        visuals: "Architecture Visuals prepared with demo images.",
-        "design-pack": "Architecture Design Pack prepared.",
+        visuals: "Concept Visuals prepared with demo images.",
+        "design-pack": "Architecture Concept Pack prepared.",
         all: "The complete Architecture Studio demo content is ready.",
       };
       showMessage((useDemoRoute ? demoLabels : liveLabels)[stage]);
@@ -2287,7 +2289,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
       targetPlanSet = sourcePlanSet as ArchitecturePlanSet;
       setPlanSet(targetPlanSet);
       setPreparingEstimate(false);
-      showMessage("Pre-production estimate prepared from the existing source plans and saved project area information.");
+      showMessage("Early Budget Guide prepared from the existing source plans and saved project area information.");
       return;
     }
 
@@ -2399,7 +2401,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
 
   const visibleTabs = tabs
     .filter((tab) => tab.id !== "source" || projectDraft.workflow_mode !== "build_from_scratch")
-    .filter((tab) => tab.id !== "planning" || (projectDraft.working_mode === "professional" && siteDraft.land_start === "owned"))
     .map((tab) =>
       tab.id === "source"
         ? {
@@ -2410,10 +2411,8 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     );
 
   const workflowHeroMessage = projectDraft.workflow_mode === "build_from_scratch"
-    ? projectDraft.working_mode === "professional"
-      ? "Complete the site and Space Program, lock the Plan Foundation, then develop Materials, Directions and Visuals from that approved geometry."
-      : "Add the property size and important spaces, approve the Plan Foundation, then choose how that same building should look."
-    : "Organize the source geometry first, then develop Materials, Directions and Visuals without replacing the approved building.";
+    ? "Set up the project, organise the Space Program, approve one coordinated Plan Foundation, then develop a Design Direction and a small set of concept visuals."
+    : "Organise the source geometry first, then develop a Design Direction and focused concept visuals without replacing the uploaded building.";
 
   const activeTabIndex = visibleTabs.findIndex((tab) => tab.id === activeTab);
   const previousTab = activeTabIndex > 0 ? visibleTabs[activeTabIndex - 1] : null;
@@ -2493,13 +2492,46 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
               />
             )}
 
-            {activeTab === "brief" && (
-              <BriefTab
-                project={projectDraft}
-                setProject={setProjectDraft}
-                saving={saving === "brief"}
-                onSave={saveBrief}
-              />
+            {activeTab === "setup" && (
+              <section className="architecture-merged-stage">
+                <div className="merged-stage-intro surface-card">
+                  <p className="eyebrow">Project Setup</p>
+                  <h2>Define the project once</h2>
+                  <p>Keep the brief, site information and planning assumptions together before Heyy Studio prepares the Space Program and Plan Foundation.</p>
+                </div>
+                <BriefTab
+                  project={projectDraft}
+                  setProject={setProjectDraft}
+                  saving={saving === "brief"}
+                  onSave={saveBrief}
+                />
+                <SiteTab
+                  project={projectDraft}
+                  setProject={setProjectDraft}
+                  site={siteDraft}
+                  setSite={setSiteDraft}
+                  documents={documents}
+                  uploadCategory={uploadCategory}
+                  setUploadCategory={setUploadCategory}
+                  uploading={uploading}
+                  onUpload={uploadDocuments}
+                  onDownload={downloadDocument}
+                  onDelete={deleteDocument}
+                  saving={saving === "site"}
+                  onSave={saveSite}
+                />
+                {projectDraft.working_mode === "professional" && siteDraft.land_start === "owned" && (
+                  <PlanningTab
+                    project={projectDraft}
+                    site={siteDraft}
+                    planning={planningDraft}
+                    setPlanning={setPlanningDraft}
+                    calculations={calculations}
+                    saving={saving === "planning"}
+                    onSave={savePlanning}
+                  />
+                )}
+              </section>
             )}
 
             {activeTab === "source" && projectDraft.workflow_mode !== "build_from_scratch" && (
@@ -2516,36 +2548,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
               />
             )}
 
-            {activeTab === "site" && (
-              <SiteTab
-                project={projectDraft}
-                setProject={setProjectDraft}
-                site={siteDraft}
-                setSite={setSiteDraft}
-                documents={documents}
-                uploadCategory={uploadCategory}
-                setUploadCategory={setUploadCategory}
-                uploading={uploading}
-                onUpload={uploadDocuments}
-                onDownload={downloadDocument}
-                onDelete={deleteDocument}
-                saving={saving === "site"}
-                onSave={saveSite}
-              />
-            )}
-
-            {activeTab === "planning" && (
-              <PlanningTab
-                project={projectDraft}
-                site={siteDraft}
-                planning={planningDraft}
-                setPlanning={setPlanningDraft}
-                calculations={calculations}
-                saving={saving === "planning"}
-                onSave={savePlanning}
-              />
-            )}
-
             {activeTab === "program" && (
               <SpaceProgramTab
                 project={projectDraft}
@@ -2558,46 +2560,50 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
               />
             )}
 
-            {activeTab === "materials" && (
-              <MaterialsTab
-                project={projectDraft}
-                materials={materials}
-                documents={documents}
-                saving={saving}
-                uploading={uploading}
-                extractingDocumentId={extractingMaterial}
-                onToggle={toggleMaterialSelection}
-                onUpload={(files) => uploadDocuments(files, "material-reference")}
-                onAnalyse={analyseMaterialReference}
-                onDownload={downloadDocument}
-                onDelete={deleteDocument}
-                onToggleSaved={toggleSavedMaterial}
-                onUpdate={updateArchitectureMaterial}
-                onCreateCustom={createCustomMaterial}
-                onDeleteMaterial={deleteArchitectureMaterial}
-              />
-            )}
-
-            {activeTab === "directions" && (
-              <DirectionsTab
-                project={projectDraft}
-                site={siteDraft}
-                planning={planningDraft}
-                directions={directions}
-                planSet={planSet}
-                visuals={visuals}
-                documents={documents}
-                selectedMaterials={selectedMaterials}
-                generatingDirection={generatingDirection}
-                selectingDirection={selectingDirection}
-                onGenerate={generateDirections}
-                onSelect={selectDirection}
-                regeneratingImage={regeneratingImage}
-                generationStatus={generationStatus}
-                onRegenerateImage={(directionId, quality) =>
-                  regenerateArchitectureImage("direction", directionId, { quality })
-                }
-              />
+            {activeTab === "design-direction" && (
+              <section className="architecture-merged-stage">
+                <div className="merged-stage-intro surface-card">
+                  <p className="eyebrow">Design Direction</p>
+                  <h2>Choose how the approved concept should feel</h2>
+                  <p>Materials and architectural direction shape the concept imagery. The approved Plan Foundation remains the layout reference.</p>
+                </div>
+                <MaterialsTab
+                  project={projectDraft}
+                  materials={materials}
+                  documents={documents}
+                  saving={saving}
+                  uploading={uploading}
+                  extractingDocumentId={extractingMaterial}
+                  onToggle={toggleMaterialSelection}
+                  onUpload={(files) => uploadDocuments(files, "material-reference")}
+                  onAnalyse={analyseMaterialReference}
+                  onDownload={downloadDocument}
+                  onDelete={deleteDocument}
+                  onToggleSaved={toggleSavedMaterial}
+                  onUpdate={updateArchitectureMaterial}
+                  onCreateCustom={createCustomMaterial}
+                  onDeleteMaterial={deleteArchitectureMaterial}
+                />
+                <DirectionsTab
+                  project={projectDraft}
+                  site={siteDraft}
+                  planning={planningDraft}
+                  directions={directions}
+                  planSet={planSet}
+                  visuals={visuals}
+                  documents={documents}
+                  selectedMaterials={selectedMaterials}
+                  generatingDirection={generatingDirection}
+                  selectingDirection={selectingDirection}
+                  onGenerate={generateDirections}
+                  onSelect={selectDirection}
+                  regeneratingImage={regeneratingImage}
+                  generationStatus={generationStatus}
+                  onRegenerateImage={(directionId, quality) =>
+                    regenerateArchitectureImage("direction", directionId, { quality })
+                  }
+                />
+              </section>
             )}
 
             {activeTab === "plans" && (
@@ -2793,7 +2799,7 @@ function OverviewTab({
           <div>
             <p className="eyebrow">Project Overview</p>
             <h2>Your architecture project at a glance</h2>
-            <p>Review the project foundation, establish the plans first, then develop one consistent architectural direction and visual set.</p>
+            <p>Set up the project, approve one coordinated Plan Foundation, then develop a Design Direction and a focused concept-visual set.</p>
           </div>
         </div>
 
@@ -2811,8 +2817,8 @@ function OverviewTab({
             <h3>{sourceWorkflow ? "Lock the source geometry" : "Create the Plan Foundation"}</h3>
             <p>
               {sourceWorkflow
-                ? "Organize the uploaded plans first so every later Direction and Visual uses the same building geometry."
-                : "Ground and upper floors establish the building geometry before materials, facade style or hero renders are explored."}
+                ? "Organize the uploaded plans first so every later Design Direction and concept visual starts from the same source geometry."
+                : "The coordinated multi-floor Plan Foundation establishes the layout before materials, architectural character or concept imagery are explored."}
             </p>
           </div>
           <button type="button" onClick={() => onOpen("plans")} className="primary-action">
@@ -4050,7 +4056,7 @@ function DirectionsTab({
           <p>
             {project.workflow_mode === "plan_to_render"
               ? "This direction controls style, materials and atmosphere. Your organised source drawings remain the geometry source for Concepts and Visuals."
-              : "The approved Plan Foundation remains the geometry source of truth. This Direction controls facade, roof, materials, openings, landscape character and atmosphere for Visuals and the Design Pack."}
+              : "The approved Plan Foundation remains the layout reference. This Direction controls facade, roof, materials, openings, landscape character and atmosphere for Concept Visuals and the Concept Pack."}
           </p>
         </div>
       )}
@@ -4228,7 +4234,7 @@ function DirectionsTab({
                       disabled={generatingDirection !== null || regeneratingImage !== null || !direction.is_selected}
                       onClick={() => onRegenerateImage(direction.id, "final")}
                     >
-                      Professional Final · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
+                      High Quality Direction Concept · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
                     </button>
 
                     <button
@@ -4517,8 +4523,6 @@ function PlansTab({
   onDownloadDocument: (document: DocumentRow) => Promise<void>;
   onDeleteDocument: (document: DocumentRow) => Promise<void>;
 }) {
-  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
-  const [batchRunning, setBatchRunning] = useState<"technical" | "rendered" | null>(null);
   const existingDesignProject = project.workflow_mode === "plan_to_render";
   const sourceImages = documents.filter(
     (document) => document.category === "source" && document.mime_type?.startsWith("image/"),
@@ -4583,53 +4587,9 @@ function PlansTab({
     return requiredFloorPlansReady ? null : "Generate and approve all required floor plans first";
   }
 
-  const planDisplayOrder = [
-    "plan_foundation_sheet",
-    "functional_zoning",
-    "site_plan",
-    "circulation",
-    "north_elevation",
-    "south_elevation",
-    "east_elevation",
-    "west_elevation",
-    "section_longitudinal",
-    "section_transverse",
-    "perspective_front",
-    "perspective_rear",
-    "perspective_aerial",
-  ];
-
-  function planOrderIndex(type: string) {
-    const index = planDisplayOrder.indexOf(type);
-    return index === -1 ? planDisplayOrder.length : index;
-  }
-
-  const orderedPlanVisuals = planVisuals
-    .filter((visual) => !isCanonicalFloorVisualType(visual.visual_type))
-    .sort((a, b) => planOrderIndex(a.visual_type) - planOrderIndex(b.visual_type));
-
-  function togglePlanSelection(visualId: string) {
-    setSelectedPlanIds((current) => current.includes(visualId) ? current.filter((id) => id !== visualId) : [...current, visualId]);
-  }
-
-  async function runPlanBatch(mode: "technical" | "rendered") {
-    const queue = orderedPlanVisuals.filter((visual) =>
-      selectedPlanIds.includes(visual.id) &&
-      visual.visual_type !== "plan_foundation_sheet" &&
-      !isCanonicalFloorVisualType(visual.visual_type),
-    );
-    if (!queue.length) return;
-    setBatchRunning(mode);
-    try {
-      for (const visual of queue) {
-        if (mode === "technical" && /^perspective_/.test(visual.visual_type)) continue;
-        await onRegenerateImage(visual.id, mode, "preview");
-      }
-    } finally {
-      setBatchRunning(null);
-      setSelectedPlanIds([]);
-    }
-  }
+  const orderedPlanVisuals = planVisuals.filter(
+    (visual) => visual.visual_type === "plan_foundation_sheet",
+  );
 
   if (!planSet) {
     return (
@@ -4684,26 +4644,20 @@ function PlansTab({
           <span>{existingDesignSource
             ? "Visuals and optional redraws use the uploaded source drawings first. Heyy Studio must preserve the existing footprint, layout, stairs, openings and level relationships."
             : requiredFloorPlansReady
-              ? "Previews, professional finals, elevations, sections and project visuals can now use the approved floor-plan geometry."
+              ? "The approved Plan Foundation can now guide the Design Direction, concept visuals and Concept Pack."
               : `All required floors are generated together on one professional Plan Foundation sheet. Review the whole building, then approve the sheet once.`}</span>
         </div>
         <div className="credit-legend">
           <span>One coordinated multi-floor sheet · included with Plan Foundation</span>
-          <span>Other derived views · generated separately</span>
+          <span>Detailed documentation · Expert Development</span>
           <b>{existingDesignSource ? "Source geometry locked" : requiredFloorPlansReady ? "Plans approved" : "Approval required"}</b>
         </div>
       </div>
 
-      <div className="plan-batch-panel surface-card">
-        <div><strong>Generate derived documentation</strong><span>The approved Plan Foundation sheet is the building geometry reference. Use batch generation only for additional diagrams, elevations, sections and perspectives.</span></div>
-        <div className="plan-batch-actions">
-          <button type="button" className="secondary-action" disabled={!selectedPlanIds.length || batchRunning !== null || regeneratingImage !== null} onClick={() => void runPlanBatch("technical")}>{batchRunning === "technical" ? "Generating Queue..." : `Generate Selected Detailed Plans · ${ARCHITECTURE_CREDIT_COSTS.technicalPlan} each`}</button>
-          <button type="button" className="primary-action" disabled={!selectedPlanIds.length || batchRunning !== null || regeneratingImage !== null} onClick={() => void runPlanBatch("rendered")}>{batchRunning === "rendered" ? "Generating Queue..." : `Generate Selected Previews · ${ARCHITECTURE_CREDIT_COSTS.renderedPlanPreview} each`}</button>
-        </div>
-        {selectedPlanIds.length > 0 && <small>{selectedPlanIds.length} view{selectedPlanIds.length === 1 ? "" : "s"} selected · batch runs sequentially to protect consistency, rate limits and cost.</small>}
+      <div className="plan-scope-note surface-card">
+        <strong>Focused concept scope</strong>
+        <span>Heyy Studio keeps one coordinated multi-floor Plan Foundation as the plan output. Elevations, sections and construction documentation belong to Expert Development.</span>
       </div>
-
-      <div className="plan-view-group-legend"><span>Plans & diagrams</span><span>4 elevations</span><span>2 sections</span><span>3 perspectives</span></div>
       <div className="plan-visual-grid">
         {orderedPlanVisuals.map((visual) => (
           <PlanVisualCard
@@ -4712,8 +4666,8 @@ function PlansTab({
             loading={regeneratingImage === `visual-${visual.id}`}
             anyGenerating={regeneratingImage !== null}
             generationStatus={generationStatus}
-            selected={selectedPlanIds.includes(visual.id)}
-            onToggleSelected={() => togglePlanSelection(visual.id)}
+            selected={false}
+            onToggleSelected={() => undefined}
             onGenerate={(planMode, quality) =>
               onRegenerateImage(visual.id, planMode, quality)
             }
@@ -5261,14 +5215,8 @@ function VisualsTab({
   }
 
   const galleryTypes = [
-    "front_exterior",
-    "rear_exterior",
-    "street_view",
-    "aerial_view",
-    "day_view",
-    "night_view",
-    "facade_alternative_a",
-    "facade_alternative_b",
+    "hero_exterior_concept",
+    "outdoor_living_concept",
   ];
   const gallery = visuals.filter(
     (visual) => visual.metadata?.group === "visuals" || galleryTypes.includes(visual.visual_type),
@@ -5278,24 +5226,24 @@ function VisualsTab({
     return (
       <section className="stage-empty surface-card">
         <div className="stage-empty-copy">
-          <p className="eyebrow">Architecture Visuals</p>
-          <h2>Build the selected project gallery</h2>
+          <p className="eyebrow">Concept Visualization</p>
+          <h2>Create a focused concept visualization set</h2>
           <p>
             {existingDesignSource
               ? "Turn the uploaded existing plans into coordinated architectural visuals while keeping the source geometry fixed."
-              : "Prepare coordinated image prompts for the requested front, rear, street, aerial, day, night or custom camera views."}
+              : "Create only the concept imagery Heyy Studio can responsibly deliver: one hero exterior concept and one supporting outdoor-living concept."}
           </p>
           <div className="demo-explanation">
-            <strong>{existingDesignSource ? "Existing plans stay fixed." : "Generate only the views you need."}</strong>
+            <strong>{existingDesignSource ? "Existing plans stay fixed." : "Concept imagery, not measured documentation."}</strong>
             <span>{existingDesignSource
               ? "The uploaded drawings are sent into visual generation as authoritative references; the selected direction controls materials, mood and presentation, not a new layout."
-              : "Each view has its own button, so replacing one image never regenerates the complete gallery."}</span>
+              : "The imagery interprets the approved Plan Foundation and Design Direction. Major anchors should remain recognizable, but small architectural differences can occur."}</span>
           </div>
         </div>
         <button type="button" className="primary-action" disabled={generating} onClick={onGenerate}>
-          {generating ? "Preparing Visuals..." : `Prepare Architecture Visuals · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+          {generating ? "Preparing Concept Visuals..." : `Prepare Concept Visuals · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
         </button>
-        {generating && <StageGenerationLoading title="Preparing Visual Gallery" detail="Creating project-type-specific exterior and interior views from the same Master Architecture Reference." />}
+        {generating && <StageGenerationLoading title="Preparing Concept Visuals" detail="Preparing one hero exterior concept and one supporting outdoor-living concept from the approved project references." />}
       </section>
     );
   }
@@ -5304,18 +5252,18 @@ function VisualsTab({
     <section className="visuals-stage">
       <div className="stage-header surface-card">
         <div>
-          <p className="eyebrow">Architecture Visuals</p>
-          <h2>{direction.title} Gallery</h2>
+          <p className="eyebrow">Concept Visualization</p>
+          <h2>{direction.title} Concept Views</h2>
           <p>{existingDesignSource
             ? "Source plans/elevations define the building. The selected direction controls style only. Regenerate any older view that was created before the source drawings were organised."
-            : "Approve the views that should appear in the Architecture Design Pack."}</p>
+            : "Approve the concept images that best communicate the project intent. These are not exact elevations or measured architectural views."}</p>
         </div>
         <button type="button" className="secondary-action" disabled={generating} onClick={onGenerate}>
-          {generating ? "Refreshing..." : `Refresh Gallery Prompts · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+          {generating ? "Refreshing..." : `Refresh Concept Briefs · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
         </button>
       </div>
 
-      {generating && <StageGenerationLoading title="Refreshing Visual Gallery" detail="Updating the coordinated exterior and interior prompts without generating images." />}
+      {generating && <StageGenerationLoading title="Refreshing Concept Visuals" detail="Updating the two focused concept-image briefs without generating images." />}
       <div className="visual-gallery-grid">
         {gallery.map((visual) => {
           const visualMetadata = recordValue(visual.metadata);
@@ -5343,7 +5291,7 @@ function VisualsTab({
               </div>
               <div className="visual-gallery-body">
                 <div>
-                  <span>{sourceStale ? "Source drawings changed" : "Saved Project View"}</span>
+                  <span>{sourceStale ? "Source drawings changed" : "Concept View"}</span>
                   <h3>{visual.title || visual.visual_type}</h3>
                   {visual.prompt && (
                     <>
@@ -5374,7 +5322,7 @@ function VisualsTab({
                   >
                     {regeneratingImage === `visual-${visual.id}`
                       ? "Generating Preview..."
-                      : `${existingDesignSource ? (sourceStale ? "Generate from Source Plans" : "Regenerate from Source Plans") : (visual.image_url ? "Regenerate" : "Generate") + " Preview"} · ${ARCHITECTURE_CREDIT_COSTS.visualPreview} credits`}
+                      : `${existingDesignSource ? (sourceStale ? "Generate from Source Plans" : "Regenerate from Source Plans") : (visual.image_url ? "Regenerate" : "Generate") + " Concept Preview"} · ${ARCHITECTURE_CREDIT_COSTS.visualPreview} credits`}
                   </button>
                   <button
                     type="button"
@@ -5382,7 +5330,7 @@ function VisualsTab({
                     disabled={regeneratingImage !== null}
                     onClick={() => onRegenerateImage(visual.id, "final")}
                   >
-                    Professional Final · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
+                    High Quality Concept · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
                   </button>
                   <button
                     type="button"
@@ -5391,7 +5339,7 @@ function VisualsTab({
                     disabled={sourceStale || approvingVisual === visual.id || !visual.image_url || regeneratingImage !== null}
                     onClick={() => onApprove(visual)}
                   >
-                    {sourceStale ? "Regenerate first" : approvingVisual === visual.id ? "Saving..." : visual.is_approved ? "Remove Approval" : "Approve View"}
+                    {sourceStale ? "Regenerate first" : approvingVisual === visual.id ? "Saving..." : visual.is_approved ? "Remove Approval" : "Approve Concept"}
                   </button>
                 </div>
               </div>
@@ -5401,10 +5349,9 @@ function VisualsTab({
       </div>
 
       <div className="direction-disclaimer">
-        <strong>AI-style concept imagery.</strong>
+        <strong>AI concept imagery.</strong>
         <span>
-          Visuals communicate mood and architectural intent. Final professional renders,
-          documented materials and buildable design require expert production.
+          These images interpret the approved Plan Foundation and selected Design Direction. Major project features should remain recognizable, but minor architectural differences can occur. Exact coordinated renders, elevations and construction documentation require Expert Development.
         </span>
       </div>
     </section>
@@ -5443,8 +5390,8 @@ function DesignPackTab({
   if (!direction) {
     return (
       <StageLocked
-        title="Select a direction before preparing the Design Pack"
-        body="The pack compiles the full selected project route."
+        title="Select a Design Direction before preparing the Concept Pack"
+        body="The Concept Pack compiles the approved project inputs and selected concept assets into one clear presentation."
         onOpenDirections={onOpenDirections}
       />
     );
@@ -5454,26 +5401,31 @@ function DesignPackTab({
   const generatedGallery = gallery.filter((visual) => Boolean(visual.image_url));
   const approved = generatedGallery.filter((visual) => visual.is_approved);
   const packVisuals = approved.length > 0 ? approved : generatedGallery;
-  const complete = Boolean(planSet && generatedGallery.length > 0);
+  const foundationSheet = visuals.find((visual) => visual.visual_type === "plan_foundation_sheet");
+  const foundationApproved = Boolean(
+    foundationSheet?.is_approved &&
+    (assetPreviewUrl(recordValue(foundationSheet.metadata).technical_assets) || foundationSheet.image_url),
+  );
+  const complete = Boolean(planSet && foundationApproved && generatedGallery.length > 0);
 
   if (!designPack) {
     return (
       <section className="stage-empty surface-card">
         <div className="stage-empty-copy">
-          <p className="eyebrow">Architecture Design Pack</p>
-          <h2>Compile the complete concept document</h2>
+          <p className="eyebrow">Architecture Concept Pack</p>
+          <h2>Compile the approved concept into one presentation</h2>
           <p>
             The pack combines the brief, land, planning summary, approved Plan Foundation,
-            selected Direction, materials, area schedule, generated Visuals and disclaimers.
+            selected Direction, materials, area schedule, approved concept visuals and disclaimers.
           </p>
           <div className="pack-readiness-mini">
-            <span data-ready={planSet ? "true" : "false"}>{planSet ? <Check size={12} /> : <AlertTriangle size={12} />} Plans</span>
-            <span data-ready={generatedGallery.length ? "true" : "false"}>{generatedGallery.length ? <Check size={12} /> : <AlertTriangle size={12} />} Generated Visuals</span>
+            <span data-ready={foundationApproved ? "true" : "false"}>{foundationApproved ? <Check size={12} /> : <AlertTriangle size={12} />} Approved Plan Foundation</span>
+            <span data-ready={generatedGallery.length ? "true" : "false"}>{generatedGallery.length ? <Check size={12} /> : <AlertTriangle size={12} />} Concept Visuals</span>
           </div>
         </div>
         <div className="stage-empty-actions">
           <button type="button" className="primary-action" disabled={generating || !complete} onClick={onPrepare}>
-            {generating ? "Preparing Pack..." : "Prepare Design Pack"}
+            {generating ? "Preparing Pack..." : "Prepare Concept Pack"}
           </button>
         </div>
       </section>
@@ -5487,13 +5439,13 @@ function DesignPackTab({
     <section className="design-pack-stage">
       <div className="stage-header surface-card no-print">
         <div>
-          <p className="eyebrow">Architecture Design Pack</p>
+          <p className="eyebrow">Architecture Concept Pack</p>
           <h2>{designPack.title}</h2>
           <p>Version {designPack.version} · Prepared {formatDate(designPack.generated_at)}</p>
         </div>
         <div className="pack-actions">
           <button type="button" className="secondary-action" disabled={generating} onClick={onPrepare}>
-            {generating ? "Updating..." : "Update Pack"}
+            {generating ? "Updating..." : "Update Concept Pack"}
           </button>
           <ArchitecturePresentationExport
               project={project}
@@ -5513,7 +5465,7 @@ function DesignPackTab({
         <section className="pack-cover">
           <div className="pack-logo">HEYY<span>STUDIO</span></div>
           <div>
-            <p>Architecture Studio · Concept Design Pack</p>
+            <p>Architecture Studio · Concept Pack</p>
             <h1>{project.project_name}</h1>
             <h2>{direction.title}</h2>
             <span>{location}</span>
@@ -5551,7 +5503,7 @@ function DesignPackTab({
           <section className="pack-page">
             <div className="pack-page-heading"><span>03</span><div><p>Plan Foundation</p><h2>Approved plans and area schedule</h2></div></div>
             <div className="pack-plan-grid">
-              {visuals.filter((visual) => visual.metadata?.group === "plans" || ["functional_zoning", "ground_floor", "upper_floor", "site_plan", "circulation", "north_elevation", "south_elevation", "east_elevation", "west_elevation", "section_longitudinal", "section_transverse", "perspective_front", "perspective_rear", "perspective_aerial"].includes(visual.visual_type)).map((visual) => (
+              {visuals.filter((visual) => visual.visual_type === "plan_foundation_sheet").map((visual) => (
                 <figure key={visual.id}>{visual.image_url && <img src={visual.image_url} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" />}<figcaption>{visual.title}</figcaption></figure>
               ))}
             </div>
@@ -5574,7 +5526,7 @@ function DesignPackTab({
 
         {packVisuals.length > 0 && (
           <section className="pack-page">
-            <div className="pack-page-heading"><span>05</span><div><p>Architectural Visuals</p><h2>Selected project gallery</h2></div></div>
+            <div className="pack-page-heading"><span>05</span><div><p>Concept Visuals</p><h2>Selected concept imagery</h2></div></div>
             <div className="pack-gallery-grid">
               {packVisuals.map((visual) => (
                 <figure key={visual.id}>{visual.image_url && <img src={visual.image_url} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" />}<figcaption>{visual.title}</figcaption></figure>
@@ -5586,7 +5538,7 @@ function DesignPackTab({
         <section className="pack-page pack-final-page">
           <div className="pack-page-heading"><span>06</span><div><p>Important Notice</p><h2>Concept design disclaimer</h2></div></div>
           <p>
-            This Architecture Design Pack communicates an early design direction only. It is not a planning application,
+            This Architecture Concept Pack communicates an early design direction only. It is not a planning application,
             permit set, engineering package, construction document, quantity survey, supplier specification or professional certification.
           </p>
           <p>
@@ -5636,7 +5588,7 @@ function EstimateTab({
     return (
       <StageLocked
         eyebrow="Source Drawings Required"
-        title="Organise the existing drawings before estimating"
+        title="Organise the existing drawings before preparing the budget guide"
         body="Existing Design projects do not need AI-generated plan approval. Organise at least one uploaded floor plan, elevation or section so the source drawings are confirmed as the project geometry."
         onOpenDirections={onOpenPlans}
         actionLabel="Open Source Plans →"
@@ -5649,7 +5601,7 @@ function EstimateTab({
       <StageLocked
         eyebrow="Plans Required"
         title="Prepare and approve the connected floor plans first"
-        body="New Design estimates use the approved plan area, room schedule and selected project materials."
+        body="The early budget guide uses the approved Plan Foundation area, room schedule and selected concept materials."
         onOpenDirections={onOpenPlans}
         actionLabel="Open Plans →"
       />
@@ -5673,7 +5625,7 @@ function EstimateTab({
       return (
         <StageLocked
           eyebrow="Approved Plan Foundation Required"
-          title="Approve the coordinated Plan Foundation before estimating"
+          title="Approve the coordinated Plan Foundation before preparing the budget guide"
           body="The approved multi-floor Plan Foundation is the geometry authority used for quantities, Directions and downstream visuals."
           onOpenDirections={onOpenPlans}
           actionLabel="Review Plan Foundation →"
@@ -5702,10 +5654,10 @@ function EstimateTab({
     return (
       <section className="stage-empty surface-card">
         <div className="stage-empty-copy">
-          <p className="eyebrow">Existing plans ready</p>
-          <h2>Add an approximate floor area before estimating</h2>
+          <p className="eyebrow">Budget basis needed</p>
+          <h2>Add an approximate floor area before preparing the budget guide</h2>
           <p>
-            Your uploaded plans are already accepted as the geometry source and do not need approval. The estimate only needs an area basis for provisional quantities. Complete the Space Program or add the target gross area in Professional Mode.
+            Your uploaded plans are already accepted as the geometry source and do not need approval. The budget guide needs an area basis for indicative quantities and ranges. Complete the Space Program or add the target gross area in Professional Mode.
           </p>
         </div>
         <button type="button" className="primary-action" onClick={onOpenSpaceProgram}>Open Space Program</button>
@@ -5717,9 +5669,9 @@ function EstimateTab({
     return (
       <section className="stage-empty surface-card">
         <div className="stage-empty-copy">
-          <p className="eyebrow">Pre-production estimate</p>
-          <h2>Select the project materials first</h2>
-          <p>Choose the materials feeding generation before calculating quantities, waste and provisional price ranges.</p>
+          <p className="eyebrow">Early Budget Guide</p>
+          <h2>Select the concept materials first</h2>
+          <p>Choose the concept materials before calculating indicative quantities and broad price ranges.</p>
         </div>
         <button type="button" className="primary-action" onClick={onOpenMaterials}>Open Materials</button>
       </section>
@@ -5730,8 +5682,8 @@ function EstimateTab({
     <section className="estimate-stage">
       <div className="stage-header surface-card">
         <div>
-          <p className="eyebrow">Pre-production estimate</p>
-          <h2>Quantities, price ranges and supplier planning</h2>
+          <p className="eyebrow">Early Budget Guide</p>
+          <h2>Indicative quantities and early cost ranges</h2>
           <p>
             {existingDesign
               ? `Prepared from the organised existing source drawings, saved project area information and selected materials for ${project.city || project.country || "the project location"}. No AI-plan approval is required.`
@@ -5739,7 +5691,7 @@ function EstimateTab({
           </p>
         </div>
         <button type="button" className="primary-action" disabled={preparing} onClick={() => void onPrepare()}>
-          {preparing ? "Preparing Estimate..." : estimate ? "Refresh Estimate" : "Prepare Estimate"}
+          {preparing ? "Preparing Budget Guide..." : estimate ? "Refresh Budget Guide" : "Prepare Budget Guide"}
         </button>
       </div>
 
@@ -5756,14 +5708,14 @@ function EstimateTab({
 
       {!estimate ? (
         <div className="estimate-empty surface-card">
-          <strong>Ready to estimate</strong>
-          <span>{existingDesign ? "Prepare the estimate from the existing source drawings, project area and material schedule." : "Prepare the estimate from the latest approved plans and material schedule."}</span>
+          <strong>Ready for an early budget guide</strong>
+          <span>{existingDesign ? "Prepare a broad budget guide from the existing source drawings, project area and material schedule." : "Prepare a broad budget guide from the latest approved Plan Foundation and material schedule."}</span>
         </div>
       ) : (
         <>
           <div className="estimate-summary-grid">
-            <MetricCard label="Estimated low range" value={`US$${Math.round(estimate.lowTotalUsd).toLocaleString("en-US")}`} />
-            <MetricCard label="Estimated high range" value={`US$${Math.round(estimate.highTotalUsd).toLocaleString("en-US")}`} />
+            <MetricCard label="Indicative low range" value={`US$${Math.round(estimate.lowTotalUsd).toLocaleString("en-US")}`} />
+            <MetricCard label="Indicative high range" value={`US$${Math.round(estimate.highTotalUsd).toLocaleString("en-US")}`} />
             <MetricCard label="Material lines" value={String(estimate.items.length)} />
             <MetricCard label="Last prepared" value={new Date(estimate.generatedAt).toLocaleDateString("en-US")} />
           </div>
@@ -5899,31 +5851,20 @@ function ArchitectureProductionTab({
       storage_path: direction.image_storage_path,
       summary: direction.philosophy || direction.site_response || null,
     },
-    ...(concept
-      ? [{
-          id: concept.id,
-          group: "legacy_concept",
-          visual_type: "architecture_concept",
-          title: concept.title,
-          is_approved: true,
-          image_url: concept.image_url,
-          storage_path: null,
-          summary: concept.summary,
-        }]
-      : []),
-    ...visuals.filter((visual) => recordValue(visual.metadata).group !== "tour").map((visual) => {
+    ...visuals.filter((visual) => {
+      const group = recordValue(visual.metadata).group;
+      return visual.visual_type === "plan_foundation_sheet" || group === "visuals";
+    }).map((visual) => {
       const metadata = recordValue(visual.metadata);
       return {
         id: visual.id,
-        group: metadata.group || "visuals",
+        group: visual.visual_type === "plan_foundation_sheet" ? "plan_foundation" : "concept_visuals",
         visual_type: visual.visual_type,
         title: visual.title,
         is_approved: visual.is_approved,
         image_url: visual.image_url,
         storage_path: visual.storage_path,
         technical_assets: metadata.technical_assets || null,
-        rendered_preview_assets: metadata.rendered_preview_assets || null,
-        rendered_final_assets: metadata.rendered_final_assets || null,
         preview_assets: metadata.preview_assets || null,
         final_assets: metadata.final_assets || null,
       };
@@ -5961,21 +5902,20 @@ function ArchitectureProductionTab({
     selected_direction: direction,
     space_program: spaceProgram,
     selected_materials: materials,
-    architecture_concept: concept,
     concept_plan_set: planSet,
-    approved_visuals: visuals.filter((visual) => visual.is_approved && recordValue(visual.metadata).group !== "tour"),
+    approved_concept_visuals: visuals.filter((visual) => visual.is_approved && recordValue(visual.metadata).group === "visuals"),
     all_generated_outputs: generatedOutputs,
     design_pack: designPack,
     pre_production_estimate: planSet ? recordValue(planSet.generation_json).estimate || null : null,
-    disclaimer: "AI and demo outputs are conceptual. Expert production creates professional final deliverables.",
+    disclaimer: "Heyy Studio Architecture outputs are conceptual. Expert Development is required for measured drawings, coordinated renders, approvals, engineering and construction documentation.",
   };
 
   return (
     <section className="production-stage">
       <div className="stage-header surface-card">
         <div>
-          <p className="eyebrow">Expert Production</p>
-          <h2>Move from concept to professional architecture services</h2>
+          <p className="eyebrow">Expert Development</p>
+          <h2>Develop the AI concept with qualified architecture professionals</h2>
           <p>
             This uses the existing Heyy Studio request, quote, Stripe payment, production job,
             deliverables and revision system. No separate Architecture payment system is created.
@@ -6010,7 +5950,7 @@ function ArchitectureProductionTab({
           description={`Professional development of the selected ${direction.title} ${project.workflow_mode === "sketch_to_real" ? "sketch interpretation" : project.workflow_mode === "plan_to_render" ? "plan-to-render direction" : "architecture concept"}.`}
           usage="Planning, design development, professional coordination and project-specific architecture deliverables as defined in the final quote."
           expertNote="The current Architecture Studio outputs are conceptual. A qualified expert must verify and develop the final scope, drawings, renders and documentation."
-          buttonLabel="Request Architecture Production →"
+          buttonLabel="Request Expert Development →"
         />
       </div>
     </section>
@@ -6573,7 +6513,13 @@ const workspaceStyles = `
   .recommended-materials-action { min-height:44px; border-color:var(--arch-accent-border); background:var(--arch-accent-soft); color:var(--blue); }
   .recommended-materials-action:hover:not(:disabled) { border-color:var(--arch-accent-strong); background:#e4f0ff; color:var(--arch-accent-strong); }
   .stage-source-chip { display: inline-flex; min-height: 28px; align-items: center; margin-top: 14px; border-radius: 999px; background: #eaf8f0; color: #0b7b47; padding: 0 11px; font-size: 8px; font-weight: 950; text-transform: uppercase; letter-spacing: .09em; }
-  .concept-stage, .plans-stage, .visuals-stage, .design-pack-stage, .production-stage { display: grid; gap: 16px; }
+  .architecture-merged-stage, .concept-stage, .plans-stage, .visuals-stage, .design-pack-stage, .production-stage { display: grid; gap: 16px; }
+  .merged-stage-intro { padding: 22px; }
+  .merged-stage-intro h2 { margin: 4px 0 8px; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.045em; }
+  .merged-stage-intro p:last-child { margin: 0; max-width: 760px; color: var(--studio-muted); font-size: 13px; font-weight: 650; line-height: 1.75; }
+  .plan-scope-note { display: grid; gap: 6px; padding: 18px 20px; }
+  .plan-scope-note strong { font-size: 13px; color: var(--studio-text); }
+  .plan-scope-note span { color: var(--studio-muted); font-size: 12px; font-weight: 650; line-height: 1.65; }
   .concept-hero { overflow: hidden; padding: 0; }
   .concept-hero img { display: block; width: 100%; aspect-ratio: 1.5; object-fit: cover; }
   .strategy-grid { display: grid; gap: 12px; }

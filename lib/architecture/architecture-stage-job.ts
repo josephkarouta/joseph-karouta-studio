@@ -526,10 +526,14 @@ async function runArchitectureStage(args: {
     });
     const architectureDna = dnaResult.architectureDna;
     const sourceBrief = metadataRecord(project.source_brief);
-    const requestedViews = Array.isArray(sourceBrief.camera_views) ? (sourceBrief.camera_views as string[]) : [];
+    const requestedViews = project.workflow_mode === "build_from_scratch"
+      ? ["Hero Exterior Concept", "Outdoor Living Concept"]
+      : Array.isArray(sourceBrief.camera_views) && (sourceBrief.camera_views as string[]).length
+        ? (sourceBrief.camera_views as string[]).slice(0, 2)
+        : ["Hero Exterior Concept", "Outdoor Living Concept"];
     const canonicalPlan = canonicalPlanFromRecord(currentPlan?.generation_json) || canonicalPlanFromRecord(currentPlanResult.data?.generation_json);
     if (!canonicalPlan && project.workflow_mode === "build_from_scratch") {
-      throw new Error("Prepare the Plan Foundation before preparing Visuals.");
+      throw new Error("Prepare and approve the Plan Foundation before preparing Concept Visuals.");
     }
 
     const generated = await generateArchitectureVisualPrompts({
@@ -563,7 +567,7 @@ async function runArchitectureStage(args: {
       if (error) throw new Error(error.message);
     }
     nextCompletion = Math.max(nextCompletion, 88);
-    nextStatus = "Visuals Ready";
+    nextStatus = "Concept Visuals Ready";
   }
 
   if (stage === "design-pack" || stage === "all") {
@@ -590,7 +594,7 @@ async function runArchitectureStage(args: {
         project_id: project.id,
         user_id: project.user_id,
         direction_id: project.selected_direction_id,
-        title: `${project.project_name} Architecture Design Pack`,
+        title: `${project.project_name} Architecture Concept Pack`,
         version: nextVersion,
         status: "Ready",
         included_sections: [
@@ -602,9 +606,9 @@ async function runArchitectureStage(args: {
           "Approved Plan Foundation",
           "Material System",
           "Selected Direction",
-          "Architectural Visuals",
+          "Concept Visuals",
           "Area Schedule",
-          "Planning Disclaimer",
+          "Concept Disclaimer",
         ],
         generated_at: new Date().toISOString(),
         metadata: {
@@ -622,7 +626,7 @@ async function runArchitectureStage(args: {
       }, { onConflict: "project_id" });
     if (error) throw new Error(error.message);
     nextCompletion = Math.max(nextCompletion, 100);
-    nextStatus = "Design Pack Ready";
+    nextStatus = "Concept Pack Ready";
   }
 
   const { error: projectError } = await admin

@@ -9,7 +9,6 @@ import { renderArchitecturalDrawingSvg } from "@/lib/ai/architecture-drawing";
 import {
   ARCHITECTURE_PROJECT_TYPES,
   getArchitectureProjectTemplate,
-  getArchitectureVisualViews,
 } from "@/lib/architecture/project-templates";
 
 export type LiveDirection = {
@@ -2645,7 +2644,7 @@ export async function generateArchitectureVisualPrompts(args: {
   const template = getArchitectureProjectTemplate(projectType);
   const requestedViews = args.requestedViews.length
     ? args.requestedViews
-    : getArchitectureVisualViews(projectType);
+    : ["Hero Exterior Concept", "Outdoor Living Concept"];
   const existingDesignSource = String(args.project.workflow_mode || "") === "plan_to_render";
 
   return structuredCompletion<{ visuals: LiveVisualPrompt[] }>({
@@ -2653,7 +2652,7 @@ export async function generateArchitectureVisualPrompts(args: {
     schema: visualPromptsSchema,
     system: [
       "You are Heyy Studio's architecture visual director.",
-      "Prepare one coordinated image prompt for each requested view of the exact same property.",
+      "Prepare a small, focused set of architecture CONCEPT image prompts. Do not present them as measured elevations or exact coordinated render views.",
       `This is a ${projectType} project. Include the appropriate interior experiences and operational spaces rather than using a residential-only gallery.`,
       `The gallery must reflect these priorities: ${template.directionFocus.join(", ")}.`,
       existingDesignSource
@@ -2665,7 +2664,7 @@ export async function generateArchitectureVisualPrompts(args: {
       existingDesignSource
         ? "Do not rely on a generated canonical plan, concept render or direction render to define geometry."
         : "All views, especially aerial and site-related views, must be derived from the approved plan geometry. Do not invent a U-shape, courtyard, wing, pool location, entry or massing relationship that conflicts with the approved plans.",
-      "Night views must be a lighting transformation of the same day-time architecture, not a new design.",
+      "For new designs, preserve the major project anchors visible in the approved Plan Foundation: storey count, main entry zone, garage side, pool/outdoor relationship and overall massing family. Minor architectural differences may occur and the imagery remains conceptual.",
       "Use stable snake_case visual_type values.",
       safetyInstruction,
       imagePromptInstruction,
@@ -2709,7 +2708,18 @@ export async function generateArchitectureVisualPrompts(args: {
             "Do not invent a different footprint, storey arrangement, stair position, opening pattern or massing.",
           ].join(" "),
         }))
-      : value.visuals,
+      : value.visuals.slice(0, 2).map((visual, index) => ({
+          ...visual,
+          visual_type: index === 0 ? "hero_exterior_concept" : "outdoor_living_concept",
+          title: index === 0 ? "Hero Exterior Concept" : "Outdoor Living Concept",
+          prompt: [
+            index === 0
+              ? "Create one strong hero exterior concept that communicates the selected Design Direction while reasonably following the approved Plan Foundation."
+              : "Create one supporting outdoor-living concept focused on landscape, pool/terrace atmosphere and indoor-outdoor character rather than pretending to be a measured second elevation.",
+            visual.prompt,
+            "Keep the number of levels and major entry, garage, pool and outdoor-living relationships recognisable from the approved Plan Foundation. This is concept imagery, not exact documentation.",
+          ].join(" "),
+        })),
     usage,
   }));
 }
@@ -3596,12 +3606,24 @@ export async function generateAndStorePlanFoundationSheetImage(args: {
       }))
     : [];
 
-const siteBrief = {
-  pool: args.canonicalPlan.pool || null,
-  entry: args.canonicalPlan.entry || null,
-  driveway: args.canonicalPlan.driveway || null,
-  site: args.canonicalPlan.site || null,
-};
+  const canonicalRecord = args.canonicalPlan as unknown as Record<string, unknown>;
+  const siteElements = Object.entries(canonicalRecord)
+    .filter(([key, value]) => {
+      if (["site", "footprint", "building_outline", "vertical_cores", "circulation_routes", "entry", "section_cuts", "levels"].includes(key)) return false;
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+      return (value as Record<string, unknown>).present === true;
+    })
+    .map(([type, value]) => ({
+      type,
+      ...(value as Record<string, unknown>),
+    }));
+
+  const siteBrief = {
+    site: args.canonicalPlan.site || null,
+    footprint: args.canonicalPlan.footprint || null,
+    entry: args.canonicalPlan.entry || null,
+    site_elements: siteElements,
+  };
 
   const prompt = [
     `Create ONE premium architectural PLAN FOUNDATION presentation sheet for ${args.projectName}.`,
@@ -3612,7 +3634,7 @@ const siteBrief = {
     "Every enclosed room must have a real door opening connected to circulation or an adjacent accessible space. Doors must sit in walls; no floating symbols.",
     "Use professional black-and-white architectural plan graphics with strong wall hierarchy, proper door swings, windows, stairs, fixtures and restrained furniture. The result should look like a high-quality architect concept-plan sheet, not a debug diagram, zoning block plan or wireframe.",
     "Do NOT invent numeric site dimensions, scale bars, area schedules or construction dimensions. Do not print fake measurements. Room names may be shown clearly, but keep annotations minimal and legible.",
-    "Keep pool, garage, entry and outdoor-living relationships consistent across the sheet where relevant.",
+    "Keep every site relationship and every project-specific program element represented in the canonical plan consistent across the sheet where relevant. Do not invent residential features for non-residential projects, and do not assume a pool, garage, terrace, loading area, parking area or any other feature unless it exists in the project data.",
     `FLOOR PROGRAMS: ${JSON.stringify(floorBrief)}`,
     sharedCore.length ? `SHARED VERTICAL CORES: ${JSON.stringify(sharedCore)}` : "",
     `SITE RELATIONSHIPS: ${JSON.stringify(siteBrief)}`,

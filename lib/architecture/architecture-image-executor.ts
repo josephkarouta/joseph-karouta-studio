@@ -929,10 +929,10 @@ export async function executeArchitectureImageGeneration(args: {
     ]);
 
     if (!masterDirection) {
-      throw new Error("Select and generate an Architecture Direction before generating Visuals.");
+      throw new Error("Select and generate a Design Direction before generating Concept Visuals.");
     }
     if (!masterReference && !sourceGeometryLocked) {
-      throw new Error("Generate the selected Architecture Direction visual before generating Visuals.");
+      throw new Error("Generate the selected Design Direction visual before generating Concept Visuals.");
     }
     const planJson = metadataRecord(planSet?.generation_json);
     const architectureDna =
@@ -962,7 +962,7 @@ export async function executeArchitectureImageGeneration(args: {
     previousAssetMetadata = visualMetadata[visualAssetKey];
     const visualType = String(visual.visual_type || "");
     const currentTargetReference = imageReference({
-      label: "Current target view. Use only for camera/material continuity; never override the source drawings.",
+      label: "Current concept image. Use only for visual continuity; never override the approved project references.",
       storagePath: preferredMasterPath(visualMetadata, visual.storage_path),
       url: visual.image_url,
     });
@@ -1050,7 +1050,7 @@ export async function executeArchitectureImageGeneration(args: {
         ? `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. The selected Direction may affect materials, facade character, landscape and lighting only.`
         : group === "tour"
           ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the APPROVED PLAN FOUNDATION. Approved plans define geometry; the selected Direction defines architectural expression.`
-          : `Generate only the ${String(visual.title || visual.visual_type)} view derived from the APPROVED PLAN FOUNDATION. Do not redesign the footprint, stacking, core, entry, pool or site relationship. Apply the selected Direction as architectural expression only.`,
+          : `Generate only the ${String(visual.title || visual.visual_type)} CONCEPT image using the APPROVED PLAN FOUNDATION as the major layout reference and the selected Design Direction as the visual-language reference. Preserve the number of levels and major entry, garage, pool and outdoor-living relationships. Do not present the output as a measured elevation or exact construction visualization.`,
       tier: quality,
     }));
     imageUrl = generated.imageUrl;
