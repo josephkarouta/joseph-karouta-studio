@@ -3574,67 +3574,64 @@ export async function generateAndStorePlanFoundationSheetImage(args: {
   projectName: string;
   canonicalPlan: CanonicalPlanSpec;
   architectureDna?: ArchitectureDna | null;
+  plan: AiPlanConfig;
 }) {
   const levels = Array.isArray(args.canonicalPlan.levels) ? args.canonicalPlan.levels : [];
-  if (!levels.length) throw new Error("The Plan Foundation has no canonical floors to render.");
+  if (!levels.length) throw new Error("The Plan Foundation has no coordinated floors to render.");
 
-  const floorPngs = await Promise.all(levels.map(async (level, index) => {
-    const visualType = floorVisualTypeForIndex(index);
-    const title = floorPlanTitle(level, index);
-    const svg = renderCanonicalPlanSvg({
-      plan: args.canonicalPlan,
-      visualType,
-      title,
-      projectName: args.projectName,
-      architectureDna: args.architectureDna,
-    });
-    return sharp(Buffer.from(svg, "utf8"), { density: 150 })
-      .flatten({ background: "#FFFFFF" })
-      .resize({ width: 1180, height: 800, fit: "contain", background: "#FFFFFF" })
-      .png({ compressionLevel: 9 })
-      .toBuffer();
+  const floorBrief = levels.map((level, index) => ({
+    floor: floorPlanTitle(level, index),
+    rooms: (level.rooms || []).map((room) => ({
+      name: room.name,
+      zone: room.zone,
+      capacity_type: room.capacity_type || null,
+      capacity_count: Number(room.capacity_count || 0) || null,
+    })),
   }));
 
-  const columns = levels.length === 1 ? 1 : 2;
-  const rows = Math.ceil(levels.length / columns);
-  const cardWidth = 1180;
-  const cardHeight = 800;
-  const gap = 40;
-  const margin = 70;
-  const header = 150;
-  const footer = 100;
-  const width = margin * 2 + columns * cardWidth + (columns - 1) * gap;
-  const height = header + margin + rows * cardHeight + (rows - 1) * gap + footer;
+  const sharedCore = Array.isArray(args.canonicalPlan.vertical_cores)
+    ? args.canonicalPlan.vertical_cores.map((core) => ({
+        type: core.type,
+        serves_level_ids: core.serves_level_ids,
+      }))
+    : [];
 
-  const titleSvg = Buffer.from(`
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100%" height="100%" fill="#ffffff"/>
-      <text x="${margin}" y="58" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#2563eb" letter-spacing="2">HEYY STUDIO · PLAN FOUNDATION</text>
-      <text x="${margin}" y="108" font-family="Arial, sans-serif" font-size="38" font-weight="800" fill="#111827">${escapeXml(args.projectName)}</text>
-      <text x="${width - margin}" y="105" text-anchor="end" font-family="Arial, sans-serif" font-size="18" fill="#475569">${levels.length} coordinated floor${levels.length === 1 ? "" : "s"} · one canonical building model</text>
-      <line x1="${margin}" y1="130" x2="${width - margin}" y2="130" stroke="#e2e8f0" stroke-width="2"/>
-      <line x1="${margin}" y1="${height - 70}" x2="${width - margin}" y2="${height - 70}" stroke="#e2e8f0" stroke-width="2"/>
-      <text x="${margin}" y="${height - 32}" font-family="Arial, sans-serif" font-size="16" fill="#64748b">All floors are deterministic renders of the same canonical coordinates. Concept only · not for construction.</text>
-    </svg>
-  `);
+const siteBrief = {
+  pool: args.canonicalPlan.pool || null,
+  entry: args.canonicalPlan.entry || null,
+  driveway: args.canonicalPlan.driveway || null,
+  site: args.canonicalPlan.site || null,
+};
 
-  const composites = floorPngs.map((input, index) => ({
-    input,
-    left: margin + (index % columns) * (cardWidth + gap),
-    top: header + margin + Math.floor(index / columns) * (cardHeight + gap),
-  }));
-  const sheetPng = await sharp(titleSvg)
-    .composite(composites)
-    .png({ compressionLevel: 9 })
-    .toBuffer();
+  const prompt = [
+    `Create ONE premium architectural PLAN FOUNDATION presentation sheet for ${args.projectName}.`,
+    `The sheet must show ALL ${levels.length} floor plans together on the same page, side-by-side in a clean architectural presentation.`,
+    "THIS SINGLE IMAGE IS THE PROJECT'S PLAN GEOMETRY REFERENCE. Every floor shown must clearly belong to the same building.",
+    "Coordinate the floors as one building: same orientation, same main structural/vertical core, stairs directly aligned floor-to-floor, sensible upper-floor footprint over the ground floor, and consistent exterior/site relationships.",
+    "Do not create separate unrelated floor-plan designs. Do not rotate one floor relative to another.",
+    "Every enclosed room must have a real door opening connected to circulation or an adjacent accessible space. Doors must sit in walls; no floating symbols.",
+    "Use professional black-and-white architectural plan graphics with strong wall hierarchy, proper door swings, windows, stairs, fixtures and restrained furniture. The result should look like a high-quality architect concept-plan sheet, not a debug diagram, zoning block plan or wireframe.",
+    "Do NOT invent numeric site dimensions, scale bars, area schedules or construction dimensions. Do not print fake measurements. Room names may be shown clearly, but keep annotations minimal and legible.",
+    "Keep pool, garage, entry and outdoor-living relationships consistent across the sheet where relevant.",
+    `FLOOR PROGRAMS: ${JSON.stringify(floorBrief)}`,
+    sharedCore.length ? `SHARED VERTICAL CORES: ${JSON.stringify(sharedCore)}` : "",
+    `SITE RELATIONSHIPS: ${JSON.stringify(siteBrief)}`,
+    "Composition: white presentation board, equal visual scale for all floors, generous margins, Ground Floor first then Upper/Level floors in order. No photorealistic render, no elevation, no perspective, no mood board.",
+  ].filter(Boolean).join("\n\n");
 
-  return storeArchitectureImageVariants({
+  return generateAndStoreArchitectureImage({
     supabase: args.supabase,
     userId: args.userId,
     projectId: args.projectId,
     folder: "plans",
     filenamePrefix: args.filenamePrefix || "plan-foundation-sheet",
-    sourceBytes: sheetPng,
+    prompt,
+    plan: args.plan,
+    architectureDna: null,
+    referenceImages: [],
+    sourceGeometryReferences: [],
+    preserveSourceGeometry: false,
+    targetRole: "Generate one coordinated multi-floor architectural plan sheet. All floors must be designed together in the same image and must read as one building. This sheet becomes the approved geometry reference for later Directions and Visuals.",
     tier: "preview",
   });
 }

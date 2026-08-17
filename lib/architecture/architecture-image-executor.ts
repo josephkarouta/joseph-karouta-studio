@@ -521,16 +521,14 @@ export async function executeArchitectureImageGeneration(args: {
         if (!canonicalPlan) {
           throw new Error("Prepare and approve the Plan Foundation before generating a Direction visual.");
         }
-        const requiredTypes = requiredFloorVisualTypes(canonicalPlan);
         const rows = (planRows || []) as Array<Record<string, unknown>>;
-        planFoundationReferences = requiredTypes
-          .map((floorType) => approvedGeneratedPlanReference(
-            rows.find((row) => String(row.visual_type || "") === floorType),
-            `APPROVED ${floorType.replace(/_/g, " ")} — geometry authority for this exact building. The Direction must develop facade, roof, materials and landscape around this plan without changing its footprint, floor stacking, stair/core, entry, pool or site relationships.`,
-          ))
-          .filter((reference): reference is ArchitectureImageReference => Boolean(reference));
-        if (planFoundationReferences.length !== requiredTypes.length) {
-          throw new Error("Generate and approve every required floor plan before generating a Direction visual.");
+        const foundationReference = approvedGeneratedPlanReference(
+          rows.find((row) => String(row.visual_type || "") === "plan_foundation_sheet"),
+          "APPROVED PLAN FOUNDATION SHEET — ABSOLUTE geometry authority for this exact building. Every floor is shown together on this one coordinated sheet. The Direction must develop facade, roof, materials and landscape around this building without changing its floor relationships, stair/core, entry, pool, garage or site organization.",
+        );
+        planFoundationReferences = foundationReference ? [foundationReference] : [];
+        if (!foundationReference) {
+          throw new Error("Approve the coordinated Plan Foundation sheet before generating a Direction visual.");
         }
       }
 
@@ -948,22 +946,15 @@ export async function executeArchitectureImageGeneration(args: {
     if (!canonicalPlan && !sourceGeometryLocked) {
       throw new Error("Prepare and approve the connected floor plans before generating architectural visuals.");
     }
-    const requiredPlanTypes = requiredFloorVisualTypes(canonicalPlan);
     const projectPlanRows = (relatedVisuals || []) as Array<Record<string, unknown>>;
-    const missingApprovedPlans = sourceGeometryLocked
-      ? []
-      : requiredPlanTypes.filter((requiredType) => {
-          const row = projectPlanRows.find((item) => String(item.visual_type || "") === requiredType);
-          const rowMetadata = metadataRecord(row?.metadata);
-          const technicalAssets = metadataRecord(rowMetadata.technical_assets);
-          return !row || row.is_approved !== true || !(
-            technicalAssets.master_storage_path || technicalAssets.preview_url || row.image_url
-          );
-        });
-    if (missingApprovedPlans.length) {
-      throw new Error(
-        `Approve ${missingApprovedPlans.map((item) => item.replace(/_/g, " ")).join(" and ")} before generating visuals. Visuals must follow the approved floor plans.`,
-      );
+    const approvedFoundationSheet = sourceGeometryLocked
+      ? null
+      : approvedGeneratedPlanReference(
+          projectPlanRows.find((item) => String(item.visual_type || "") === "plan_foundation_sheet"),
+          "APPROVED PLAN FOUNDATION SHEET — ABSOLUTE geometry authority. Reconstruct the same building shown by all coordinated floors on this sheet. Preserve entry, garage, pool/site organization, vertical circulation and overall floor relationships.",
+        );
+    if (!sourceGeometryLocked && !approvedFoundationSheet) {
+      throw new Error("Approve the coordinated Plan Foundation sheet before generating visuals.");
     }
 
     const visualAssetKey = `${quality}_assets`;
@@ -981,18 +972,7 @@ export async function executeArchitectureImageGeneration(args: {
       : [];
     const approvedPlanReferences = sourceGeometryLocked
       ? []
-      : requiredPlanTypes.map((requiredType) => {
-          const planRow = rows.find((row) => String(row.visual_type || "") === requiredType);
-          const planMetadata = metadataRecord(planRow?.metadata);
-          const planAssets = metadataRecord(planMetadata.technical_assets);
-          return planRow
-            ? imageReference({
-                label: `APPROVED ${requiredType.replace(/_/g, " ")} — ABSOLUTE GEOMETRY SOURCE for this building. Preserve footprint, level stacking, stair/core, entry, pool/site relationship and circulation. Apply the Direction as style only.`,
-                storagePath: planAssets.master_storage_path,
-                url: planAssets.preview_url || planRow.image_url,
-              })
-            : null;
-        });
+      : approvedFoundationSheet ? [approvedFoundationSheet] : [];
     const tourPreviousType = group === "tour" && typeof visualMetadata.tour_previous_visual_type === "string"
       ? visualMetadata.tour_previous_visual_type
       : null;
@@ -1054,7 +1034,7 @@ export async function executeArchitectureImageGeneration(args: {
       sourceGeometryReferences: sourceGeometryLocked
         ? relevantSourceReferences
         : uniqueReferences(approvedPlanReferences),
-      preserveSourceGeometry: sourceGeometryLocked || approvedPlanReferences.filter(Boolean).length > 0,
+      preserveSourceGeometry: sourceGeometryLocked || approvedPlanReferences.length > 0,
       referenceImages: sourceGeometryLocked
         ? uniqueReferences([
             masterReference,

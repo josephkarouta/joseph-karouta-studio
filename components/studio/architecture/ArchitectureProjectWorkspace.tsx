@@ -3926,14 +3926,13 @@ function DirectionsTab({
   );
   const generatedPlanFoundationReady = Boolean(
     planSet &&
-    requiredFloorTypes.length > 0 &&
-    requiredFloorTypes.every((type) => {
-      const row = planRows.find((visual) => visual.visual_type === type);
+    (() => {
+      const foundation = planRows.find((visual) => visual.visual_type === "plan_foundation_sheet");
       return Boolean(
-        row?.is_approved &&
-        (assetPreviewUrl(recordValue(row.metadata).technical_assets) || row.image_url),
+        foundation?.is_approved &&
+        (assetPreviewUrl(recordValue(foundation.metadata).technical_assets) || foundation.image_url),
       );
-    }),
+    })(),
   );
   const organisedSourcePlanReady = documents.some((document) => Boolean(sourcePlanTypeFromCategory(document.category)));
   const planFoundationReady = project.workflow_mode === "plan_to_render"
@@ -4557,14 +4556,10 @@ function PlansTab({
   const canonicalPlan = recordValue(recordValue(planSet?.generation_json).canonical_plan);
   const canonicalLevels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
   const requiredFloorPlanTypes = floorPlanTypesForLevels(canonicalLevels);
-  const requiredFloorPlansReady = existingDesignSource || (
-    requiredFloorPlanTypes.length > 0 && requiredFloorPlanTypes.every((type) => {
-    const visual = planVisuals.find((item) => item.visual_type === type);
-      return Boolean(
-        visual?.is_approved &&
-        (assetPreviewUrl(recordValue(visual.metadata).technical_assets) || visual.image_url),
-      );
-    })
+  const foundationSheetVisual = planVisuals.find((item) => item.visual_type === "plan_foundation_sheet");
+  const requiredFloorPlansReady = existingDesignSource || Boolean(
+    foundationSheetVisual?.is_approved &&
+    (assetPreviewUrl(recordValue(foundationSheetVisual.metadata).technical_assets) || foundationSheetVisual.image_url),
   );
 
   function planGenerationLockReason(visual: ArchitectureVisual) {
@@ -4588,7 +4583,6 @@ function PlansTab({
 
   const planDisplayOrder = [
     "plan_foundation_sheet",
-    ...requiredFloorPlanTypes,
     "functional_zoning",
     "site_plan",
     "circulation",
@@ -4608,10 +4602,9 @@ function PlansTab({
     return index === -1 ? planDisplayOrder.length : index;
   }
 
-  const orderedPlanVisuals = [...planVisuals].sort(
-    (a, b) =>
-      planOrderIndex(a.visual_type) - planOrderIndex(b.visual_type),
-  );
+  const orderedPlanVisuals = planVisuals
+    .filter((visual) => !isCanonicalFloorVisualType(visual.visual_type))
+    .sort((a, b) => planOrderIndex(a.visual_type) - planOrderIndex(b.visual_type));
 
   function togglePlanSelection(visualId: string) {
     setSelectedPlanIds((current) => current.includes(visualId) ? current.filter((id) => id !== visualId) : [...current, visualId]);
@@ -4651,7 +4644,7 @@ function PlansTab({
             <strong>{existingDesignSource ? "Existing geometry stays locked." : "These are not permit drawings."}</strong>
             <span>{existingDesignSource
               ? "If you already have the plans you need, you can go directly to Visuals. Generate a detailed plan here only when you want a cleaned or presentation-ready redraw of the uploaded source."
-              : "Generate the required floor plans first and approve them. Those approved plans become the geometry source of truth for every Direction and Visual that follows."}</span>
+              : "Prepare one coordinated multi-floor Plan Foundation sheet and approve it once. That approved sheet becomes the geometry source of truth for every Direction and Visual that follows."}</span>
           </div>
         </div>
         <button type="button" className="primary-action" disabled={generating} onClick={onGenerate}>
@@ -4690,17 +4683,17 @@ function PlansTab({
             ? "Visuals and optional redraws use the uploaded source drawings first. Heyy Studio must preserve the existing footprint, layout, stairs, openings and level relationships."
             : requiredFloorPlansReady
               ? "Previews, professional finals, elevations, sections and project visuals can now use the approved floor-plan geometry."
-              : `All required floors were rendered together from one canonical model. Review them, then approve the required floor plans. Required floors: ${requiredFloorPlanTypes.map((item) => floorPlanDisplayName(item, canonicalLevels)).join(", ")}.`}</span>
+              : `All required floors are generated together on one professional Plan Foundation sheet. Review the whole building, then approve the sheet once.`}</span>
         </div>
         <div className="credit-legend">
-          <span>Canonical floor plans · included with Plan Foundation</span>
+          <span>One coordinated multi-floor sheet · included with Plan Foundation</span>
           <span>Other derived views · generated separately</span>
           <b>{existingDesignSource ? "Source geometry locked" : requiredFloorPlansReady ? "Plans approved" : "Approval required"}</b>
         </div>
       </div>
 
       <div className="plan-batch-panel surface-card">
-        <div><strong>Generate derived documentation</strong><span>The coordinated floor plans above are already locked to one canonical model. Use batch generation only for additional diagrams, elevations, sections and perspectives.</span></div>
+        <div><strong>Generate derived documentation</strong><span>The approved Plan Foundation sheet is the building geometry reference. Use batch generation only for additional diagrams, elevations, sections and perspectives.</span></div>
         <div className="plan-batch-actions">
           <button type="button" className="secondary-action" disabled={!selectedPlanIds.length || batchRunning !== null || regeneratingImage !== null} onClick={() => void runPlanBatch("technical")}>{batchRunning === "technical" ? "Generating Queue..." : `Generate Selected Detailed Plans · ${ARCHITECTURE_CREDIT_COSTS.technicalPlan} each`}</button>
           <button type="button" className="primary-action" disabled={!selectedPlanIds.length || batchRunning !== null || regeneratingImage !== null} onClick={() => void runPlanBatch("rendered")}>{batchRunning === "rendered" ? "Generating Queue..." : `Generate Selected Previews · ${ARCHITECTURE_CREDIT_COSTS.renderedPlanPreview} each`}</button>
@@ -5137,14 +5130,19 @@ function PlanVisualCard({
       )}
       {loading && <ImageGenerationOverlay title={viewMode === "rendered" ? "Generating rendered plan" : "Generating detailed concept plan"} detail={generationStatus} />}
       <div className="plan-card-copy">
-        <span>{foundationSheet ? "One coordinated building model" : canonicalFloor ? "Deterministic canonical floor" : viewMode === "rendered" ? "Rendered Preview" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
+        <span>{foundationSheet ? "One coordinated multi-floor Plan Foundation" : canonicalFloor ? "Internal canonical floor" : viewMode === "rendered" ? "Rendered Preview" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
         <h3>{visual.title || visual.visual_type}</h3>
       </div>
       <div className="plan-card-actions">
         {foundationSheet ? (
-          <button type="button" className="image-regenerate-button plan-generation-locked" disabled>
-            Rebuild with Refresh Plan Foundation
-          </button>
+          <>
+            <button type="button" className="image-regenerate-button plan-generation-locked" disabled>
+              Rebuild with Refresh Plan Foundation
+            </button>
+            {technicalUrl && <button type="button" className="visual-approve-button" data-approved={visual.is_approved ? "true" : "false"} disabled={anyGenerating || approving} onClick={onApprove}>
+              {approving ? "Saving..." : visual.is_approved ? "Plan Foundation approved ✓" : "Approve Plan Foundation"}
+            </button>}
+          </>
         ) : canonicalFloor ? null : !renderedOnly && generationLockReason && !technicalUrl ? (
           <button type="button" className="image-regenerate-button plan-generation-locked" disabled>
             {generationLockReason}
