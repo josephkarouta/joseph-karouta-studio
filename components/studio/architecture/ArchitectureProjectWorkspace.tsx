@@ -3938,7 +3938,7 @@ function DirectionsTab({
   const planFoundationReady = project.workflow_mode === "plan_to_render"
     ? organisedSourcePlanReady
     : generatedPlanFoundationReady;
-  const directionReady = briefReady && siteReady && planningAdded && materialReady && planFoundationReady;
+  const directionReady = briefReady && planningAdded && materialReady && planFoundationReady;
   const selectedDirection = directions.find((direction) => direction.is_selected);
   const [lightbox, setLightbox] = useState<{ url: string; title: string } | null>(null);
   const [expandedDirections, setExpandedDirections] = useState<string[]>([]);
@@ -4002,11 +4002,13 @@ function DirectionsTab({
         />
         <DirectionReadinessItem
           label="Land & site"
-          complete={siteReady}
+          complete={siteReady || planFoundationReady}
           detail={
             siteReady
               ? `${formatMeasurement(site.plot_area, "m²")} · ${site.terrain || "Terrain not set"}`
-              : "Add the country and available site information"
+              : planFoundationReady
+                ? "Approved Plan Foundation already contains the locked building/site geometry"
+                : "Add the country and available site information"
           }
         />
         <DirectionReadinessItem
