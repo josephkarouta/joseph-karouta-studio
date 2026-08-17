@@ -1145,6 +1145,206 @@ function roomsShareOpeningWall(
     && canonicalOverlap(Number(source.y), sourceY2, Number(target.y), targetY2) > 0.75;
 }
 
+type CanonicalOpeningWall = "north" | "south" | "east" | "west";
+
+function sharedOpeningWall(
+  source: CanonicalPlanRoom,
+  target: CanonicalPlanRoom,
+): CanonicalOpeningWall | null {
+  const walls: CanonicalOpeningWall[] = ["north", "south", "east", "west"];
+  return walls.find((wall) => roomsShareOpeningWall(source, target, wall)) || null;
+}
+
+function roomTouchesLevelBoundary(
+  room: CanonicalPlanRoom,
+  level: CanonicalPlanLevel,
+): CanonicalOpeningWall | null {
+  const outline = Array.isArray(level.outline) && level.outline.length >= 4
+    ? level.outline
+    : [];
+  if (!outline.length) return null;
+  const bounds = pointBounds(outline);
+  const tolerance = 1.5;
+  const roomX2 = Number(room.x) + Number(room.width);
+  const roomY2 = Number(room.y) + Number(room.height);
+  if (Math.abs(Number(room.y) - bounds.minY) <= tolerance) return "north";
+  if (Math.abs(roomY2 - bounds.maxY) <= tolerance) return "south";
+  if (Math.abs(Number(room.x) - bounds.minX) <= tolerance) return "west";
+  if (Math.abs(roomX2 - bounds.maxX) <= tolerance) return "east";
+  return null;
+}
+
+function roomAccessPreference(source: CanonicalPlanRoom, target: CanonicalPlanRoom) {
+  const sourceName = source.name.toLowerCase();
+  const targetName = target.name.toLowerCase();
+  if (/corridor|hall|landing|lobby|foyer|entry|circulation/.test(targetName)) return 0;
+  if (/bath|toilet|powder|ensuite|wc/.test(sourceName) && /bed|suite/.test(targetName)) return 1;
+  if (/storage|pantry/.test(sourceName) && /kitchen|service|utility/.test(targetName)) return 1;
+  if (/laundry|utility/.test(sourceName) && /kitchen|garage|service/.test(targetName)) return 1;
+  if (/garage|carport/.test(sourceName) && /foyer|entry|hall|mud|utility|laundry/.test(targetName)) return 1;
+  if (/living|dining|family|lounge|kitchen/.test(targetName)) return 2;
+  if (/bed|office|study|gym/.test(targetName)) return 4;
+  return 3;
+}
+
+function sharedWallOverlap(
+  source: CanonicalPlanRoom,
+  target: CanonicalPlanRoom,
+  wall: CanonicalOpeningWall,
+) {
+  const sourceX2 = Number(source.x) + Number(source.width);
+  const sourceY2 = Number(source.y) + Number(source.height);
+  const targetX2 = Number(target.x) + Number(target.width);
+  const targetY2 = Number(target.y) + Number(target.height);
+  return wall === "north" || wall === "south"
+    ? canonicalOverlap(Number(source.x), sourceX2, Number(target.x), targetX2)
+    : canonicalOverlap(Number(source.y), sourceY2, Number(target.y), targetY2);
+}
+
+/**
+ * Normalise access metadata against the actual canonical rectangles before
+ * validation/rendering. The model is good at room programming but can return
+ * a correct adjacency with the wrong wall label, or omit a door record even
+ * when two rooms physically share a wall. We repair only what the geometry
+ * can prove; we never invent a connection between non-adjacent rooms.
+ */
+function repairCanonicalPlanAccess(planSet: LivePlanSet): LivePlanSet {
+  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
+  const levels = repaired.canonical_plan?.levels || [];
+
+  levels.forEach((level, levelIndex) => {
+    const rooms = level.rooms || [];
+    const roomById = new Map(rooms.map((room) => [room.id, room]));
+    const externalTarget = /outside|exterior|entry|garden|terrace|balcony|pool|driveway|site/i;
+
+    const validDoorOpenings: NonNullable<CanonicalPlanLevel["openings"]> = [];
+    const openingIds = new Set<string>();
+
+    for (const opening of level.openings || []) {
+      if (!/door/.test(opening.type)) {
+        validDoorOpenings.push(opening);
+        openingIds.add(opening.id);
+        continue;
+      }
+
+      const source = roomById.get(opening.room_id);
+      if (!source) continue;
+      const destination = String(opening.connects_to || "");
+      const target = roomById.get(destination);
+
+      if (target) {
+        const actualWall = sharedOpeningWall(source, target);
+        if (!actualWall) continue;
+        validDoorOpenings.push({ ...opening, wall: actualWall });
+        openingIds.add(opening.id);
+        continue;
+      }
+
+      if (externalTarget.test(destination)) {
+        const boundaryWall = roomTouchesLevelBoundary(source, level);
+        if (!boundaryWall) continue;
+        validDoorOpenings.push({ ...opening, wall: boundaryWall, connects_to: destination || "outside" });
+        openingIds.add(opening.id);
+      }
+    }
+
+    // Keep only circulation relationships that the actual room geometry can support.
+    const repairedCirculation = (level.circulation || []).filter((link) => {
+      const source = roomById.get(link.from_room_id);
+      const target = roomById.get(link.to_room_id);
+      return Boolean(source && target && sharedOpeningWall(source, target));
+    });
+    const circulationKeys = new Set(repairedCirculation.map((link) => `${link.from_room_id}|${link.to_room_id}`));
+
+    function ensureCirculation(source: CanonicalPlanRoom, target: CanonicalPlanRoom) {
+      const forward = `${source.id}|${target.id}`;
+      const reverse = `${target.id}|${source.id}`;
+      if (circulationKeys.has(forward) || circulationKeys.has(reverse)) return;
+      repairedCirculation.push({
+        from_room_id: source.id,
+        to_room_id: target.id,
+        label: `${source.name} to ${target.name}`,
+      });
+      circulationKeys.add(forward);
+    }
+
+    // Every valid internal door must also have a circulation relationship so
+    // the deterministic renderer draws exactly the same physical opening.
+    for (const opening of validDoorOpenings) {
+      if (!/door/.test(opening.type)) continue;
+      const source = roomById.get(opening.room_id);
+      const target = roomById.get(String(opening.connects_to || ""));
+      if (source && target) ensureCirculation(source, target);
+    }
+
+    for (const room of rooms) {
+      if (isOutdoorCanonicalRoom(room)) continue;
+      const alreadyAccessible = validDoorOpenings.some((opening) =>
+        opening.room_id === room.id && /door/.test(opening.type),
+      );
+      if (alreadyAccessible) continue;
+
+      const candidates = rooms
+        .filter((candidate) => candidate.id !== room.id)
+        .map((candidate) => {
+          const wall = sharedOpeningWall(room, candidate);
+          return wall ? {
+            room: candidate,
+            wall,
+            score: roomAccessPreference(room, candidate),
+            overlap: sharedWallOverlap(room, candidate, wall),
+          } : null;
+        })
+        .filter((candidate): candidate is { room: CanonicalPlanRoom; wall: CanonicalOpeningWall; score: number; overlap: number } => Boolean(candidate))
+        .sort((a, b) => a.score - b.score || b.overlap - a.overlap);
+
+      const best = candidates[0];
+      if (best) {
+        let id = `auto-door-${levelIndex}-${room.id}-${best.room.id}`;
+        let suffix = 2;
+        while (openingIds.has(id)) id = `auto-door-${levelIndex}-${room.id}-${best.room.id}-${suffix++}`;
+        validDoorOpenings.push({
+          id,
+          type: "door",
+          room_id: room.id,
+          wall: best.wall,
+          position: 0.5,
+          width_m: /garage|carport/.test(room.name.toLowerCase()) ? 1.1 : 0.9,
+          connects_to: best.room.id,
+        });
+        openingIds.add(id);
+        ensureCirculation(room, best.room);
+        continue;
+      }
+
+      // Exterior access is a conservative last fallback only when the room
+      // demonstrably touches the level perimeter. Internal rooms are left
+      // unresolved so the correction pass must repair their geometry.
+      const boundaryWall = roomTouchesLevelBoundary(room, level);
+      if (boundaryWall) {
+        let id = `auto-exterior-door-${levelIndex}-${room.id}`;
+        let suffix = 2;
+        while (openingIds.has(id)) id = `auto-exterior-door-${levelIndex}-${room.id}-${suffix++}`;
+        validDoorOpenings.push({
+          id,
+          type: "door",
+          room_id: room.id,
+          wall: boundaryWall,
+          position: 0.5,
+          width_m: 0.9,
+          connects_to: "outside",
+        });
+        openingIds.add(id);
+      }
+    }
+
+    level.openings = validDoorOpenings;
+    level.circulation = repairedCirculation;
+  });
+
+  return repaired;
+}
+
 function geometryCoordinationIssues(args: {
   planSet: LivePlanSet;
   project: Record<string, unknown>;
@@ -2044,7 +2244,7 @@ export async function generateArchitecturePlanSet(args: {
     payload,
   });
 
-  let value = first.value;
+  let value = repairCanonicalPlanAccess(first.value);
   let correctionUsage: unknown = null;
   let correctionAuditUsage: unknown = null;
 
@@ -2088,7 +2288,7 @@ export async function generateArchitecturePlanSet(args: {
         correction_attempt: correctionAttempt,
       },
     });
-    value = corrected.value;
+    value = repairCanonicalPlanAccess(corrected.value);
     correctionUsages.push(corrected.usage);
 
     deterministicIssues = [
