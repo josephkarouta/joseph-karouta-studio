@@ -1713,6 +1713,7 @@ export async function generateArchitectureDirection(args: {
   site: Record<string, unknown> | null;
   planning: Record<string, unknown> | null;
   selectedMaterials: Array<Record<string, unknown>>;
+  planFoundation?: Record<string, unknown> | null;
 }) {
   const letter = String.fromCharCode(64 + args.directionNumber);
   const projectType = String(args.project.project_type || "Other");
@@ -1724,6 +1725,9 @@ export async function generateArchitectureDirection(args: {
     system: [
       "You are Heyy Studio's senior conceptual architect.",
       "Create one clearly differentiated architectural direction from the supplied project data.",
+      args.planFoundation
+        ? "PLAN-FIRST MODE: the approved plan foundation already defines the building geometry. Do not invent, move, rotate, enlarge, shrink or replace the footprint, storeys, vertical cores, pool/site placement, entry relationship or major indoor-outdoor layout. Develop architectural character around that exact plan foundation."
+        : "No approved plan foundation was supplied; use the saved project information conservatively.",
       `This is a ${projectType} project. Never default to residential language unless the project type is residential.`,
       `Focus on the correct users, operations and spatial priorities: ${template.directionFocus.join(", ")}.`,
       "Treat explicit user capacity and floor-count inputs as hard design requirements, not optional inspiration.",
@@ -1744,6 +1748,10 @@ export async function generateArchitectureDirection(args: {
       project: args.project,
       site: args.site,
       planning_assumptions: args.planning,
+      approved_plan_foundation: args.planFoundation || null,
+      plan_first_geometry_rule: args.planFoundation
+        ? "The approved plan foundation is the geometry source of truth. Directions may vary facade language, roof expression, materials, openings treatment, shading, landscape character and atmosphere, but may not redesign the plan geometry or site relationships."
+        : null,
       selected_materials: args.selectedMaterials,
       project_type_template: template,
       hard_project_requirements: {
@@ -1888,6 +1896,7 @@ export async function generateArchitecturePlanSet(args: {
   planning: Record<string, unknown> | null;
   selectedMaterials: Array<Record<string, unknown>>;
   spaceProgram: Array<Record<string, unknown>>;
+  planFoundationMode?: boolean;
   existingPlan?: LivePlanSet;
   adjustmentInstruction?: string;
   adjustmentScope?: "local_area" | "current_floor" | "all_connected";
@@ -1937,9 +1946,15 @@ export async function generateArchitecturePlanSet(args: {
     "Define representative fixtures/equipment appropriate to the actual project and to measurable requirements, so the detailed plan can visually demonstrate that the brief was satisfied.",
     "Define at least two perpendicular architectural section cuts in canonical_plan.section_cuts. Label them A—A and B—B, specify the cut axis and viewing direction, and list the rooms crossed by each cut.",
     "At least one section cut must pass through the principal vertical circulation so the section can show floor-to-floor relationships.",
-    "All levels must align vertically and describe one single building represented by the selected Architecture Direction and Architecture DNA.",
-    "Translate architecture_dna.massing, roof_form, entry_expression and visual_prompt_anchor into one explicit canonical building_outline polygon. The master outline is the geometry lock for the building massing; do not let each floor invent its own unrelated perimeter.",
-    "Every level must return level.outline. The ground-floor outline should normally match the master building_outline. Upper floors may step back or omit wings only when that is consistent with the selected Direction massing; they must remain inside the master outline.",
+    args.planFoundationMode
+      ? "PLAN-FIRST MODE IS ACTIVE. The Canonical Plan you create now becomes the geometry source of truth for every later Architecture Direction, Concept/Visual and Design Pack. Do not depend on a design direction to define this plan. Derive geometry from the user brief, site, planning information, Space Program and Requirement Contract."
+      : "All levels must align vertically and describe one single building represented by the selected Architecture Direction and Architecture DNA.",
+    args.planFoundationMode
+      ? "Create one explicit canonical building_outline polygon from the site envelope, programme, access, outdoor requirements and room relationships. Choose a coherent footprint that satisfies the brief; this footprint will be locked before style directions are generated."
+      : "Translate architecture_dna.massing, roof_form, entry_expression and visual_prompt_anchor into one explicit canonical building_outline polygon. The master outline is the geometry lock for the building massing; do not let each floor invent its own unrelated perimeter.",
+    args.planFoundationMode
+      ? "Every level must return level.outline. Ground defines the primary footprint. Upper floors must stack logically over the lower floor, stay within the master outline unless a legitimate cantilever is explicitly required, and keep stairs/cores aligned exactly."
+      : "Every level must return level.outline. The ground-floor outline should normally match the master building_outline. Upper floors may step back or omit wings only when that is consistent with the selected Direction massing; they must remain inside the master outline.",
     "Create canonical_plan.vertical_cores as master coordinates for stairs, lifts and shafts. These are NOT level-specific suggestions. Every served floor must use the exact same x, y, width and height for the same core.",
     "The legacy level.stairs entries must mirror the corresponding master stair core coordinates exactly so old renderers and section logic remain compatible.",
     "Create canonical_plan.circulation_routes as real geometric route spines with points on the same 0-100 grid. Routes that serve several floors preserve the same geometric spine on those floors unless the programme explicitly requires a transfer.",
@@ -1968,9 +1983,12 @@ export async function generateArchitecturePlanSet(args: {
 
   const payload: Record<string, unknown> = {
     project: args.project,
-    selected_direction: args.direction,
+    workflow_authority: args.planFoundationMode
+      ? "PLAN FOUNDATION: geometry is being established before any style direction."
+      : "SELECTED DIRECTION: geometry must remain coordinated with the approved direction.",
+    selected_direction: args.planFoundationMode ? null : args.direction,
     architecture_dna: args.architectureDna,
-    concept: args.concept,
+    concept: args.planFoundationMode ? null : args.concept,
     site: args.site,
     planning_assumptions: args.planning,
     selected_materials: args.selectedMaterials,
@@ -1999,8 +2017,12 @@ export async function generateArchitecturePlanSet(args: {
       coordinate_system: "0-100 relative site grid using most of the available canvas",
       room_geometry: "No overlapping room rectangles. Shared walls should align. Keep coordinates and dimensions practical and readable.",
       requirement_evidence: "Every hard plan requirement must have explicit evidence in the canonical model. Quantities use capacity_type/capacity_count or countable rooms/fixtures; relationships use circulation/openings/level placement/site elements.",
-      same_property_rule: "Every level and diagram is the same property and uses one locked master building outline, one site arrangement and one coordinated massing logic derived from the selected Direction.",
-      building_outline_rules: "building_outline is the master massing footprint polygon. Every level.outline is coordinated to it; ground normally matches it and upper levels may only step back within it when consistent with the selected Architecture DNA.",
+      same_property_rule: args.planFoundationMode
+        ? "Every level and diagram is the same property and uses one locked master building outline and site arrangement. This plan foundation will control all later Directions and Visuals."
+        : "Every level and diagram is the same property and uses one locked master building outline, one site arrangement and one coordinated massing logic derived from the selected Direction.",
+      building_outline_rules: args.planFoundationMode
+        ? "building_outline is the master geometry authority created from the brief/site/programme. Ground normally matches it; upper levels must coordinate vertically and preserve cores. Later design directions are not allowed to replace it."
+        : "building_outline is the master massing footprint polygon. Every level.outline is coordinated to it; ground normally matches it and upper levels may only step back within it when consistent with the selected Architecture DNA.",
       opening_rules: "Every enclosed room has an explicit door in level.openings and a valid circulation/access path; occupied rooms have appropriate exterior openings where relevant; required access/separation is explicit.",
       vertical_rules: "vertical_cores are master coordinates. The same stair/lift/shaft has identical x, y, width and height on every served level; level.stairs mirrors master stair cores exactly.",
       circulation_geometry: "circulation_routes contain geometric route spines on the same 0-100 grid so circulation is coordinated across floors instead of being redrawn independently.",
@@ -2050,7 +2072,9 @@ export async function generateArchitecturePlanSet(args: {
         "For geometry failures, repair the canonical geometry itself: building_outline, level.outline, master vertical_cores, mirrored level.stairs, circulation_routes, room coordinates and explicit openings. Do not explain that they should align; make the coordinates align.",
         "If a room is inaccessible, add or correct a real opening and circulation connection. If a stair/core moves between levels, move the level stair back onto the exact master-core coordinates.",
         "If a capacity target is distributed across several spaces or floors, make the explicit capacity_count values sum to the required target without double counting the same physical capacity.",
-        "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements and the selected Architecture DNA.",
+        args.planFoundationMode
+          ? "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements and the locked plan-foundation geometry relationships."
+          : "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements and the selected Architecture DNA.",
       ].join(" "),
       payload: {
         ...payload,
@@ -2136,13 +2160,13 @@ export async function generateArchitectureVisualPrompts(args: {
       `The gallery must reflect these priorities: ${template.directionFocus.join(", ")}.`,
       existingDesignSource
         ? "This is an Existing Design / Plan-to-Visual workflow. The uploaded drawings will be supplied directly to the image editor as authoritative geometry. Do not describe or invent a specific footprint, room layout, stair position, opening pattern, roof geometry or massing that is not explicitly stated by the user."
-        : "The selected direction image is the Master Architecture Reference and will be supplied to the image editor.",
+        : "This is a PLAN-FIRST new-design workflow. The approved floor plans and Canonical Plan are the geometry source of truth. The selected Direction image is a style, facade, roof, material and landscape reference only and must never replace the approved plan geometry.",
       existingDesignSource
         ? "Prompts should describe only the requested camera/view, material character, atmosphere, lighting, landscape treatment and functional experience. Always say to reconstruct the exact uploaded design."
-        : "Every prompt must explicitly preserve the Architecture DNA and must not redesign the building.",
+        : "Every prompt must explicitly preserve the approved plan footprint, floor stacking, stair/core positions, entry, pool/site relationship and circulation while applying the selected Direction's architectural language.",
       existingDesignSource
         ? "Do not rely on a generated canonical plan, concept render or direction render to define geometry."
-        : "Aerial and site-related views must respect the Canonical Plan Specification.",
+        : "All views, especially aerial and site-related views, must be derived from the approved plan geometry. Do not invent a U-shape, courtyard, wing, pool location, entry or massing relationship that conflicts with the approved plans.",
       "Night views must be a lighting transformation of the same day-time architecture, not a new design.",
       "Use stable snake_case visual_type values.",
       safetyInstruction,
@@ -2169,7 +2193,8 @@ export async function generateArchitectureVisualPrompts(args: {
           selected_direction: args.direction,
           architecture_dna: args.architectureDna,
           canonical_plan: args.canonicalPlan,
-          concept: args.concept,
+          concept: null,
+          geometry_authority: "Approved floor plans and canonical plan. Selected Direction controls architectural expression only.",
           site: args.site,
           selected_materials: args.selectedMaterials,
           requested_views: requestedViews,
@@ -2274,12 +2299,12 @@ function continuityPrompt(args: {
 
   return [
     sourceLocked
-      ? "EXISTING DESIGN MODE. THE SOURCE DRAWINGS ARE THE ABSOLUTE GEOMETRY SOURCE OF TRUTH."
+      ? "GEOMETRY-LOCKED MODE. THE SOURCE GEOMETRY IMAGES ARE THE ABSOLUTE BUILDING GEOMETRY SOURCE OF TRUTH."
       : "VISUAL CONTINUITY IS THE HIGHEST PRIORITY.",
     sourceList,
     referenceList,
     sourceLocked
-      ? "The SOURCE GEOMETRY references come first and override every later style, direction, concept or previous-render reference if there is any conflict. Preserve the visible footprint, storey count, floor relationships, stairs, external walls, openings, roof/profile information, setbacks and spatial arrangement. Do not copy geometry from STYLE / CONTINUITY references."
+      ? "The SOURCE GEOMETRY references come first and override every later style, direction, concept or previous-render reference if there is any conflict. They may be uploaded source drawings or approved Heyy Studio floor plans. Preserve the visible footprint, storey count, floor relationships, stairs/cores, external walls, entry, pool/site relationship, setbacks and spatial arrangement. Do not copy replacement geometry from STYLE / CONTINUITY references."
       : args.referenceImages.length
         ? "Reference 1 is the Master Architecture Reference unless explicitly labelled otherwise. Preserve the same property identity."
         : "",
@@ -2290,7 +2315,7 @@ function continuityPrompt(args: {
         : "",
     args.targetRole ? `TARGET ROLE — ${args.targetRole}` : "",
     sourceLocked
-      ? "Translate the existing technical drawings into the requested architectural visual. If information is not shown in the drawings, keep the interpretation conservative and do not invent a different building."
+      ? "Translate the locked geometry into the requested architectural visual. If information is not resolved by the geometry references, use the selected Direction only to develop facade, roof, materials, openings, landscape character and atmosphere without changing the plan-established building."
       : "Do not invent a new house. Preserve the same massing, storey count, roof geometry, facade rhythm, window proportions, material placement, terraces, entry expression, pool relationship and landscape language.",
     "Only change the requested camera, diagram role, lighting, atmosphere or presentation treatment.",
     args.prompt,

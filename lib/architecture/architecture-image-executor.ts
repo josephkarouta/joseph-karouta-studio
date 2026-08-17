@@ -218,6 +218,38 @@ function uniqueReferences(values: Array<ArchitectureImageReference | null>) {
   }).slice(0, 6);
 }
 
+function floorVisualTypeForIndex(index: number) {
+  if (index <= 0) return "ground_floor";
+  if (index === 1) return "upper_floor";
+  return `level_${index}_floor`;
+}
+
+function floorIndexFromVisualType(visualType: string) {
+  if (visualType === "ground_floor") return 0;
+  if (visualType === "upper_floor") return 1;
+  const match = visualType.match(/^level_(\d+)_floor$/);
+  return match ? Number(match[1]) : null;
+}
+
+function requiredFloorVisualTypes(canonicalPlan: CanonicalPlanSpec | null) {
+  const count = Math.max(1, Array.isArray(canonicalPlan?.levels) ? canonicalPlan.levels.length : 1);
+  return Array.from({ length: count }, (_, index) => floorVisualTypeForIndex(index));
+}
+
+function approvedGeneratedPlanReference(
+  row: Record<string, unknown> | undefined,
+  label: string,
+) {
+  if (!row || row.is_approved !== true) return null;
+  const metadata = metadataRecord(row.metadata);
+  const technical = metadataRecord(metadata.technical_assets);
+  return imageReference({
+    label,
+    storagePath: technical.master_storage_path || row.storage_path,
+    url: technical.preview_url || row.image_url,
+  });
+}
+
 type SourceDocumentRecord = Record<string, unknown>;
 
 function sourceReferenceFingerprint(documents: SourceDocumentRecord[]) {
@@ -465,10 +497,43 @@ export async function executeArchitectureImageGeneration(args: {
         throw new Error("This direction has no saved image prompt. Regenerate the direction text first.");
       }
       const currentReference = imageReference({
-        label: "Current Direction image. Preserve this direction identity while refining the visual.",
+        label: "Current Direction image. Preserve this direction's architectural expression while refining it.",
         storagePath: direction.image_storage_path,
         url: direction.image_url,
       });
+
+      let planFoundationReferences: ArchitectureImageReference[] = [];
+      if (!sourceGeometryLocked) {
+        const [{ data: planSet }, { data: planRows }] = await Promise.all([
+          supabase
+            .from("architecture_plan_sets")
+            .select("generation_json")
+            .eq("project_id", projectId)
+            .eq("user_id", authenticatedUserId)
+            .maybeSingle(),
+          supabase
+            .from("architecture_visuals")
+            .select("id,visual_type,image_url,storage_path,is_approved,metadata")
+            .eq("project_id", projectId)
+            .eq("user_id", authenticatedUserId),
+        ]);
+        const canonicalPlan = canonicalPlanFrom(metadataRecord(planSet?.generation_json));
+        if (!canonicalPlan) {
+          throw new Error("Prepare and approve the Plan Foundation before generating a Direction visual.");
+        }
+        const requiredTypes = requiredFloorVisualTypes(canonicalPlan);
+        const rows = (planRows || []) as Array<Record<string, unknown>>;
+        planFoundationReferences = requiredTypes
+          .map((floorType) => approvedGeneratedPlanReference(
+            rows.find((row) => String(row.visual_type || "") === floorType),
+            `APPROVED ${floorType.replace(/_/g, " ")} — geometry authority for this exact building. The Direction must develop facade, roof, materials and landscape around this plan without changing its footprint, floor stacking, stair/core, entry, pool or site relationships.`,
+          ))
+          .filter((reference): reference is ArchitectureImageReference => Boolean(reference));
+        if (planFoundationReferences.length !== requiredTypes.length) {
+          throw new Error("Generate and approve every required floor plan before generating a Direction visual.");
+        }
+      }
+
       const generated = await paidGenerate(quality === "final" ? "architectureProfessionalFinal" : "architectureDirection", { target: "direction", quality }, () => generateAndStoreArchitectureImage({
         supabase,
         userId: authenticatedUserId,
@@ -480,14 +545,12 @@ export async function executeArchitectureImageGeneration(args: {
           : savedPrompt,
         plan,
         architectureDna: sourceGeometryLocked ? null : fallbackArchitectureDna(direction as Record<string, unknown>),
-        sourceGeometryReferences: sourceGeometryLocked ? sourceDrawingReferences : [],
-        preserveSourceGeometry: sourceGeometryLocked,
-        referenceImages: sourceGeometryLocked
-          ? []
-          : uniqueReferences([currentReference]),
+        sourceGeometryReferences: sourceGeometryLocked ? sourceDrawingReferences : planFoundationReferences,
+        preserveSourceGeometry: sourceGeometryLocked || planFoundationReferences.length > 0,
+        referenceImages: uniqueReferences([currentReference]),
         targetRole: sourceGeometryLocked
-          ? "Create a STYLE / MATERIAL DIRECTION BOARD only. The source drawings define the actual building and this direction image must not establish replacement geometry."
-          : "Refine this Architecture Direction without changing its core identity.",
+          ? "Create a STYLE / MATERIAL DIRECTION BOARD only. The uploaded source drawings define the actual building and this direction image must not establish replacement geometry."
+          : "Create this Architecture Direction as an architectural expression of the APPROVED PLAN FOUNDATION. Keep the approved plan geometry fixed; develop only facade composition, roof expression compatible with that footprint, materials, openings, landscape character and atmosphere.",
         tier: quality,
       }));
       imageUrl = generated.imageUrl;
@@ -541,19 +604,23 @@ export async function executeArchitectureImageGeneration(args: {
     return { success: true, mode, targetType, quality, direction: updated };
   }
 
-  const masterDirection = await loadSelectedDirection(supabase, project, authenticatedUserId);
-  const masterDirectionJson = metadataRecord(masterDirection.generation_json);
-  const masterReference = imageReference({
-    label: "Master Architecture Reference. This exact property identity must be preserved.",
-    storagePath: preferredMasterPath(masterDirectionJson, masterDirection.image_storage_path),
-    url: masterDirection.image_url,
-  });
-
-  if (!masterReference && mode !== "demo" && !sourceGeometryLocked) {
-    throw new Error("The selected direction has no generated Master Architecture Reference image.");
-  }
+  const masterDirection = project.selected_direction_id
+    ? await loadSelectedDirection(supabase, project, authenticatedUserId)
+    : null;
+  const masterDirectionJson = metadataRecord(masterDirection?.generation_json);
+  const masterReference = masterDirection
+    ? imageReference({
+        label: "Selected Architecture Direction. Apply its facade, roof, materials, openings, landscape character and atmosphere WITHOUT changing the approved plan geometry.",
+        storagePath: preferredMasterPath(masterDirectionJson, masterDirection.image_storage_path),
+        url: masterDirection.image_url,
+      })
+    : null;
 
   if (targetType === "concept") {
+    if (!masterDirection) throw new Error("Select an Architecture Direction before preparing concept content.");
+    if (!masterReference && !sourceGeometryLocked) {
+      throw new Error("The selected direction has no generated Direction image.");
+    }
     const { data: concept, error } = await supabase
       .from("architecture_concepts")
       .select("*")
@@ -719,8 +786,10 @@ export async function executeArchitectureImageGeneration(args: {
     }
     const architectureDna =
       architectureDnaFrom(planJson) ||
-      architectureDnaFrom(visualMetadata) ||
-      fallbackArchitectureDna(masterDirection);
+      architectureDnaFrom(visualMetadata);
+    if (!architectureDna) {
+      throw new Error("The Plan Foundation is missing its geometry context. Refresh Plan Content & Prompts.");
+    }
 
     const { data: siblingPlanRows } = await supabase
       .from("architecture_visuals")
@@ -757,9 +826,9 @@ export async function executeArchitectureImageGeneration(args: {
         areaSchedule: Array.isArray(planSet.area_schedule) ? planSet.area_schedule : [],
         plan,
         tier: quality,
-        referenceImages: uniqueReferences([masterReference, currentRenderedReference]),
-        sourceGeometryReferences: sourceDrawingReferences,
-        preserveSourceGeometry: sourceGeometryLocked,
+        referenceImages: uniqueReferences([currentRenderedReference]),
+        sourceGeometryReferences: [],
+        preserveSourceGeometry: false,
       }));
       imageUrl = generated.imageUrl;
       storagePath = generated.storagePath;
@@ -787,18 +856,20 @@ export async function executeArchitectureImageGeneration(args: {
         url: currentTechnical.preview_url,
       });
       const visualType = String(visual.visual_type || "ground_floor");
-      const coordinatedFloorReferences = ["ground_floor", "upper_floor"].map((floorType) => {
-        const floor = siblingPlans.find((row) => String(row.visual_type || "") === floorType);
-        const floorMetadata = metadataRecord(floor?.metadata);
-        const floorTechnical = metadataRecord(floorMetadata.technical_assets);
-        return floor
-          ? imageReference({
-              label: `${floorType.replace(/_/g, " ")} of the same project. Align footprint, stairs, wet cores, facade openings and vertical structure where relevant.`,
-              storagePath: floorTechnical.master_storage_path,
-              url: floorTechnical.preview_url || floor.image_url,
-            })
-          : null;
-      });
+      const targetFloorIndex = floorIndexFromVisualType(visualType);
+      const allRequiredFloorTypes = requiredFloorVisualTypes(canonicalPlan);
+      const connectedFloorTypes = targetFloorIndex === null
+        ? allRequiredFloorTypes
+        : allRequiredFloorTypes.slice(0, targetFloorIndex);
+      const coordinatedFloorReferences = connectedFloorTypes.map((floorType) =>
+        approvedGeneratedPlanReference(
+          siblingPlans.find((row) => String(row.visual_type || "") === floorType),
+          `APPROVED ${floorType.replace(/_/g, " ")} from the same Plan Foundation. Preserve its orientation, footprint relationship, vertical core, circulation and level stacking.`,
+        ),
+      );
+      if (targetFloorIndex !== null && targetFloorIndex > 0 && coordinatedFloorReferences.filter(Boolean).length !== connectedFloorTypes.length) {
+        throw new Error(`Approve the lower floor plan${targetFloorIndex > 1 ? "s" : ""} before generating ${visualType.replace(/_/g, " ")}.`);
+      }
       const generated = await paidGenerate(
         quality === "final" ? "architectureProfessionalFinal" : "architectureTechnicalPlan",
         { target: "detailed_concept_plan", quality, plan_mode: "technical", visual_type: visualType },
@@ -815,12 +886,11 @@ export async function executeArchitectureImageGeneration(args: {
           plan,
           tier: quality,
           referenceImages: uniqueReferences([
-            masterReference,
-            currentTechnicalReference,
             ...coordinatedFloorReferences,
+            currentTechnicalReference,
           ]),
-          sourceGeometryReferences: sourceDrawingReferences,
-          preserveSourceGeometry: sourceGeometryLocked,
+          sourceGeometryReferences: [],
+          preserveSourceGeometry: false,
         }),
       );
       imageUrl = generated.imageUrl;
@@ -846,19 +916,12 @@ export async function executeArchitectureImageGeneration(args: {
       throw new Error("This visual has no saved image prompt. Refresh Gallery Prompts first.");
     }
 
-    const [{ data: concept }, { data: relatedVisuals }, { data: planSet }] = await Promise.all([
-      supabase
-        .from("architecture_concepts")
-        .select("*")
-        .eq("project_id", projectId)
-        .eq("user_id", authenticatedUserId)
-        .maybeSingle(),
+    const [{ data: relatedVisuals }, { data: planSet }] = await Promise.all([
       supabase
         .from("architecture_visuals")
         .select("*")
         .eq("project_id", projectId)
-        .eq("user_id", authenticatedUserId)
-        .eq("direction_id", project.selected_direction_id),
+        .eq("user_id", authenticatedUserId),
       supabase
         .from("architecture_plan_sets")
         .select("*")
@@ -867,11 +930,15 @@ export async function executeArchitectureImageGeneration(args: {
         .maybeSingle(),
     ]);
 
-    const conceptJson = metadataRecord(concept?.generation_json);
+    if (!masterDirection) {
+      throw new Error("Select and generate an Architecture Direction before generating Visuals.");
+    }
+    if (!masterReference && !sourceGeometryLocked) {
+      throw new Error("Generate the selected Architecture Direction visual before generating Visuals.");
+    }
     const planJson = metadataRecord(planSet?.generation_json);
     const architectureDna =
       architectureDnaFrom(visualMetadata) ||
-      architectureDnaFrom(conceptJson) ||
       architectureDnaFrom(planJson) ||
       fallbackArchitectureDna(masterDirection);
     const canonicalPlan =
@@ -881,10 +948,7 @@ export async function executeArchitectureImageGeneration(args: {
     if (!canonicalPlan && !sourceGeometryLocked) {
       throw new Error("Prepare and approve the connected floor plans before generating architectural visuals.");
     }
-    const requiredPlanTypes = [
-      "ground_floor",
-      ...(canonicalPlan?.levels?.length && canonicalPlan.levels.length > 1 ? ["upper_floor"] : []),
-    ];
+    const requiredPlanTypes = requiredFloorVisualTypes(canonicalPlan);
     const projectPlanRows = (relatedVisuals || []) as Array<Record<string, unknown>>;
     const missingApprovedPlans = sourceGeometryLocked
       ? []
@@ -911,12 +975,6 @@ export async function executeArchitectureImageGeneration(args: {
       storagePath: preferredMasterPath(visualMetadata, visual.storage_path),
       url: visual.image_url,
     });
-    const conceptReference = imageReference({
-      label: "Approved Concept reference for the same property.",
-      storagePath: preferredMasterPath(conceptJson, conceptJson.image_storage_path),
-      url: concept?.image_url,
-    });
-
     const rows = (relatedVisuals || []) as Array<Record<string, unknown>>;
     const relevantSourceReferences = sourceGeometryLocked
       ? sourceReferencesForVisual(orderedSourceDocuments, visualType)
@@ -929,7 +987,7 @@ export async function executeArchitectureImageGeneration(args: {
           const planAssets = metadataRecord(planMetadata.technical_assets);
           return planRow
             ? imageReference({
-                label: `Approved ${requiredType.replace(/_/g, " ")} for the exact same project. The architecture, openings, circulation and indoor-outdoor relationships in the visual must remain consistent with this plan.`,
+                label: `APPROVED ${requiredType.replace(/_/g, " ")} — ABSOLUTE GEOMETRY SOURCE for this building. Preserve footprint, level stacking, stair/core, entry, pool/site relationship and circulation. Apply the Direction as style only.`,
                 storagePath: planAssets.master_storage_path,
                 url: planAssets.preview_url || planRow.image_url,
               })
@@ -964,10 +1022,6 @@ export async function executeArchitectureImageGeneration(args: {
     const currentGroundedReference = !sourceGeometryLocked || sourceGrounded(visualMetadata, sourceFingerprint)
       ? currentTargetReference
       : null;
-    const conceptGroundedReference = !sourceGeometryLocked || sourceGrounded(conceptJson, sourceFingerprint)
-      ? conceptReference
-      : null;
-
     const generated = await paidGenerate(quality === "final" ? "architectureProfessionalFinal" : "architectureVisual", { target: "visual", quality, visual_type: visual.visual_type }, () => generateAndStoreArchitectureImage({
       supabase,
       userId: authenticatedUserId,
@@ -997,25 +1051,26 @@ export async function executeArchitectureImageGeneration(args: {
           ].filter(Boolean).join("\n\n"),
       plan,
       architectureDna: sourceGeometryLocked ? null : architectureDna,
-      sourceGeometryReferences: relevantSourceReferences,
-      preserveSourceGeometry: sourceGeometryLocked,
+      sourceGeometryReferences: sourceGeometryLocked
+        ? relevantSourceReferences
+        : uniqueReferences(approvedPlanReferences),
+      preserveSourceGeometry: sourceGeometryLocked || approvedPlanReferences.filter(Boolean).length > 0,
       referenceImages: sourceGeometryLocked
         ? uniqueReferences([
+            masterReference,
             currentGroundedReference,
             relatedReference,
           ])
         : uniqueReferences([
-            ...approvedPlanReferences,
             masterReference,
             currentTargetReference,
             relatedReference,
-            conceptGroundedReference,
           ]),
       targetRole: sourceGeometryLocked
-        ? `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. Style references may affect materials, colour, landscape and lighting only.`
+        ? `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. The selected Direction may affect materials, facade character, landscape and lighting only.`
         : group === "tour"
-          ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the same locked property. Keep the room navigable and visually continuous with adjacent tour nodes.`
-          : `Generate only the ${String(visual.title || visual.visual_type)} view of the same locked property.`,
+          ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the APPROVED PLAN FOUNDATION. Approved plans define geometry; the selected Direction defines architectural expression.`
+          : `Generate only the ${String(visual.title || visual.visual_type)} view derived from the APPROVED PLAN FOUNDATION. Do not redesign the footprint, stacking, core, entry, pool or site relationship. Apply the selected Direction as architectural expression only.`,
       tier: quality,
     }));
     imageUrl = generated.imageUrl;

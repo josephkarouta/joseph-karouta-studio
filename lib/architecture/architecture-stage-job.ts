@@ -150,6 +150,121 @@ export async function processArchitectureStageJob(jobId: string) {
   }
 }
 
+function planFoundationDirectionContext(project: ProjectRow) {
+  return {
+    title: "Plan Foundation",
+    philosophy: "A program-first architecture foundation. Geometry is established from the user brief, site and Space Program before style directions are explored.",
+    site_response: "Use the saved site, access, outdoor requirements and planning assumptions to establish one coherent building footprint.",
+    form_strategy: "The plan determines the massing footprint. Later Architecture Directions must inherit this geometry rather than replace it.",
+    spatial_strategy: "Prioritise operational adjacencies, clear circulation, aligned vertical cores, access and the user's required spaces.",
+    facade_strategy: "Facade character is intentionally deferred until the Direction stage.",
+    materials: [],
+    roof_strategy: "Roof expression is intentionally deferred until the Direction stage while the plan footprint remains fixed.",
+    landscape_strategy: "Site, pool, terraces, access and required outdoor spaces are positioned as part of the plan foundation.",
+    sustainability: "Use passive planning principles appropriate to the site at concept level.",
+    natural_light_strategy: "Arrange occupied rooms and openings for plausible daylight without locking a facade style.",
+    privacy_strategy: "Separate public, private and service zones according to the project brief.",
+    cost_level: "To be developed after plan approval",
+    image_prompt: "",
+    project_name: project.project_name,
+  };
+}
+
+function planFoundationDna(project: ProjectRow, site: Record<string, unknown> | null): ArchitectureDna {
+  const sourceBrief = metadataRecord(project.source_brief);
+  const professionalBrief = metadataRecord(project.professional_brief);
+  const requestedStoreys = Math.max(
+    1,
+    Number(site?.desired_floors || sourceBrief.desired_floors || professionalBrief.desired_floors || 1) || 1,
+  );
+  return {
+    identity_name: `${project.project_name} Plan Foundation`,
+    design_summary: "Program-first coordinated geometry established before architectural style direction.",
+    storeys: requestedStoreys,
+    massing: "Derived from the approved canonical plan footprint and level outlines.",
+    roof_form: "Deferred to the Architecture Direction stage; must remain compatible with the approved plan footprint.",
+    facade_rhythm: "Deferred to the Architecture Direction stage; openings must remain compatible with approved room and circulation logic.",
+    window_language: "Deferred to the Architecture Direction stage.",
+    entry_expression: "The main entry location is fixed by the canonical plan.",
+    landscape_relationship: "Pool, access, terraces, gardens and outdoor rooms are fixed by the canonical site plan before style development.",
+    pool_relationship: "Preserve the pool/site relationship established by the canonical plan.",
+    material_placement: [],
+    signature_elements: ["approved footprint", "aligned vertical cores", "locked site relationships"],
+    must_preserve: [
+      "canonical building outline",
+      "ground-floor footprint",
+      "upper-floor stacking",
+      "vertical-core coordinates",
+      "main-entry location",
+      "pool and outdoor-space location",
+      "garage and driveway relationship",
+      "primary circulation logic",
+    ],
+    prohibited_changes: [
+      "do not replace the approved footprint",
+      "do not move stairs or lifts between floors",
+      "do not relocate the pool or main entry",
+      "do not change the approved floor count",
+    ],
+    visual_prompt_anchor: "All later design directions and visuals must be developed from the approved plan foundation.",
+    footprint_shape: "Defined by canonical_plan.building_outline",
+    plan_massing_logic: "The approved canonical plan is the geometry source of truth.",
+    vertical_core_strategy: "Use the exact canonical vertical-core coordinates across all levels.",
+    upper_level_setback_strategy: "Follow the approved canonical upper-level outline and stacking relationship.",
+  };
+}
+
+async function ensurePlanAssociationDirection(args: {
+  admin: SupabaseClient;
+  project: ProjectRow;
+  directions: Array<Record<string, unknown>>;
+  currentPlan: Record<string, unknown> | null;
+}) {
+  const existingPlanDirectionId = typeof args.currentPlan?.direction_id === "string"
+    ? args.currentPlan.direction_id
+    : null;
+  if (existingPlanDirectionId) return existingPlanDirectionId;
+
+  if (args.project.selected_direction_id) return args.project.selected_direction_id;
+
+  const existingFoundation = args.directions.find((row) =>
+    metadataRecord(row.generation_json).plan_first_foundation === true,
+  );
+  if (existingFoundation?.id) return String(existingFoundation.id);
+
+  const existingDirection = args.directions.find((row) => row.id);
+  if (existingDirection?.id) return String(existingDirection.id);
+
+  const { data, error } = await args.admin
+    .from("architecture_directions")
+    .insert({
+      project_id: args.project.id,
+      user_id: args.project.user_id,
+      direction_number: 1,
+      title: "Plan Foundation",
+      philosophy: "Internal plan-first geometry anchor.",
+      form_strategy: "Geometry is established from the brief, site and Space Program before style directions.",
+      facade_strategy: "Deferred until the Direction stage.",
+      materials: [],
+      roof_strategy: "Deferred until the Direction stage.",
+      landscape_strategy: "Site relationships are established by the plan foundation.",
+      sustainability: "Concept-level passive planning assumptions only.",
+      cost_level: "Pending direction",
+      image_url: null,
+      is_selected: false,
+      generation_json: {
+        mode: "plan_first_foundation",
+        plan_first_foundation: true,
+        hidden_from_direction_ui: true,
+        created_at: new Date().toISOString(),
+      },
+    })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Plan Foundation reference could not be created.");
+  return String(data.id);
+}
+
 async function runArchitectureStage(args: {
   admin: SupabaseClient;
   userId: string;
@@ -161,7 +276,7 @@ async function runArchitectureStage(args: {
 
   const [
     projectResult,
-    directionResult,
+    directionsResult,
     siteResult,
     planningResult,
     materialsResult,
@@ -171,7 +286,7 @@ async function runArchitectureStage(args: {
     currentVisualsResult,
   ] = await Promise.all([
     admin.from("architecture_projects").select("*").eq("id", projectId).eq("user_id", userId).single(),
-    admin.from("architecture_directions").select("*").eq("project_id", projectId).eq("user_id", userId).eq("is_selected", true).maybeSingle(),
+    admin.from("architecture_directions").select("*").eq("project_id", projectId).eq("user_id", userId).order("direction_number", { ascending: true }),
     admin.from("architecture_sites").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_planning").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_materials").select("*").eq("project_id", projectId).eq("user_id", userId).eq("is_selected", true).order("sort_order", { ascending: true }),
@@ -186,11 +301,10 @@ async function runArchitectureStage(args: {
   }
 
   const project = projectResult.data as ProjectRow;
-  if (!project.selected_direction_id || !directionResult.data) {
-    throw new Error("Select an Architecture Direction before continuing.");
-  }
-
-  const direction = directionResult.data as Record<string, unknown>;
+  const allDirections = (directionsResult.data as Array<Record<string, unknown>> | null) || [];
+  const selectedDirection = allDirections.find((row) =>
+    row.is_selected === true || (project.selected_direction_id && row.id === project.selected_direction_id),
+  ) || null;
   const site = (siteResult.data as Record<string, unknown> | null) || null;
   const planning = (planningResult.data as Record<string, unknown> | null) || null;
   const selectedMaterials = (materialsResult.data as Array<Record<string, unknown>> | null) || [];
@@ -202,81 +316,31 @@ async function runArchitectureStage(args: {
   let nextCompletion = Number(project.completion || 0);
   let nextStatus = project.status;
 
-  const existingDna = dnaFromRecord(currentConcept?.generation_json) || dnaFromRecord(currentPlan?.generation_json);
-  const dnaResult = existingDna
-    ? { architectureDna: existingDna, usage: null }
-    : await generateArchitectureDna({
-        plan: aiPlan,
-        project: project as unknown as Record<string, unknown>,
-        direction,
-        site,
-        selectedMaterials,
-      });
-  const architectureDna = dnaResult.architectureDna;
-  const masterDirectionStoragePath = typeof direction.image_storage_path === "string" ? direction.image_storage_path : null;
-
-  if (stage === "concept" || stage === "all") {
-    const generated = await generateArchitectureConcept({
-      plan: aiPlan,
-      project: project as unknown as Record<string, unknown>,
-      direction,
-      architectureDna,
-      site,
-      planning,
-      selectedMaterials,
-      spaceProgram,
-    });
-
-    const previousJson = metadataRecord(currentConcept?.generation_json);
-    const { image_prompt, ...conceptFields } = generated.concept;
-    const { data, error } = await admin
-      .from("architecture_concepts")
-      .upsert(
-        {
-          project_id: project.id,
-          user_id: project.user_id,
-          direction_id: project.selected_direction_id,
-          ...conceptFields,
-          image_url: (currentConcept?.image_url as string | null) || null,
-          generation_mode: "live",
-          generation_json: {
-            ...previousJson,
-            mode: "live",
-            image_prompt,
-            text_model: aiPlan.textModel,
-            usage: generated.usage,
-            architecture_dna: architectureDna,
-            architecture_dna_usage: dnaResult.usage,
-            visual_continuity_version: 2,
-            master_direction_id: project.selected_direction_id,
-            master_direction_storage_path: masterDirectionStoragePath,
-            selected_materials: selectedMaterials,
-            space_program: spaceProgram,
-            prepared_at: new Date().toISOString(),
-            disclaimer: "AI-generated conceptual architecture. Not for permit, construction, engineering or regulatory reliance.",
-          },
-        },
-        { onConflict: "project_id" },
-      )
-      .select("*")
-      .single();
-    if (error || !data) throw new Error(error?.message || "Architecture Concept could not be saved.");
-    currentConcept = data as Record<string, unknown>;
-    nextCompletion = Math.max(nextCompletion, 75);
-    nextStatus = "Concept Ready";
+  if (stage !== "plans" && !selectedDirection) {
+    throw new Error("Select an Architecture Direction before continuing to Visuals or the Design Pack.");
   }
 
-  if (stage === "plans" || stage === "all") {
+  if (stage === "plans") {
+    const associationDirectionId = await ensurePlanAssociationDirection({
+      admin,
+      project,
+      directions: allDirections,
+      currentPlan,
+    });
+    const foundationDirection = planFoundationDirectionContext(project);
+    const foundationDna = planFoundationDna(project, site);
+
     const generated = await generateArchitecturePlanSet({
       plan: aiPlan,
       project: project as unknown as Record<string, unknown>,
-      direction,
-      architectureDna,
-      concept: currentConcept,
+      direction: foundationDirection,
+      architectureDna: foundationDna,
+      concept: null,
       site,
       planning,
       selectedMaterials,
       spaceProgram,
+      planFoundationMode: true,
     });
     const { plan_images, canonical_plan, ...planFields } = generated.planSet;
     const { data: savedPlan, error: planError } = await admin
@@ -285,18 +349,16 @@ async function runArchitectureStage(args: {
         {
           project_id: project.id,
           user_id: project.user_id,
-          direction_id: project.selected_direction_id,
+          direction_id: associationDirectionId,
           ...planFields,
-          generation_mode: "live",
+          generation_mode: "plan_first",
           generation_json: {
-            mode: "live",
+            mode: "plan_first",
             text_model: aiPlan.textModel,
             usage: generated.usage,
-            architecture_dna: architectureDna,
+            architecture_dna: foundationDna,
             canonical_plan,
-            visual_continuity_version: 2,
-            master_direction_id: project.selected_direction_id,
-            master_direction_storage_path: masterDirectionStoragePath,
+            plan_first_geometry_authority: true,
             selected_materials: selectedMaterials,
             saved_space_program: spaceProgram,
             prepared_at: new Date().toISOString(),
@@ -310,32 +372,101 @@ async function runArchitectureStage(args: {
     if (planError || !savedPlan) throw new Error(planError?.message || "Architecture Plan Set could not be saved.");
     currentPlan = savedPlan as Record<string, unknown>;
 
-    await removeStaleVisualFiles(admin, existingVisuals, project.selected_direction_id, "plans");
+    await removeStaleVisualFiles(admin, existingVisuals, associationDirectionId, "plans");
     const planRows = mergeVisualRows({
       project,
-      directionId: project.selected_direction_id,
-      masterDirectionStoragePath,
+      directionId: associationDirectionId,
+      masterDirectionStoragePath: null,
       prompts: plan_images,
       group: "plans",
       existing: existingVisuals,
       model: aiPlan.textModel,
       usage: generated.usage,
-      architectureDna,
+      architectureDna: foundationDna,
       canonicalPlan: canonical_plan,
-    });
+    }).map((row) => ({
+      ...row,
+      metadata: {
+        ...row.metadata,
+        plan_first_geometry_authority: true,
+        master_direction_id: null,
+        master_direction_storage_path: null,
+      },
+    }));
     await removeObsoleteVisualRows(admin, existingVisuals, "plans", planRows.map((row) => row.visual_type));
     if (planRows.length) {
       const { error } = await admin.from("architecture_visuals").upsert(planRows, { onConflict: "direction_id,visual_type" });
       if (error) throw new Error(error.message);
     }
-    nextCompletion = Math.max(nextCompletion, 83);
-    nextStatus = "Plans Ready";
+    nextCompletion = Math.max(nextCompletion, 64);
+    nextStatus = "Plan Foundation Ready";
+  }
+
+  if (stage === "concept" || stage === "all") {
+    const direction = selectedDirection as Record<string, unknown>;
+    const dnaResult = await generateArchitectureDna({
+      plan: aiPlan,
+      project: project as unknown as Record<string, unknown>,
+      direction,
+      site,
+      selectedMaterials,
+    });
+    const architectureDna = dnaResult.architectureDna;
+    const generated = await generateArchitectureConcept({
+      plan: aiPlan,
+      project: project as unknown as Record<string, unknown>,
+      direction,
+      architectureDna,
+      site,
+      planning,
+      selectedMaterials,
+      spaceProgram,
+    });
+    const previousJson = metadataRecord(currentConcept?.generation_json);
+    const { image_prompt, ...conceptFields } = generated.concept;
+    const { data, error } = await admin
+      .from("architecture_concepts")
+      .upsert({
+        project_id: project.id,
+        user_id: project.user_id,
+        direction_id: project.selected_direction_id,
+        ...conceptFields,
+        image_url: null,
+        generation_mode: "internal_only",
+        generation_json: {
+          ...previousJson,
+          mode: "internal_only",
+          image_prompt,
+          text_model: aiPlan.textModel,
+          usage: generated.usage,
+          architecture_dna: architectureDna,
+          architecture_dna_usage: dnaResult.usage,
+          hidden_from_workspace: true,
+          prepared_at: new Date().toISOString(),
+        },
+      }, { onConflict: "project_id" })
+      .select("*")
+      .single();
+    if (error || !data) throw new Error(error?.message || "Architecture strategy could not be saved.");
+    currentConcept = data as Record<string, unknown>;
   }
 
   if (stage === "visuals" || stage === "all") {
+    const direction = selectedDirection as Record<string, unknown>;
+    const dnaResult = await generateArchitectureDna({
+      plan: aiPlan,
+      project: project as unknown as Record<string, unknown>,
+      direction,
+      site,
+      selectedMaterials,
+    });
+    const architectureDna = dnaResult.architectureDna;
     const sourceBrief = metadataRecord(project.source_brief);
     const requestedViews = Array.isArray(sourceBrief.camera_views) ? (sourceBrief.camera_views as string[]) : [];
     const canonicalPlan = canonicalPlanFromRecord(currentPlan?.generation_json) || canonicalPlanFromRecord(currentPlanResult.data?.generation_json);
+    if (!canonicalPlan && project.workflow_mode === "build_from_scratch") {
+      throw new Error("Prepare the Plan Foundation before preparing Visuals.");
+    }
 
     const generated = await generateArchitectureVisualPrompts({
       plan: aiPlan,
@@ -349,11 +480,11 @@ async function runArchitectureStage(args: {
       requestedViews,
     });
 
-    await removeStaleVisualFiles(admin, existingVisuals, project.selected_direction_id, "visuals");
+    await removeStaleVisualFiles(admin, existingVisuals, String(project.selected_direction_id), "visuals");
     const visualRows = mergeVisualRows({
       project,
-      directionId: project.selected_direction_id,
-      masterDirectionStoragePath,
+      directionId: String(project.selected_direction_id),
+      masterDirectionStoragePath: typeof direction.image_storage_path === "string" ? direction.image_storage_path : null,
       prompts: generated.visuals,
       group: "visuals",
       existing: existingVisuals,
@@ -367,11 +498,20 @@ async function runArchitectureStage(args: {
       const { error } = await admin.from("architecture_visuals").upsert(visualRows, { onConflict: "direction_id,visual_type" });
       if (error) throw new Error(error.message);
     }
-    nextCompletion = Math.max(nextCompletion, 92);
+    nextCompletion = Math.max(nextCompletion, 88);
     nextStatus = "Visuals Ready";
   }
 
   if (stage === "design-pack" || stage === "all") {
+    const direction = selectedDirection as Record<string, unknown>;
+    const dnaResult = await generateArchitectureDna({
+      plan: aiPlan,
+      project: project as unknown as Record<string, unknown>,
+      direction,
+      site,
+      selectedMaterials,
+    });
+    const architectureDna = dnaResult.architectureDna;
     const { data: currentPack } = await admin
       .from("architecture_design_packs")
       .select("version")
@@ -382,45 +522,40 @@ async function runArchitectureStage(args: {
 
     const { error } = await admin
       .from("architecture_design_packs")
-      .upsert(
-        {
-          project_id: project.id,
-          user_id: project.user_id,
-          direction_id: project.selected_direction_id,
-          title: `${project.project_name} Architecture Design Pack`,
-          version: nextVersion,
-          status: "Ready",
-          included_sections: [
-            "Project Brief",
-            ...(project.workflow_mode === "build_from_scratch" ? [] : ["Source Input"]),
-            "Land & Site",
-            "Planning Summary",
-            "Space Program",
-            "Material System",
-            "Selected Direction",
-            "Architecture DNA",
-            "Architecture Strategy",
-            "Canonical Concept Plans",
-            "Area Schedule",
-            "Architectural Visuals",
-            "Planning Disclaimer",
-          ],
-          generated_at: new Date().toISOString(),
-          metadata: {
-            mode: "live",
-            text_model: aiPlan.textModel,
-            architecture_dna: architectureDna,
-            canonical_plan: canonicalPlanFromRecord(currentPlan?.generation_json),
-            visual_continuity_version: 2,
-            master_direction_id: project.selected_direction_id,
-            master_direction_storage_path: masterDirectionStoragePath,
-            selected_materials: selectedMaterials,
-            space_program: spaceProgram,
-            prepared_at: new Date().toISOString(),
-          },
+      .upsert({
+        project_id: project.id,
+        user_id: project.user_id,
+        direction_id: project.selected_direction_id,
+        title: `${project.project_name} Architecture Design Pack`,
+        version: nextVersion,
+        status: "Ready",
+        included_sections: [
+          "Project Brief",
+          ...(project.workflow_mode === "build_from_scratch" ? [] : ["Source Input"]),
+          "Land & Site",
+          "Planning Summary",
+          "Space Program",
+          "Approved Plan Foundation",
+          "Material System",
+          "Selected Direction",
+          "Architectural Visuals",
+          "Area Schedule",
+          "Planning Disclaimer",
+        ],
+        generated_at: new Date().toISOString(),
+        metadata: {
+          mode: "plan_first",
+          text_model: aiPlan.textModel,
+          architecture_dna: architectureDna,
+          canonical_plan: canonicalPlanFromRecord(currentPlan?.generation_json),
+          plan_first_geometry_authority: true,
+          master_direction_id: project.selected_direction_id,
+          master_direction_storage_path: typeof direction.image_storage_path === "string" ? direction.image_storage_path : null,
+          selected_materials: selectedMaterials,
+          space_program: spaceProgram,
+          prepared_at: new Date().toISOString(),
         },
-        { onConflict: "project_id" },
-      );
+      }, { onConflict: "project_id" });
     if (error) throw new Error(error.message);
     nextCompletion = Math.max(nextCompletion, 100);
     nextStatus = "Design Pack Ready";

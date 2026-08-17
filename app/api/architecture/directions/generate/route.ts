@@ -86,6 +86,71 @@ export async function POST(request: Request) {
       );
     }
 
+    if (project.workflow_mode === "build_from_scratch") {
+      const [{ data: planSet }, { data: planVisuals }] = await Promise.all([
+        supabase
+          .from("architecture_plan_sets")
+          .select("generation_json")
+          .eq("project_id", projectId)
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("architecture_visuals")
+          .select("visual_type,image_url,is_approved,metadata")
+          .eq("project_id", projectId)
+          .eq("user_id", user.id),
+      ]);
+      const generationJson = planSet?.generation_json && typeof planSet.generation_json === "object"
+        ? planSet.generation_json as Record<string, unknown>
+        : {};
+      const canonicalPlan = generationJson.canonical_plan && typeof generationJson.canonical_plan === "object"
+        ? generationJson.canonical_plan as Record<string, unknown>
+        : null;
+      const levels = Array.isArray(canonicalPlan?.levels) ? canonicalPlan.levels : [];
+      if (!planSet || !levels.length) {
+        return NextResponse.json(
+          { success: false, error: "Prepare the Plan Foundation before generating Architecture Directions." },
+          { status: 400 },
+        );
+      }
+      const requiredTypes = levels.map((_, index) =>
+        index === 0 ? "ground_floor" : index === 1 ? "upper_floor" : `level_${index}_floor`,
+      );
+      const rows = (planVisuals || []) as Array<Record<string, unknown>>;
+      const missing = requiredTypes.filter((visualType) => {
+        const row = rows.find((item) => String(item.visual_type || "") === visualType);
+        const metadata = row?.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+          ? row.metadata as Record<string, unknown>
+          : {};
+        const technical = metadata.technical_assets && typeof metadata.technical_assets === "object" && !Array.isArray(metadata.technical_assets)
+          ? metadata.technical_assets as Record<string, unknown>
+          : {};
+        return !row || row.is_approved !== true || !(technical.master_storage_path || technical.preview_storage_path || technical.preview_url || row.image_url);
+      });
+      if (missing.length) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Generate and approve ${missing.map((item) => item.replace(/_/g, " ")).join(" and ")} before generating Architecture Directions. The plans are the geometry source of truth.`,
+          },
+          { status: 400 },
+        );
+      }
+    } else if (project.workflow_mode === "plan_to_render") {
+      const { count } = await supabase
+        .from("architecture_documents")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId)
+        .eq("user_id", user.id)
+        .like("category", "source-plan-%");
+      if (!Number(count || 0)) {
+        return NextResponse.json(
+          { success: false, error: "Organize at least one source plan before generating Architecture Directions." },
+          { status: 400 },
+        );
+      }
+    }
+
     const minimumMaterials = project.workflow_mode === "build_from_scratch" ? 3 : 1;
     const { count: selectedMaterialCount, error: materialError } = await supabase
       .from("architecture_materials")

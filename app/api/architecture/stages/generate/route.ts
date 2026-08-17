@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
-    if (!project.selected_direction_id) {
+    if (stage !== "plans" && !project.selected_direction_id) {
       return NextResponse.json(
         { success: false, error: "Select an Architecture Direction before continuing." },
         { status: 400 },

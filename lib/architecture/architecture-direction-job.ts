@@ -529,12 +529,13 @@ async function runArchitectureDirections(args: {
 }) {
   const { admin, userId, projectId, directionNumber, planName, mode } = args;
 
-  const [projectResult, siteResult, planningResult, existingResult, materialsResult] = await Promise.all([
+  const [projectResult, siteResult, planningResult, existingResult, materialsResult, planResult] = await Promise.all([
     admin.from("architecture_projects").select("*").eq("id", projectId).eq("user_id", userId).single(),
     admin.from("architecture_sites").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_planning").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_directions").select("id,direction_number,is_selected,generation_json,image_storage_path").eq("project_id", projectId).eq("user_id", userId),
     admin.from("architecture_materials").select("material_key,name,category,finish,application,image_url").eq("project_id", projectId).eq("user_id", userId).eq("is_selected", true).order("sort_order", { ascending: true }),
+    admin.from("architecture_plan_sets").select("title,planning_assumptions,area_schedule,room_relationships,conceptual_dimensions,total_estimated_area,generation_json").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
   ]);
 
   if (projectResult.error || !projectResult.data) {
@@ -546,7 +547,14 @@ async function runArchitectureDirections(args: {
   const planning = (planningResult.data as PlanningRow | null) || null;
   const existing = (existingResult.data as ExistingDirection[] | null) || [];
   const selectedMaterials = (materialsResult.data as SelectedMaterial[] | null) || [];
+  const planFoundation = planResult.data && typeof planResult.data === "object"
+    ? planResult.data as unknown as Record<string, unknown>
+    : null;
   const minimumMaterials = project.workflow_mode === "build_from_scratch" ? 3 : 1;
+
+  if (project.workflow_mode === "build_from_scratch" && !planFoundation) {
+    throw new Error("Prepare and approve the Plan Foundation before generating Architecture Directions.");
+  }
 
   if (selectedMaterials.length < minimumMaterials) {
     throw new Error(`Select at least ${minimumMaterials} material${minimumMaterials === 1 ? "" : "s"} before generating directions.`);
@@ -594,6 +602,7 @@ async function runArchitectureDirections(args: {
       site: site as unknown as Record<string, unknown> | null,
       planning: planning as unknown as Record<string, unknown> | null,
       selectedMaterials: selectedMaterials as unknown as Array<Record<string, unknown>>,
+      planFoundation: project.workflow_mode === "build_from_scratch" ? planFoundation : null,
     });
 
     payloads.push({
@@ -610,6 +619,8 @@ async function runArchitectureDirections(args: {
         plan: planName,
         selected_material_keys: selectedMaterials.map((material) => material.material_key),
         selected_materials: selectedMaterials,
+        plan_first_geometry_authority: project.workflow_mode === "build_from_scratch",
+        plan_foundation_snapshot: project.workflow_mode === "build_from_scratch" ? planFoundation : null,
         usage: generated.usage,
         image_usage: null,
         preview_assets: null,
