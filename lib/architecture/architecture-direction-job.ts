@@ -529,13 +529,14 @@ async function runArchitectureDirections(args: {
 }) {
   const { admin, userId, projectId, directionNumber, planName, mode } = args;
 
-  const [projectResult, siteResult, planningResult, existingResult, materialsResult, planResult] = await Promise.all([
+  const [projectResult, siteResult, planningResult, existingResult, materialsResult, planResult, foundationResult] = await Promise.all([
     admin.from("architecture_projects").select("*").eq("id", projectId).eq("user_id", userId).single(),
     admin.from("architecture_sites").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_planning").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_directions").select("id,direction_number,is_selected,generation_json,image_storage_path").eq("project_id", projectId).eq("user_id", userId),
     admin.from("architecture_materials").select("material_key,name,category,finish,application,image_url").eq("project_id", projectId).eq("user_id", userId).eq("is_selected", true).order("sort_order", { ascending: true }),
     admin.from("architecture_plan_sets").select("title,planning_assumptions,area_schedule,room_relationships,conceptual_dimensions,total_estimated_area,generation_json").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
+    admin.from("architecture_visuals").select("image_url,is_approved,metadata").eq("project_id", projectId).eq("user_id", userId).eq("visual_type", "plan_foundation_sheet").maybeSingle(),
   ]);
 
   if (projectResult.error || !projectResult.data) {
@@ -552,8 +553,27 @@ async function runArchitectureDirections(args: {
     : null;
   const minimumMaterials = project.workflow_mode === "build_from_scratch" ? 3 : 1;
 
-  if (project.workflow_mode === "build_from_scratch" && !planFoundation) {
-    throw new Error("Prepare and approve the Plan Foundation before generating Architecture Directions.");
+  if (project.workflow_mode === "build_from_scratch") {
+    if (!planFoundation) {
+      throw new Error("Prepare the Plan Foundation before generating Architecture Directions.");
+    }
+    const foundation = foundationResult.data && typeof foundationResult.data === "object"
+      ? foundationResult.data as unknown as Record<string, unknown>
+      : null;
+    const foundationMetadata = foundation?.metadata && typeof foundation.metadata === "object" && !Array.isArray(foundation.metadata)
+      ? foundation.metadata as Record<string, unknown>
+      : {};
+    const foundationTechnical = foundationMetadata.technical_assets && typeof foundationMetadata.technical_assets === "object" && !Array.isArray(foundationMetadata.technical_assets)
+      ? foundationMetadata.technical_assets as Record<string, unknown>
+      : {};
+    const foundationReady = Boolean(
+      foundation &&
+      foundation.is_approved === true &&
+      (foundationTechnical.master_storage_path || foundationTechnical.preview_storage_path || foundationTechnical.preview_url || foundation.image_url)
+    );
+    if (!foundationReady) {
+      throw new Error("Approve the coordinated Plan Foundation before generating Architecture Directions.");
+    }
   }
 
   if (selectedMaterials.length < minimumMaterials) {

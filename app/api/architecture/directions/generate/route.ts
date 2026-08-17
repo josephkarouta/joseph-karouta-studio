@@ -113,25 +113,24 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      const requiredTypes = levels.map((_, index) =>
-        index === 0 ? "ground_floor" : index === 1 ? "upper_floor" : `level_${index}_floor`,
-      );
       const rows = (planVisuals || []) as Array<Record<string, unknown>>;
-      const missing = requiredTypes.filter((visualType) => {
-        const row = rows.find((item) => String(item.visual_type || "") === visualType);
-        const metadata = row?.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-          ? row.metadata as Record<string, unknown>
-          : {};
-        const technical = metadata.technical_assets && typeof metadata.technical_assets === "object" && !Array.isArray(metadata.technical_assets)
-          ? metadata.technical_assets as Record<string, unknown>
-          : {};
-        return !row || row.is_approved !== true || !(technical.master_storage_path || technical.preview_storage_path || technical.preview_url || row.image_url);
-      });
-      if (missing.length) {
+      const foundation = rows.find((item) => String(item.visual_type || "") === "plan_foundation_sheet");
+      const foundationMetadata = foundation?.metadata && typeof foundation.metadata === "object" && !Array.isArray(foundation.metadata)
+        ? foundation.metadata as Record<string, unknown>
+        : {};
+      const foundationTechnical = foundationMetadata.technical_assets && typeof foundationMetadata.technical_assets === "object" && !Array.isArray(foundationMetadata.technical_assets)
+        ? foundationMetadata.technical_assets as Record<string, unknown>
+        : {};
+      const foundationReady = Boolean(
+        foundation &&
+        foundation.is_approved === true &&
+        (foundationTechnical.master_storage_path || foundationTechnical.preview_storage_path || foundationTechnical.preview_url || foundation.image_url)
+      );
+      if (!foundationReady) {
         return NextResponse.json(
           {
             success: false,
-            error: `Generate and approve ${missing.map((item) => item.replace(/_/g, " ")).join(" and ")} before generating Architecture Directions. The plans are the geometry source of truth.`,
+            error: "Approve the coordinated Plan Foundation before generating Architecture Directions. The approved Plan Foundation sheet is the geometry source of truth.",
           },
           { status: 400 },
         );
