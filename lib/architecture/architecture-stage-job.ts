@@ -797,5 +797,8 @@ function publicGenerationError(message: string) {
   if (/content|safety|policy|moderation/i.test(message)) {
     return "Architecture generation could not complete for this request. Your credits were returned.";
   }
+  if (process.env.NEXT_PUBLIC_HEYY_PUBLIC_BETA === "true") {
+    return `Plan Foundation failed: ${message.slice(0, 900)} Your credits were returned.`;
+  }
   return "Architecture content generation could not be completed. Your credits were returned.";
 }

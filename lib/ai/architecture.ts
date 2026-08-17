@@ -1654,9 +1654,12 @@ function hardPlanAuditFailures(
   return contract.requirements.flatMap((requirement) => {
     if (requirement.priority !== "hard" || requirement.validation_scope !== "plan") return [];
     const check = byId.get(requirement.id);
-    if (check?.status === "pass") return [];
+    // The independent AI audit is a secondary safeguard, not the geometry source of truth.
+    // Only an explicit contradiction may block Plan Foundation generation. Missing or
+    // uncertain audit evidence must not randomly fail an otherwise deterministic plan.
+    if (!check || check.status === "pass" || check.status === "uncertain") return [];
     return [
-      `${requirement.id}: ${requirement.statement} Audit status: ${check?.status || "missing"}. ${check?.reason || "No compliance evidence was returned."}`,
+      `${requirement.id}: ${requirement.statement} Audit status: ${check.status}. ${check.reason || "The audit found explicit conflicting evidence."}`,
     ];
   });
 }

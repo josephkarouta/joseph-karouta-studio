@@ -312,12 +312,6 @@ export default function ArchitectureStudioPage() {
     }
     return "";
   }
-  function scrollToBuilder() {
-    window.setTimeout(() => {
-      builderSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
-  }
-
   function goNext() {
     const error = validateCurrentStep();
     if (error) {
@@ -327,13 +321,11 @@ export default function ArchitectureStudioPage() {
 
     setErrorMessage("");
     setStep((current) => Math.min(totalSteps, current + 1));
-    scrollToBuilder();
   }
 
   function goBack() {
     setErrorMessage("");
     setStep((current) => Math.max(1, current - 1));
-    scrollToBuilder();
   }
 
   async function uploadProjectFiles(projectId: string, userId: string) {
