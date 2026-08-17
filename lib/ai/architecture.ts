@@ -1348,6 +1348,263 @@ function repairCanonicalPlanAccess(planSet: LivePlanSet): LivePlanSet {
   return repaired;
 }
 
+
+/**
+ * Last-resort deterministic geometry stabiliser for Plan Foundation.
+ *
+ * The text model is allowed to propose the architecture, but Heyy Studio must
+ * not fail a paid Plan Foundation job just because that proposal contains
+ * rectangle overlaps, an oversized upper outline, or incomplete door metadata.
+ * After the normal AI correction passes, this stabiliser converts the returned
+ * programme into one physically coherent shared building envelope with a
+ * circulation spine. It preserves every named programme room while making the
+ * geometry machine-valid and renderable from one canonical model.
+ *
+ * This is deliberately deterministic: it does not weaken validation and it
+ * does not ask another image model to invent a different floor.
+ */
+function stabilizeCanonicalPlanGeometry(planSet: LivePlanSet): LivePlanSet {
+  const stabilized = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
+  const plan = stabilized.canonical_plan;
+  const levels = plan?.levels || [];
+  if (!plan || !levels.length) return stabilized;
+
+  const sourceOutline = Array.isArray(plan.building_outline?.points) && plan.building_outline!.points.length >= 4
+    ? plan.building_outline!.points
+    : canonicalOutlineForLevel(plan, levels[0]);
+  const sourceBounds = pointBounds(sourceOutline);
+
+  // Keep the model comfortably inside the canonical 0–100 canvas. If the
+  // model returned a degenerate outline, fall back to the saved footprint.
+  const fallback = plan.footprint || { x: 12, y: 12, width: 76, height: 72 };
+  let minX = Math.max(4, Math.min(88, Number.isFinite(sourceBounds.minX) ? sourceBounds.minX : Number(fallback.x || 12)));
+  let minY = Math.max(4, Math.min(88, Number.isFinite(sourceBounds.minY) ? sourceBounds.minY : Number(fallback.y || 12)));
+  let maxX = Math.min(96, Math.max(12, Number.isFinite(sourceBounds.maxX) ? sourceBounds.maxX : minX + Number(fallback.width || 76)));
+  let maxY = Math.min(96, Math.max(12, Number.isFinite(sourceBounds.maxY) ? sourceBounds.maxY : minY + Number(fallback.height || 72)));
+  if (maxX - minX < 42) {
+    const center = (minX + maxX) / 2;
+    minX = Math.max(4, center - 21);
+    maxX = Math.min(96, center + 21);
+  }
+  if (maxY - minY < 38) {
+    const center = (minY + maxY) / 2;
+    minY = Math.max(4, center - 19);
+    maxY = Math.min(96, center + 19);
+  }
+
+  const masterOutline: CanonicalPlanPoint[] = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+  const masterWidth = maxX - minX;
+  const masterHeight = maxY - minY;
+  const corridorHeight = Math.max(6, Math.min(10, masterHeight * 0.12));
+  const corridorY = minY + (masterHeight - corridorHeight) / 2;
+  const upperBandHeight = corridorY - minY;
+  const lowerBandY = corridorY + corridorHeight;
+  const lowerBandHeight = maxY - lowerBandY;
+
+  plan.building_outline = {
+    shape_label: String(plan.building_outline?.shape_label || "coordinated plan foundation"),
+    points: masterOutline,
+  };
+  plan.footprint = { x: minX, y: minY, width: masterWidth, height: masterHeight };
+
+  // A multi-floor foundation always owns one shared vertical core. Normalize
+  // the primary stair to one coordinate and mirror it exactly on every level.
+  const existingCores = Array.isArray(plan.vertical_cores) ? plan.vertical_cores : [];
+  let primaryStair = existingCores.find((core) => core.type === "stair") || null;
+  if (levels.length > 1) {
+    const coreWidth = Math.max(5, Math.min(8, masterWidth * 0.1));
+    const coreHeight = Math.max(5, Math.min(corridorHeight, 8));
+    const coreX = minX + masterWidth * 0.46;
+    const coreY = corridorY + (corridorHeight - coreHeight) / 2;
+    if (!primaryStair) {
+      primaryStair = {
+        id: "plan-foundation-stair",
+        type: "stair",
+        x: coreX,
+        y: coreY,
+        width: coreWidth,
+        height: coreHeight,
+        serves_level_ids: levels.map((level) => level.id),
+      };
+      plan.vertical_cores = [...existingCores, primaryStair];
+    } else {
+      primaryStair.x = coreX;
+      primaryStair.y = coreY;
+      primaryStair.width = coreWidth;
+      primaryStair.height = coreHeight;
+      primaryStair.serves_level_ids = levels.map((level) => level.id);
+      plan.vertical_cores = existingCores;
+    }
+  }
+
+  function roomWeight(room: CanonicalPlanRoom) {
+    const name = String(room.name || "").toLowerCase();
+    if (/garage|carport/.test(name)) return 2.1;
+    if (/living|family|lounge/.test(name)) return 1.75;
+    if (/kitchen/.test(name)) return 1.45;
+    if (/dining/.test(name)) return 1.3;
+    if (/master.*bed|primary.*bed/.test(name)) return 1.4;
+    if (/bed|office|study|gym/.test(name)) return 1.15;
+    if (/bath|ensuite|toilet|powder|wc|laundry|storage|pantry|robe/.test(name)) return 0.8;
+    return 1;
+  }
+
+  function distributeRow(rooms: CanonicalPlanRoom[], y: number, height: number) {
+    if (!rooms.length) return;
+    const weights = rooms.map(roomWeight);
+    const weightTotal = Math.max(1, weights.reduce((sum, weight) => sum + weight, 0));
+    let cursor = minX;
+    rooms.forEach((room, index) => {
+      const isLast = index === rooms.length - 1;
+      const width = isLast
+        ? maxX - cursor
+        : masterWidth * weights[index] / weightTotal;
+      room.x = cursor;
+      room.y = y;
+      room.width = Math.max(3.5, width);
+      room.height = Math.max(3.5, height);
+      cursor += width;
+    });
+  }
+
+  levels.forEach((level, levelIndex) => {
+    level.outline = masterOutline.map((point) => ({ ...point }));
+    const originalRooms = Array.isArray(level.rooms) ? level.rooms : [];
+    const hallCandidates = originalRooms.filter((room) =>
+      /corridor|hall|landing|lobby|foyer|circulation/i.test(String(room.name || "")),
+    );
+    let hall = hallCandidates[0] || null;
+    if (!hall) {
+      hall = {
+        id: `plan-foundation-hall-${levelIndex}`,
+        name: levelIndex === 0 ? "Main Circulation Hall" : "Upper Floor Hall",
+        zone: "circulation",
+        x: minX,
+        y: corridorY,
+        width: masterWidth,
+        height: corridorHeight,
+      };
+      originalRooms.push(hall);
+    }
+
+    // One circulation spine is enough. Other lobby/foyer/landing spaces stay
+    // in the programme and are packed like normal rooms so nothing is deleted.
+    hall.x = minX;
+    hall.y = corridorY;
+    hall.width = masterWidth;
+    hall.height = corridorHeight;
+    hall.zone = hall.zone || "circulation";
+
+    const programmeRooms = originalRooms.filter((room) => room.id !== hall!.id);
+    // Preserve the model's broad public/private tendency when possible, while
+    // guaranteeing two non-overlapping bands that share a wall with the hall.
+    const sorted = [...programmeRooms].sort((a, b) => {
+      const aPrivate = /private|bed|bath|ensuite|robe/i.test(`${a.zone} ${a.name}`) ? 1 : 0;
+      const bPrivate = /private|bed|bath|ensuite|robe/i.test(`${b.zone} ${b.name}`) ? 1 : 0;
+      if (aPrivate !== bPrivate) return aPrivate - bPrivate;
+      return Number(a.y || 0) - Number(b.y || 0) || Number(a.x || 0) - Number(b.x || 0);
+    });
+    const split = Math.ceil(sorted.length / 2);
+    const upperRooms = sorted.slice(0, split);
+    const lowerRooms = sorted.slice(split);
+    distributeRow(upperRooms, minY, upperBandHeight);
+    distributeRow(lowerRooms, lowerBandY, lowerBandHeight);
+
+    level.rooms = [...upperRooms, hall, ...lowerRooms];
+
+    // Keep non-door openings only when their room still exists. Door metadata
+    // is rebuilt from the actual shared geometry below.
+    const roomIds = new Set(level.rooms.map((room) => room.id));
+    const retainedOpenings = (level.openings || []).filter((opening) =>
+      !/door/.test(opening.type) && roomIds.has(opening.room_id),
+    );
+    const newOpenings: NonNullable<CanonicalPlanLevel["openings"]> = [...retainedOpenings];
+    const newCirculation: CanonicalPlanLevel["circulation"] = [];
+
+    for (const room of programmeRooms) {
+      if (isOutdoorCanonicalRoom(room)) continue;
+      const wall = sharedOpeningWall(room, hall);
+      if (!wall) continue;
+      newOpenings.push({
+        id: `foundation-door-${levelIndex}-${room.id}`,
+        type: /garage|carport/.test(String(room.name || "").toLowerCase()) ? "door" : "door",
+        room_id: room.id,
+        wall,
+        position: 0.5,
+        width_m: /garage|carport/.test(String(room.name || "").toLowerCase()) ? 1.1 : 0.9,
+        connects_to: hall.id,
+      });
+      newCirculation.push({
+        from_room_id: hall.id,
+        to_room_id: room.id,
+        label: `${hall.name} to ${room.name}`,
+      });
+    }
+
+    // Give the circulation spine one explicit exterior entrance. Choose the
+    // closest side to the model's saved entry so the site relationship remains
+    // recognizable instead of becoming random on each floor.
+    const entryX = Number(plan.entry?.x || minX);
+    const entryY = Number(plan.entry?.y || corridorY + corridorHeight / 2);
+    const sideDistances: Array<{ wall: CanonicalOpeningWall; distance: number }> = [
+      { wall: "west", distance: Math.abs(entryX - minX) },
+      { wall: "east", distance: Math.abs(entryX - maxX) },
+      { wall: "north", distance: Math.abs(entryY - minY) },
+      { wall: "south", distance: Math.abs(entryY - maxY) },
+    ];
+    const preferredSide = sideDistances.sort((a, b) => a.distance - b.distance)[0]?.wall || "west";
+    // The horizontal hall physically touches west/east. If the saved entry was
+    // north/south, use the nearest hall end rather than inventing a floating door.
+    const entranceWall: CanonicalOpeningWall = preferredSide === "east" ? "east" : "west";
+    newOpenings.push({
+      id: `foundation-entry-${levelIndex}`,
+      type: "door",
+      room_id: hall.id,
+      wall: entranceWall,
+      position: 0.5,
+      width_m: levelIndex === 0 ? 1.2 : 0.9,
+      connects_to: levelIndex === 0 ? "outside" : "core",
+    });
+
+    level.openings = newOpenings;
+    level.circulation = newCirculation;
+
+    if (primaryStair) {
+      const nextLevel = levels[Math.min(levelIndex + 1, levels.length - 1)];
+      level.stairs = [{
+        id: primaryStair.id,
+        x: primaryStair.x,
+        y: primaryStair.y,
+        width: primaryStair.width,
+        height: primaryStair.height,
+        connects_to_level_id: nextLevel?.id || level.id,
+      }];
+    }
+  });
+
+  if (levels.length > 1 && !(plan.circulation_routes || []).length) {
+    plan.circulation_routes = [{
+      id: "plan-foundation-main-circulation",
+      type: "mixed",
+      width_m: 1.5,
+      points: [
+        { x: minX, y: corridorY + corridorHeight / 2 },
+        { x: maxX, y: corridorY + corridorHeight / 2 },
+      ],
+      serves_level_ids: levels.map((level) => level.id),
+    }];
+  }
+
+  // Regenerate access metadata once more using the same geometry rules as the
+  // validator. This catches any edge case introduced by legacy openings.
+  return repairCanonicalPlanAccess(stabilized);
+}
+
 function geometryCoordinationIssues(args: {
   planSet: LivePlanSet;
   project: Record<string, unknown>;
@@ -2320,6 +2577,28 @@ export async function generateArchitecturePlanSet(args: {
   }
   correctionUsage = correctionUsages;
   correctionAuditUsage = correctionAuditUsages;
+
+  // If the reasoning model still returns structurally invalid rectangle
+  // geometry after both correction passes, stabilize the complete building
+  // deterministically instead of failing the paid Plan Foundation job. This
+  // keeps the validator strict: we fix the model first, then run every check
+  // again against the repaired source of truth.
+  const geometryFailurePattern = /overlaps|outside the (?:master building|locked level) outline|no explicit door opening|no clear circulation|door .* wall|opening .* missing source room|stair core .* not stacked|multi-floor building must define/i;
+  if (deterministicIssues.some((issue) => geometryFailurePattern.test(issue))) {
+    value = stabilizeCanonicalPlanGeometry(value);
+    deterministicIssues = [
+      ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
+      ...deterministicRequirementIssues(value, requirementContract),
+    ];
+    auditResult = await auditArchitecturePlanRequirements({
+      plan: args.plan,
+      contract: requirementContract,
+      planSet: value,
+    });
+    correctionAuditUsages.push(auditResult.usage);
+    auditFailures = hardPlanAuditFailures(requirementContract, auditResult.value);
+  }
 
   const unresolved = [...new Set([...deterministicIssues, ...auditFailures])];
   if (unresolved.length) {
