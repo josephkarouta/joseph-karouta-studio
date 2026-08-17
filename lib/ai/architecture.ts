@@ -1279,8 +1279,11 @@ function repairCanonicalPlanAccess(planSet: LivePlanSet): LivePlanSet {
 
     for (const room of rooms) {
       if (isOutdoorCanonicalRoom(room)) continue;
+      // A door is a bidirectional physical opening. It may be stored with
+      // either adjoining room as room_id, so count the room on either side.
       const alreadyAccessible = validDoorOpenings.some((opening) =>
-        opening.room_id === room.id && /door/.test(opening.type),
+        /door/.test(opening.type) &&
+        (opening.room_id === room.id || String(opening.connects_to || "") === room.id),
       );
       if (alreadyAccessible) continue;
 
@@ -1400,8 +1403,12 @@ function geometryCoordinationIssues(args: {
 
     for (const room of level.rooms || []) {
       if (isOutdoorCanonicalRoom(room)) continue;
+      // Openings are edges between spaces, not one-sided room properties.
+      // A Bedroom reached by a Hall→Bedroom door is accessible even when the
+      // opening record is owned by the Hall side.
       const doorOpenings = (level.openings || []).filter((opening) =>
-        opening.room_id === room.id && /door/.test(opening.type),
+        /door/.test(opening.type) &&
+        (opening.room_id === room.id || String(opening.connects_to || "") === room.id),
       );
       if (!doorOpenings.length) {
         issues.push(`${level.label || `Level ${levelIndex}`}: ${room.name} has no explicit door opening. Every enclosed room must be physically accessible.`);
@@ -1471,9 +1478,16 @@ function geometryCoordinationIssues(args: {
           issues.push(`${level.label}: ${room.name} carries ${bedCount} beds. Inpatient bedrooms must be modeled as individual 1-, 2- or 3-bed rooms rather than one oversized aggregate room.`);
         }
         const ensuiteOpening = (level.openings || []).some((opening) => {
-          if (opening.room_id !== room.id || !/door/.test(opening.type)) return false;
+          if (!/door/.test(opening.type)) return false;
+          const source = (level.rooms || []).find((candidate) => candidate.id === opening.room_id);
           const target = (level.rooms || []).find((candidate) => candidate.id === opening.connects_to);
-          return target ? /ensuite|bath|toilet|wc/i.test(target.name) : /ensuite|bath|toilet|wc/i.test(String(opening.connects_to || ""));
+          if (opening.room_id === room.id) {
+            return target ? /ensuite|bath|toilet|wc/i.test(target.name) : /ensuite|bath|toilet|wc/i.test(String(opening.connects_to || ""));
+          }
+          if (String(opening.connects_to || "") === room.id) {
+            return source ? /ensuite|bath|toilet|wc/i.test(source.name) : false;
+          }
+          return false;
         });
         if (!ensuiteOpening) {
           issues.push(`${level.label}: ${room.name} does not have direct ensuite bathroom access.`);
