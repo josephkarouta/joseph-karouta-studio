@@ -65,7 +65,6 @@ export async function processArchitectureImageJob(jobId: string) {
           target_id: input.targetId || null,
           quality: input.quality || "preview",
           plan_mode: input.planMode || "technical",
-          generation_intent: input.generationIntent || "normal",
         },
       });
       if (commitError) throw new Error(commitError.message || "Credits could not be committed.");
@@ -164,9 +163,6 @@ function publicGenerationError(message: string) {
     /Approve .* before generating visuals/i,
     /source plans are preserved/i,
     /Master Architecture Reference/i,
-    /Generate the selected Architecture Direction visual/i,
-    /Approve the .* Floor/i,
-    /connected floor/i,
   ];
   if (userActionErrors.some((pattern) => pattern.test(message))) return message;
   if (/content|safety|policy|moderation/i.test(message)) {

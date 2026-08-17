@@ -2,17 +2,13 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getAiMode, resolveAiPlan, type ImageGenerationTier } from "@/lib/ai/config";
 import { assertRateLimit } from "@/lib/ai/rate-limit";
 import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
 import type { CreditAction } from "@/lib/credits/config";
-import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
-import {
-  architectureFloorGenerationRole,
-  buildArchitectureReferenceBundle,
-  type ArchitectureFloorGenerationRole,
-} from "@/lib/architecture/reference-bundle";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,13 +21,40 @@ type RegenerateRequest = {
   targetId?: string;
   quality?: ImageGenerationTier;
   planMode?: "technical" | "rendered";
-  generationIntent?: ArchitectureFloorGenerationRole;
 };
 
 function requiredEnvironment(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is missing from the server environment.`);
   return value;
+}
+
+async function createAuthenticatedSupabaseClient() {
+  const cookieStore = await cookies();
+  return createServerClient(
+    requiredEnvironment("NEXT_PUBLIC_SUPABASE_URL"),
+    requiredEnvironment("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(
+          cookiesToSet: Array<{
+            name: string;
+            value: string;
+            options?: Parameters<typeof cookieStore.set>[2];
+          }>,
+        ) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+          } catch {
+            // Cookie writes are optional after the response is committed.
+          }
+        },
+      },
+    },
+  );
 }
 
 function metadataRecord(value: unknown) {
@@ -41,7 +64,7 @@ function metadataRecord(value: unknown) {
 }
 
 async function validateTargetAndResolveAction(args: {
-  supabase: SupabaseClient;
+  supabase: Awaited<ReturnType<typeof createAuthenticatedSupabaseClient>>;
   userId: string;
   projectId: string;
   targetType: ImageTarget;
@@ -115,7 +138,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Invalid image target." }, { status: 400 });
     }
 
-    const { user, admin: authenticatedAdmin, client: supabase } = await requireApiUser(request);
+    const supabase = await createAuthenticatedSupabaseClient();
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData.user;
+    if (!user) {
+      return NextResponse.json({ success: false, error: "Authentication required." }, { status: 401 });
+    }
 
     const { data: project, error: projectError } = await supabase
       .from("architecture_projects")
@@ -130,49 +158,6 @@ export async function POST(request: Request) {
       );
     }
 
-    admin = authenticatedAdmin;
-
-    // Reuse queued/processing jobs only for connected technical PLAN visuals.
-    // Direction and Concept images must never reconnect to an orphaned image job:
-    // those targets existed before the connected-floor workflow and should keep
-    // their original start behavior. A failed background bundle must not trap a
-    // Direction preview in a stale queued job for 30 minutes.
-    if (targetType === "visual" && planMode === "technical") {
-      const activeSince = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-      const { data: activeJobs, error: activeJobError } = await admin
-        .from("generation_jobs")
-        .select("id,status,input,created_at")
-        .eq("user_id", user.id)
-        .eq("project_id", projectId)
-        .eq("tool", "architecture_image")
-        .in("status", ["queued", "processing"])
-        .gte("created_at", activeSince)
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (activeJobError) {
-        console.error("Architecture active-job lookup failed:", activeJobError.message);
-      } else {
-        const existingActive = (activeJobs || []).find((row) => {
-          const input = metadataRecord(row.input);
-          return String(input.targetType || "") === targetType
-            && String(input.targetId || "") === targetId
-            && String(input.quality || "preview") === quality
-            && String(input.planMode || "technical") === planMode;
-        });
-        if (existingActive) {
-          const input = metadataRecord(existingActive.input);
-          return NextResponse.json({
-            success: true,
-            jobId: String(existingActive.id),
-            status: "processing",
-            reusedExistingJob: true,
-            creditsReserved: Number(input.credits || 0),
-          });
-        }
-      }
-    }
-
     assertRateLimit(`architecture-image:${user.id}`, 8, 60_000);
 
     const action = await validateTargetAndResolveAction({
@@ -185,30 +170,11 @@ export async function POST(request: Request) {
       planMode,
     });
 
-    let generationIntent: ArchitectureFloorGenerationRole = "normal";
-    if (targetType === "visual" && planMode === "technical") {
-      const { data: targetVisual, error: targetVisualError } = await supabase
-        .from("architecture_visuals")
-        .select("visual_type,metadata")
-        .eq("id", targetId)
-        .eq("project_id", projectId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (targetVisualError || !targetVisual) {
-        throw new Error(targetVisualError?.message || "Architecture visual not found.");
-      }
-      generationIntent = architectureFloorGenerationRole(String(targetVisual.visual_type || ""));
-      if (generationIntent !== "normal") {
-        // Validate the connected reference chain before reserving credits. The
-        // background worker validates again immediately before provider work.
-        await buildArchitectureReferenceBundle({
-          admin,
-          userId: user.id,
-          projectId,
-          targetVisualType: String(targetVisual.visual_type || ""),
-        });
-      }
-    }
+    admin = createClient(
+      requiredEnvironment("NEXT_PUBLIC_SUPABASE_URL"),
+      requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
 
     const mode = process.env.NEXT_PUBLIC_MOCK_IMAGES === "true" ? "demo" : getAiMode();
     let credits = 0;
@@ -224,7 +190,6 @@ export async function POST(request: Request) {
           target_id: targetId,
           quality,
           plan_mode: planMode,
-          generation_intent: generationIntent,
         },
       });
       reservationId = reservation.id;
@@ -247,7 +212,6 @@ export async function POST(request: Request) {
           targetId,
           quality,
           planMode,
-          generationIntent,
           planName: resolveAiPlan(user),
           credits,
         },
@@ -323,12 +287,6 @@ export async function POST(request: Request) {
     }
 
     console.error("Architecture image start error:", error);
-    if (error instanceof ApiAuthError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status },
-      );
-    }
     if (error instanceof CreditError) {
       return NextResponse.json(
         { success: false, error: error.message, code: error.code },

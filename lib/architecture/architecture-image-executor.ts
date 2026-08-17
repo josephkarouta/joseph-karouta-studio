@@ -18,7 +18,6 @@ type RegenerateRequest = {
   targetId?: string;
   quality?: ImageGenerationTier;
   planMode?: "technical" | "rendered";
-  generationIntent?: "ground_floor_from_direction" | "upper_floor_from_ground" | "normal";
 };
 
 type GeneratedAsset = {
@@ -228,33 +227,6 @@ function sourceReferenceFingerprint(documents: SourceDocumentRecord[]) {
     .sort()
     .join("|");
   return stable ? createHash("sha256").update(stable).digest("hex").slice(0, 20) : null;
-}
-
-function canonicalFloorVisualType(index: number) {
-  if (index <= 0) return "ground_floor";
-  if (index === 1) return "upper_floor";
-  return `level_${index}_floor`;
-}
-
-function canonicalFloorIndex(visualType: string) {
-  if (visualType === "ground_floor") return 0;
-  if (visualType === "upper_floor") return 1;
-  const match = visualType.match(/^level_(\d+)_floor$/);
-  return match ? Number(match[1]) : null;
-}
-
-function approvedPlanReference(
-  row: Record<string, unknown> | undefined,
-  label: string,
-) {
-  if (!row || row.is_approved !== true) return null;
-  const rowMetadata = metadataRecord(row.metadata);
-  const technicalAssets = metadataRecord(rowMetadata.technical_assets);
-  return imageReference({
-    label,
-    storagePath: technicalAssets.master_storage_path,
-    url: technicalAssets.preview_url || row.image_url,
-  });
 }
 
 function sourcePlanPriority(category: string, visualType: string) {
@@ -741,10 +713,6 @@ export async function executeArchitectureImageGeneration(args: {
     }
 
     const planJson = metadataRecord(planSet.generation_json);
-    const planSpatialBrief = metadataRecord(planJson.direction_spatial_brief);
-    const directionSpatialBrief = Object.keys(planSpatialBrief).length
-      ? planSpatialBrief
-      : metadataRecord(masterDirectionJson.direction_spatial_brief);
     const canonicalPlan = canonicalPlanFrom(planJson);
     if (!canonicalPlan) {
       throw new Error("This project has no Canonical Plan Specification. Click Refresh Plan Content & Prompts first.");
@@ -765,31 +733,6 @@ export async function executeArchitectureImageGeneration(args: {
         "north_elevation", "south_elevation", "east_elevation", "west_elevation",
         "section_longitudinal", "section_transverse",
       ].includes(String(row.visual_type || "")));
-    const visualType = String(visual.visual_type || "ground_floor");
-    const canonicalLevels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
-    const targetFloorIndex = canonicalFloorIndex(visualType);
-    const approvedFloorReferences = canonicalLevels.map((_, floorIndex) => {
-      const floorType = canonicalFloorVisualType(floorIndex);
-      const floorRow = siblingPlans.find((row) => String(row.visual_type || "") === floorType);
-      return approvedPlanReference(
-        floorRow,
-        `${floorType.replace(/_/g, " ")} of the same project. This is an approved connected floor plan and is a geometry anchor for the same building. Keep the footprint family, stair/core stack, wet-core logic, opening rhythm and circulation aligned with it.`,
-      );
-    }).filter((reference): reference is ArchitectureImageReference => Boolean(reference));
-    const prerequisiteFloorReferences = targetFloorIndex === null
-      ? approvedFloorReferences
-      : approvedFloorReferences.slice(0, targetFloorIndex);
-    if (targetFloorIndex !== null && targetFloorIndex > 0 && prerequisiteFloorReferences.length < targetFloorIndex) {
-      const missingTypes = Array.from({ length: targetFloorIndex }, (_, index) => canonicalFloorVisualType(index))
-        .filter((floorType, index) => !prerequisiteFloorReferences[index])
-        .map((floorType) => floorType.replace(/_/g, " "));
-      throw new Error(
-        `Approve ${missingTypes.join(" and ")} before generating ${visualType.replace(/_/g, " ")}. Each floor plan must be generated from the selected direction and the already approved lower floor plans.`,
-      );
-    }
-    const planWorkflowReferences = targetFloorIndex === null
-      ? approvedFloorReferences
-      : prerequisiteFloorReferences;
 
     if (planMode === "rendered") {
       const renderedAssetKey = `rendered_${quality}_assets`;
@@ -811,11 +754,10 @@ export async function executeArchitectureImageGeneration(args: {
         projectName: project.project_name,
         canonicalPlan,
         architectureDna,
-        directionSpatialBrief,
         areaSchedule: Array.isArray(planSet.area_schedule) ? planSet.area_schedule : [],
         plan,
         tier: quality,
-        referenceImages: uniqueReferences([masterReference, ...planWorkflowReferences, currentRenderedReference]),
+        referenceImages: uniqueReferences([masterReference, currentRenderedReference]),
         sourceGeometryReferences: sourceDrawingReferences,
         preserveSourceGeometry: sourceGeometryLocked,
       }));
@@ -844,6 +786,19 @@ export async function executeArchitectureImageGeneration(args: {
         storagePath: currentTechnical.master_storage_path,
         url: currentTechnical.preview_url,
       });
+      const visualType = String(visual.visual_type || "ground_floor");
+      const coordinatedFloorReferences = ["ground_floor", "upper_floor"].map((floorType) => {
+        const floor = siblingPlans.find((row) => String(row.visual_type || "") === floorType);
+        const floorMetadata = metadataRecord(floor?.metadata);
+        const floorTechnical = metadataRecord(floorMetadata.technical_assets);
+        return floor
+          ? imageReference({
+              label: `${floorType.replace(/_/g, " ")} of the same project. Align footprint, stairs, wet cores, facade openings and vertical structure where relevant.`,
+              storagePath: floorTechnical.master_storage_path,
+              url: floorTechnical.preview_url || floor.image_url,
+            })
+          : null;
+      });
       const generated = await paidGenerate(
         quality === "final" ? "architectureProfessionalFinal" : "architectureTechnicalPlan",
         { target: "detailed_concept_plan", quality, plan_mode: "technical", visual_type: visualType },
@@ -857,13 +812,12 @@ export async function executeArchitectureImageGeneration(args: {
           projectName: project.project_name,
           canonicalPlan,
           architectureDna,
-          directionSpatialBrief,
           plan,
           tier: quality,
           referenceImages: uniqueReferences([
             masterReference,
-            ...planWorkflowReferences,
-            ...(targetFloorIndex === null ? [currentTechnicalReference] : []),
+            currentTechnicalReference,
+            ...coordinatedFloorReferences,
           ]),
           sourceGeometryReferences: sourceDrawingReferences,
           preserveSourceGeometry: sourceGeometryLocked,
@@ -923,10 +877,6 @@ export async function executeArchitectureImageGeneration(args: {
     const canonicalPlan =
       canonicalPlanFrom(visualMetadata) ||
       canonicalPlanFrom(planJson);
-    const planSpatialBrief = metadataRecord(planJson.direction_spatial_brief);
-    const directionSpatialBrief = Object.keys(planSpatialBrief).length
-      ? planSpatialBrief
-      : metadataRecord(masterDirectionJson.direction_spatial_brief);
 
     if (!canonicalPlan && !sourceGeometryLocked) {
       throw new Error("Prepare and approve the connected floor plans before generating architectural visuals.");
@@ -961,6 +911,12 @@ export async function executeArchitectureImageGeneration(args: {
       storagePath: preferredMasterPath(visualMetadata, visual.storage_path),
       url: visual.image_url,
     });
+    const conceptReference = imageReference({
+      label: "Approved Concept reference for the same property.",
+      storagePath: preferredMasterPath(conceptJson, conceptJson.image_storage_path),
+      url: concept?.image_url,
+    });
+
     const rows = (relatedVisuals || []) as Array<Record<string, unknown>>;
     const relevantSourceReferences = sourceGeometryLocked
       ? sourceReferencesForVisual(orderedSourceDocuments, visualType)
@@ -979,10 +935,6 @@ export async function executeArchitectureImageGeneration(args: {
               })
             : null;
         });
-    const connectedApprovedPlanReferences = approvedPlanReferences
-      .filter((reference): reference is ArchitectureImageReference => Boolean(reference));
-    const directionPlanSkeleton = metadataRecord(directionSpatialBrief.plan_skeleton);
-
     const tourPreviousType = group === "tour" && typeof visualMetadata.tour_previous_visual_type === "string"
       ? visualMetadata.tour_previous_visual_type
       : null;
@@ -1012,6 +964,10 @@ export async function executeArchitectureImageGeneration(args: {
     const currentGroundedReference = !sourceGeometryLocked || sourceGrounded(visualMetadata, sourceFingerprint)
       ? currentTargetReference
       : null;
+    const conceptGroundedReference = !sourceGeometryLocked || sourceGrounded(conceptJson, sourceFingerprint)
+      ? conceptReference
+      : null;
+
     const generated = await paidGenerate(quality === "final" ? "architectureProfessionalFinal" : "architectureVisual", { target: "visual", quality, visual_type: visual.visual_type }, () => generateAndStoreArchitectureImage({
       supabase,
       userId: authenticatedUserId,
@@ -1032,39 +988,34 @@ export async function executeArchitectureImageGeneration(args: {
           ].filter(Boolean).join("\n\n")
         : [
             prompt,
-            "CHATGPT-LIKE CONNECTED REFERENCE RULE: create this requested view from the actual supplied project images. The APPROVED FLOOR PLAN images are the geometry source of truth for footprint topology, stair/core stacking, level relationships, pool/site placement, openings and circulation. The SELECTED DIRECTION image is the identity source of truth for massing character, roof/façade language, materials, landscape and atmosphere. Do not create a new building between views.",
-            Object.keys(directionPlanSkeleton).length
-              ? `Direction-derived conceptual plan skeleton: ${JSON.stringify(directionPlanSkeleton)}. Use it only to clarify the visible relationship already present in the Direction and approved plans; the approved plan images remain the strongest geometry references.`
-              : "",
             group === "tour"
               ? "TOUR OUTPUT RULES: create one immersive room panorama with a level horizon, camera at eye height and strong continuity at the left and right edges. Preserve all approved door, window and circulation positions. This is one node in a connected room-to-room tour, not an unrelated interior redesign."
+              : "",
+            canonicalPlan
+              ? `Canonical site and plan relationship: ${JSON.stringify(canonicalPlan)}`
               : "",
           ].filter(Boolean).join("\n\n"),
       plan,
       architectureDna: sourceGeometryLocked ? null : architectureDna,
-      sourceGeometryReferences: sourceGeometryLocked
-        ? relevantSourceReferences
-        : connectedApprovedPlanReferences,
-      preserveSourceGeometry: sourceGeometryLocked || connectedApprovedPlanReferences.length > 0,
-      geometryReferenceMode: sourceGeometryLocked ? "existing_design" : "approved_plans",
+      sourceGeometryReferences: relevantSourceReferences,
+      preserveSourceGeometry: sourceGeometryLocked,
       referenceImages: sourceGeometryLocked
         ? uniqueReferences([
             currentGroundedReference,
             relatedReference,
           ])
-        : group === "tour"
-          ? uniqueReferences([
-              masterReference,
-              relatedReference,
-            ])
-          : uniqueReferences([
-              masterReference,
-            ]),
+        : uniqueReferences([
+            ...approvedPlanReferences,
+            masterReference,
+            currentTargetReference,
+            relatedReference,
+            conceptGroundedReference,
+          ]),
       targetRole: sourceGeometryLocked
         ? `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. Style references may affect materials, colour, landscape and lighting only.`
         : group === "tour"
           ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the same locked property. Keep the room navigable and visually continuous with adjacent tour nodes.`
-          : `Generate only the ${String(visual.title || visual.visual_type)} view of the same locked property. Treat approved floor plans as geometry anchors and the selected Direction as the architectural identity anchor.`,
+          : `Generate only the ${String(visual.title || visual.visual_type)} view of the same locked property.`,
       tier: quality,
     }));
     imageUrl = generated.imageUrl;
@@ -1072,7 +1023,6 @@ export async function executeArchitectureImageGeneration(args: {
     imageMetadata = {
       architecture_dna: architectureDna,
       canonical_plan: canonicalPlan,
-      direction_spatial_brief: directionSpatialBrief,
       image_usage: generated.usage,
       image_reference_count: generated.referenceCount,
       image_generation_method: generated.generationMethod,

@@ -107,27 +107,7 @@ function pointBounds(points: Array<{ x: number; y: number }>) {
 }
 
 function lockedTransform(plan: CanonicalPlanSpec, target: Rect) {
-  const outlinePoints = masterOutline(plan);
-  const contextPoints = [
-    ...outlinePoints,
-    ...(plan.pool?.present
-      ? [
-          { x: plan.pool.x, y: plan.pool.y },
-          { x: plan.pool.x + plan.pool.width, y: plan.pool.y + plan.pool.height },
-        ]
-      : []),
-    ...(plan.driveway?.present
-      ? [
-          { x: plan.driveway.x, y: plan.driveway.y },
-          { x: plan.driveway.x + plan.driveway.width, y: plan.driveway.y + plan.driveway.height },
-        ]
-      : []),
-    ...((plan.site_features || []).flatMap((feature) => [
-      { x: feature.x, y: feature.y },
-      { x: feature.x + feature.width, y: feature.y + feature.height },
-    ])),
-  ];
-  const bounds = pointBounds(contextPoints.length ? contextPoints : outlinePoints);
+  const bounds = pointBounds(masterOutline(plan));
   const sourceWidth = Math.max(12, bounds.maxX - bounds.minX);
   const sourceHeight = Math.max(12, bounds.maxY - bounds.minY);
   const scale = Math.min(target.width / sourceWidth, target.height / sourceHeight);
@@ -144,35 +124,6 @@ function mapPoint(plan: CanonicalPlanSpec, target: Rect, point: { x: number; y: 
     x: transform.offsetX + (clamp(point.x) - transform.bounds.minX) * transform.scale,
     y: transform.offsetY + (clamp(point.y) - transform.bounds.minY) * transform.scale,
   };
-}
-
-function mapRect(plan: CanonicalPlanSpec, target: Rect, rect: { x: number; y: number; width: number; height: number }) {
-  const transform = lockedTransform(plan, target);
-  return {
-    x: transform.offsetX + (clamp(rect.x) - transform.bounds.minX) * transform.scale,
-    y: transform.offsetY + (clamp(rect.y) - transform.bounds.minY) * transform.scale,
-    width: Math.max(8, Math.max(1, clamp(rect.width, 0, 100)) * transform.scale),
-    height: Math.max(8, Math.max(1, clamp(rect.height, 0, 100)) * transform.scale),
-  };
-}
-
-function siteFeaturesSvg(plan: CanonicalPlanSpec, target: Rect) {
-  const features = Array.isArray(plan.site_features) ? plan.site_features : [];
-  return features.map((feature) => {
-    const box = mapRect(plan, target, feature);
-    const label = esc(feature.label || feature.type.replace(/_/g, " "));
-    if (feature.type === "steps") {
-      const count = Math.max(3, Math.min(12, Math.round(box.height / 15)));
-      const lines = Array.from({ length: count + 1 }, (_, index) => {
-        const y = box.y + box.height * index / count;
-        return `<line x1="${box.x}" y1="${y}" x2="${box.x + box.width}" y2="${y}" stroke="${MID}" stroke-width="2"/>`;
-      }).join("");
-      return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#f8fafc" stroke="${INK}" stroke-width="2"/>${lines}<text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 4}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="800" fill="${INK}">${label}</text></g>`;
-    }
-    const fill = feature.type === "garden" ? "#f2f8f1" : feature.type === "outdoor_living" ? "#fffaf0" : "#f8fafc";
-    const dash = feature.type === "path" ? ' stroke-dasharray="8 6"' : "";
-    return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="${fill}" stroke="${MID}" stroke-width="2"${dash}/><text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 4}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="${MID}">${label}</text></g>`;
-  }).join("");
 }
 
 function mapRooms(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined, target: Rect): ScreenRoom[] {
@@ -668,19 +619,17 @@ function renderFloorPlan(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | un
       }).join("")
     : "";
 
-  const poolBox = plan.pool?.present ? mapRect(plan, target, plan.pool) : null;
-  const pool = poolBox && (visualType === "ground_floor" || zoning)
-    ? `<g><rect x="${poolBox.x}" y="${poolBox.y}" width="${poolBox.width}" height="${poolBox.height}" fill="#eef8ff" stroke="${INK}" stroke-width="4"/><line x1="${poolBox.x + 10}" y1="${poolBox.y + poolBox.height / 2}" x2="${poolBox.x + poolBox.width - 10}" y2="${poolBox.y + poolBox.height / 2}" stroke="#8cc8eb" stroke-width="2"/><text x="${poolBox.x + poolBox.width / 2}" y="${poolBox.y + poolBox.height / 2 + 5}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="800">POOL</text></g>`
+  const poolX = Math.min(1390, maxX + 30);
+  const pool = plan.pool?.present && (visualType === "ground_floor" || zoning)
+    ? `<rect x="${poolX}" y="${minY + (maxY - minY) * 0.28}" width="110" height="${Math.max(120, (maxY - minY) * 0.42)}" fill="#eef8ff" stroke="${INK}" stroke-width="4"/><line x1="${poolX + 12}" y1="${minY + (maxY - minY) * 0.48}" x2="${poolX + 98}" y2="${minY + (maxY - minY) * 0.48}" stroke="#8cc8eb" stroke-width="2"/><text x="${poolX + 55}" y="${minY + (maxY - minY) * 0.5}" text-anchor="middle" transform="rotate(-90 ${poolX + 55} ${minY + (maxY - minY) * 0.5})" font-family="Arial, sans-serif" font-size="13" font-weight="800">POOL</text>`
     : "";
-  const siteFeatures = level === plan.levels?.[0] && !circulation ? siteFeaturesSvg(plan, target) : "";
 
   const legend = zoning ? Array.from(new Set(rooms.map((room) => zoneKey(room.room.zone)))).map((key, index) => `<rect x="${160 + index * 160}" y="900" width="18" height="18" fill="${zoneFill[key]}" stroke="${INK}" stroke-width="1"/><text x="${186 + index * 160}" y="914" font-family="Arial, sans-serif" font-size="11" font-weight="700">${esc(key.toUpperCase())}</text>`).join("") : "";
 
   return `<g>
     <rect x="115" y="145" width="1305" height="735" fill="#fff" stroke="#cfd5de" stroke-width="2"/>
-    ${siteFeatures}${pool}
     ${polygonSvg(plan, level, target)}
-    ${roomBodies}${scheduledOpenings}${fallbackDoors}${fallbackWindows}${verticalCoresSvg(plan, level, target)}${level === plan.levels?.[0] ? entryDoorSvg(plan, rooms) : ""}${circulationPaths}
+    ${roomBodies}${scheduledOpenings}${fallbackDoors}${fallbackWindows}${verticalCoresSvg(plan, level, target)}${level === plan.levels?.[0] ? entryDoorSvg(plan, rooms) : ""}${circulationPaths}${pool}
     ${!zoning && !circulation ? sectionCutMarkersSvg(plan, level, rooms) : ""}
     ${dimensionLine(minX, maxY + 60, maxX, maxY + 60, `APPROX. ${planWidthM.toFixed(1)} m`)}
     ${dimensionLine(minX - 60, minY, minX - 60, maxY, `APPROX. ${planDepthM.toFixed(1)} m`, true)}

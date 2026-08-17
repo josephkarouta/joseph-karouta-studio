@@ -351,11 +351,6 @@ type ArchitectureDesignPack = {
 type DemoStage = "concept" | "plans" | "visuals" | "design-pack" | "all";
 type ImageGenerationTier = "preview" | "final";
 type PlanGenerationMode = "technical" | "rendered";
-type ArchitectureConnectedGenerationIntent =
-  | "ground_floor_from_direction"
-  | "upper_floor_from_approved_floor"
-  | "level_from_approved_floors"
-  | "normal";
 
 type EstimateItem = {
   id: string;
@@ -464,14 +459,6 @@ function canonicalFloorIndex(visualType: string) {
 
 function isCanonicalFloorVisualType(visualType: string) {
   return canonicalFloorIndex(visualType) !== null;
-}
-
-function connectedGenerationIntent(visualType: string): ArchitectureConnectedGenerationIntent {
-  const index = canonicalFloorIndex(visualType);
-  if (index === 0) return "ground_floor_from_direction";
-  if (index === 1) return "upper_floor_from_approved_floor";
-  if (index !== null && index > 1) return "level_from_approved_floors";
-  return "normal";
 }
 
 function floorPlanTypesForLevels(levels: unknown[]) {
@@ -1946,73 +1933,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     }
   }
 
-  async function markDependentPlansStale(anchorVisual: ArchitectureVisual, reason: string) {
-    if (!user) return;
-    const anchorIndex = canonicalFloorIndex(anchorVisual.visual_type);
-    if (anchorIndex === null) return;
-
-    const dependents = visuals.filter((item) => {
-      if (item.id === anchorVisual.id) return false;
-      const metadata = recordValue(item.metadata);
-      const floorIndex = canonicalFloorIndex(item.visual_type);
-      if (floorIndex !== null) return floorIndex > anchorIndex;
-      return metadata.group === "plans";
-    });
-    if (!dependents.length) return;
-
-    const updatedRows: ArchitectureVisual[] = [];
-    for (const dependent of dependents) {
-      const nextMetadata = {
-        ...recordValue(dependent.metadata),
-        stale: true,
-        stale_reason: reason,
-        stale_at: new Date().toISOString(),
-      };
-      const { data, error: staleError } = await supabase
-        .from("architecture_visuals")
-        .update({ is_approved: false, metadata: nextMetadata })
-        .eq("id", dependent.id)
-        .eq("project_id", projectId)
-        .eq("user_id", user.id)
-        .select("*")
-        .single();
-      if (staleError || !data) {
-        throw new Error(staleError?.message || "Dependent Architecture plans could not be invalidated.");
-      }
-      updatedRows.push(data as ArchitectureVisual);
-    }
-
-    if (updatedRows.length) {
-      const byId = new Map(updatedRows.map((item) => [item.id, item]));
-      setVisuals((current) => current.map((item) => byId.get(item.id) || item));
-    }
-  }
-
-  async function unlockFloorAnchorForRegeneration(visual: ArchitectureVisual) {
-    if (!user) return visual;
-    const nextMetadata = {
-      ...recordValue(visual.metadata),
-      anchor_status: "candidate",
-      approved_as_reference_at: null,
-      stale: false,
-      stale_reason: null,
-    };
-    const { data, error: unlockError } = await supabase
-      .from("architecture_visuals")
-      .update({ is_approved: false, metadata: nextMetadata })
-      .eq("id", visual.id)
-      .eq("project_id", projectId)
-      .eq("user_id", user.id)
-      .select("*")
-      .single();
-    if (unlockError || !data) {
-      throw new Error(unlockError?.message || "The locked floor reference could not be prepared for regeneration.");
-    }
-    const updated = data as ArchitectureVisual;
-    setVisuals((current) => current.map((item) => item.id === updated.id ? updated : item));
-    return updated;
-  }
-
   async function regenerateArchitectureImage(
     targetType: "direction" | "concept" | "visual",
     targetId: string,
@@ -2024,53 +1944,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     if (!user) return;
     const quality = options.quality || "preview";
     const planMode = options.planMode || "technical";
-    let generationIntent: ArchitectureConnectedGenerationIntent = "normal";
-
-    if (targetType === "visual" && planMode === "technical") {
-      const targetVisual = visuals.find((item) => item.id === targetId);
-      const floorIndex = targetVisual ? canonicalFloorIndex(targetVisual.visual_type) : null;
-      if (targetVisual && floorIndex !== null) {
-        generationIntent = connectedGenerationIntent(targetVisual.visual_type);
-        const activeDirection = directions.find((item) => item.id === projectDraft?.selected_direction_id) || null;
-        if (!activeDirection || !(activeDirection.image_storage_path || activeDirection.image_url)) {
-          setError("Generate the selected Architecture Direction visual before generating connected floor plans.");
-          switchTab("directions");
-          return;
-        }
-
-        for (let index = 0; index < floorIndex; index += 1) {
-          const requiredType = canonicalFloorVisualType(index);
-          const requiredFloor = visuals.find((item) => item.visual_type === requiredType);
-          const requiredMetadata = recordValue(requiredFloor?.metadata);
-          const hasDetailedPlan = Boolean(
-            requiredFloor &&
-            (assetPreviewUrl(requiredMetadata.technical_assets) || requiredFloor.image_url),
-          );
-          if (!requiredFloor?.is_approved || requiredMetadata.stale === true || !hasDetailedPlan) {
-            setError(`Approve the ${floorPlanDisplayName(requiredType)} before generating the next floor.`);
-            return;
-          }
-        }
-
-        if (targetVisual.is_approved) {
-          const confirmed = window.confirm(
-            `Regenerating this locked ${floorPlanDisplayName(targetVisual.visual_type)} will invalidate later plans and visuals that depend on it. Continue?`,
-          );
-          if (!confirmed) return;
-          try {
-            await markDependentPlansStale(
-              targetVisual,
-              `${targetVisual.visual_type}_reference_regenerated`,
-            );
-            await unlockFloorAnchorForRegeneration(targetVisual);
-          } catch (referenceError) {
-            setError(referenceError instanceof Error ? referenceError.message : "The connected floor reference could not be updated.");
-            return;
-          }
-        }
-      }
-    }
-
     const stateKey = `${targetType}-${targetId}`;
     setRegeneratingImage(stateKey);
     setGenerationStatus(
@@ -2097,40 +1970,10 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         status?: "processing" | "succeeded" | "failed";
         jobId?: string;
         error?: string;
-        reusedExistingJob?: boolean;
         direction?: Direction;
         concept?: ArchitectureConcept;
         visual?: ArchitectureVisual;
       };
-
-      async function architectureAccessToken(forceRefresh = false) {
-        if (forceRefresh) {
-          const { data, error: refreshError } = await supabase.auth.refreshSession();
-          if (refreshError || !data.session?.access_token) {
-            throw new Error("Your session expired. Please sign in again.");
-          }
-          return data.session.access_token;
-        }
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.access_token) return data.session.access_token;
-        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-        if (refreshError || !refreshed.session?.access_token) {
-          throw new Error("Your session expired. Please sign in again.");
-        }
-        return refreshed.session.access_token;
-      }
-
-      async function architectureApiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
-        const requestWithToken = async (forceRefresh = false) => {
-          const token = await architectureAccessToken(forceRefresh);
-          const headers = new Headers(init.headers || {});
-          headers.set("Authorization", `Bearer ${token}`);
-          return fetch(input, { ...init, headers });
-        };
-        let response = await requestWithToken(false);
-        if (response.status === 401) response = await requestWithToken(true);
-        return response;
-      }
 
       async function readArchitectureImageResponse(
         response: Response,
@@ -2151,7 +1994,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         }
       }
 
-      const response = await architectureApiFetch("/api/architecture/images/regenerate", {
+      const response = await fetch("/api/architecture/images/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2160,7 +2003,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
           targetId,
           quality,
           planMode,
-          generationIntent,
         }),
       });
       const started = await readArchitectureImageResponse(
@@ -2170,9 +2012,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
       if (!response.ok || !started.success || !started.jobId) {
         throw new Error(started.error || "Architecture image generation could not be started.");
       }
-      if (started.reusedExistingJob) {
-        setGenerationStatus("This image is already generating in the background — reconnecting to the existing job");
-      }
 
       let payload: ArchitectureImageResponse | null = null;
       for (let attempt = 0; attempt < 180; attempt += 1) {
@@ -2180,7 +2019,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
           await new Promise<void>((resolve) => window.setTimeout(resolve, 2500));
         }
 
-        const statusResponse = await architectureApiFetch(
+        const statusResponse = await fetch(
           `/api/architecture/images/status?job=${encodeURIComponent(started.jobId)}`,
           { cache: "no-store" },
         );
@@ -2240,82 +2079,29 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
   async function approveVisual(visual: ArchitectureVisual) {
     if (!user) return;
 
-    const nextApproved = !visual.is_approved;
-    const floorIndex = canonicalFloorIndex(visual.visual_type);
-    const currentMetadata = recordValue(visual.metadata);
-    if (nextApproved && currentMetadata.stale === true) {
-      setError("Regenerate this stale plan before approving it as a connected reference.");
-      return;
-    }
-
-    if (nextApproved && floorIndex !== null && floorIndex > 0) {
-      for (let index = 0; index < floorIndex; index += 1) {
-        const requiredType = canonicalFloorVisualType(index);
-        const requiredFloor = visuals.find((item) => item.visual_type === requiredType);
-        const requiredMetadata = recordValue(requiredFloor?.metadata);
-        if (!requiredFloor?.is_approved || requiredMetadata.stale === true) {
-          setError(`Approve the ${floorPlanDisplayName(requiredType)} before locking this floor as a reference.`);
-          return;
-        }
-      }
-    }
-
     setApprovingVisual(visual.id);
     setError("");
 
-    const nextMetadata = floorIndex !== null
-      ? {
-          ...currentMetadata,
-          anchor_status: nextApproved ? "locked" : "candidate",
-          approved_as_reference_at: nextApproved ? new Date().toISOString() : null,
-          stale: false,
-          stale_reason: null,
-        }
-      : currentMetadata;
-
     const { data, error: approvalError } = await supabase
       .from("architecture_visuals")
-      .update({ is_approved: nextApproved, metadata: nextMetadata })
+      .update({ is_approved: !visual.is_approved })
       .eq("id", visual.id)
       .eq("project_id", projectId)
       .eq("user_id", user.id)
       .select("*")
       .single();
 
+    setApprovingVisual(null);
+
     if (approvalError || !data) {
-      setApprovingVisual(null);
       setError(approvalError?.message || "The visual approval could not be updated.");
       return;
     }
 
-    const updated = data as ArchitectureVisual;
     setVisuals((current) =>
-      current.map((item) => (item.id === visual.id ? updated : item)),
+      current.map((item) => (item.id === visual.id ? (data as ArchitectureVisual) : item)),
     );
-
-    try {
-      if (floorIndex !== null && !nextApproved) {
-        await markDependentPlansStale(
-          updated,
-          `${visual.visual_type}_reference_unapproved`,
-        );
-      }
-    } catch (staleError) {
-      setApprovingVisual(null);
-      setError(staleError instanceof Error ? staleError.message : "Dependent Architecture plans could not be invalidated.");
-      return;
-    }
-
-    setApprovingVisual(null);
-    showMessage(
-      nextApproved
-        ? floorIndex !== null
-          ? `${floorPlanDisplayName(visual.visual_type)} locked as a downstream reference.`
-          : "Visual approved."
-        : floorIndex !== null
-          ? `${floorPlanDisplayName(visual.visual_type)} unlocked. Later dependent plans must be regenerated.`
-          : "Visual approval removed.",
-    );
+    showMessage((data as ArchitectureVisual).is_approved ? "Visual approved." : "Visual approval removed.");
   }
 
   function estimateAreaScheduleFromProject() {
@@ -4756,48 +4542,10 @@ function PlansTab({
     const visual = planVisuals.find((item) => item.visual_type === type);
       return Boolean(
         visual?.is_approved &&
-        recordValue(visual.metadata).stale !== true &&
         (assetPreviewUrl(recordValue(visual.metadata).technical_assets) || visual.image_url),
       );
     })
   );
-  const directionHasImage = Boolean(direction.image_storage_path || direction.image_url);
-
-  function technicalGenerationLockReason(visual: ArchitectureVisual) {
-    const floorIndex = canonicalFloorIndex(visual.visual_type);
-    if (floorIndex === 0) {
-      return directionHasImage ? null : "Generate the selected Direction visual first.";
-    }
-    if (floorIndex !== null && floorIndex > 0) {
-      for (let index = 0; index < floorIndex; index += 1) {
-        const requiredType = canonicalFloorVisualType(index);
-        const requiredFloor = planVisuals.find((item) => item.visual_type === requiredType);
-        const metadata = recordValue(requiredFloor?.metadata);
-        const hasDetailedPlan = Boolean(
-          requiredFloor &&
-          (assetPreviewUrl(metadata.technical_assets) || requiredFloor.image_url),
-        );
-        if (!requiredFloor?.is_approved || metadata.stale === true || !hasDetailedPlan) {
-          return `Approve ${floorPlanDisplayName(requiredType, canonicalLevels)} to unlock this floor.`;
-        }
-      }
-      return null;
-    }
-    return requiredFloorPlansReady ? null : "Approve all required floor plans to unlock this view.";
-  }
-
-  function connectedReferenceNote(visual: ArchitectureVisual) {
-    const floorIndex = canonicalFloorIndex(visual.visual_type);
-    if (floorIndex === 0) return `Uses ${direction?.title || "the selected Direction"} as the master architecture reference.`;
-    if (floorIndex !== null && floorIndex > 0) {
-      const previousNames = Array.from({ length: floorIndex }, (_, index) =>
-        floorPlanDisplayName(canonicalFloorVisualType(index), canonicalLevels).replace(/ Plan$/i, ""),
-      );
-      return `Uses ${direction?.title || "the selected Direction"} + approved ${previousNames.join(" + ")}.`;
-    }
-    if (requiredFloorPlansReady) return "Uses the approved floor-plan set as locked geometry references.";
-    return null;
-  }
 
   const planDisplayOrder = [
     ...requiredFloorPlanTypes,
@@ -4831,8 +4579,7 @@ function PlansTab({
 
   async function runPlanBatch(mode: "technical" | "rendered") {
     const queue = orderedPlanVisuals.filter((visual) =>
-      selectedPlanIds.includes(visual.id) &&
-      (mode !== "technical" || technicalGenerationLockReason(visual) === null),
+      selectedPlanIds.includes(visual.id),
     );
     if (!queue.length) return;
     setBatchRunning(mode);
@@ -4935,10 +4682,6 @@ function PlansTab({
             }
             plansReady={requiredFloorPlansReady}
             sourceLocked={existingDesignSource}
-            generationLockedReason={technicalGenerationLockReason(visual)}
-            referenceNote={connectedReferenceNote(visual)}
-            lockedReference={isCanonicalFloorVisualType(visual.visual_type) && visual.is_approved && recordValue(visual.metadata).stale !== true}
-            stale={recordValue(visual.metadata).stale === true}
             approving={approvingVisual === visual.id}
             onApprove={() => onApprove(visual)}
           />
@@ -5289,10 +5032,6 @@ function PlanVisualCard({
   onGenerate,
   plansReady,
   sourceLocked,
-  generationLockedReason,
-  referenceNote,
-  lockedReference,
-  stale,
   approving,
   onApprove,
 }: {
@@ -5305,10 +5044,6 @@ function PlanVisualCard({
   onGenerate: (planMode: PlanGenerationMode, quality: ImageGenerationTier) => Promise<void>;
   plansReady: boolean;
   sourceLocked: boolean;
-  generationLockedReason: string | null;
-  referenceNote: string | null;
-  lockedReference: boolean;
-  stale: boolean;
   approving: boolean;
   onApprove: () => void;
 }) {
@@ -5345,7 +5080,7 @@ function PlanVisualCard({
           {!renderedOnly && <button type="button" data-active={viewMode === "technical"} disabled={!technicalUrl} onClick={() => setViewMode("technical")}>{sourceLocked ? "Faithful redraw" : "Detailed plan"}</button>}
           <button type="button" data-active={viewMode === "rendered"} disabled={!renderedUrl} onClick={() => setViewMode("rendered")}>{renderedOnly ? "Preview" : "Preview"}</button>
         </div>
-        <button type="button" className="plan-select-toggle" data-selected={selected} disabled={Boolean(generationLockedReason)} onClick={onToggleSelected}>{selected ? "Selected for batch ✓" : "Select for batch"}</button>
+        <button type="button" className="plan-select-toggle" data-selected={selected} onClick={onToggleSelected}>{selected ? "Selected for batch ✓" : "Select for batch"}</button>
       </div>
       {displayUrl ? (
         <button type="button" className="plan-image-zoom" onClick={() => setLightbox(displayUrl)} aria-label={`Enlarge ${visual.title || visual.visual_type}`}><img src={displayUrl} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" /><span>Click to enlarge</span></button>
@@ -5356,26 +5091,13 @@ function PlanVisualCard({
       <div className="plan-card-copy">
         <span>{viewMode === "rendered" ? "Rendered Preview" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
         <h3>{visual.title || visual.visual_type}</h3>
-        {(lockedReference || stale || referenceNote) && (
-          <div className="plan-reference-status">
-            {lockedReference && <b>Locked reference</b>}
-            {stale && <b data-tone="stale">Needs regeneration</b>}
-            {referenceNote && <small>{referenceNote}</small>}
-          </div>
-        )}
       </div>
       <div className="plan-card-actions">
-        {!renderedOnly && generationLockedReason ? (
-          <button type="button" className="image-regenerate-button plan-generation-locked" disabled>
-            {generationLockedReason}
-          </button>
-        ) : !renderedOnly ? (
-          <button type="button" className="image-regenerate-button" disabled={anyGenerating} onClick={() => { setViewMode("technical"); void onGenerate("technical", "preview"); }}>
-            {sourceLocked
-              ? technicalUrl ? "Regenerate Faithful Redraw" : "Create Faithful Redraw"
-              : technicalUrl ? "Regenerate Detailed Plan" : "Generate Detailed Plan"} · {ARCHITECTURE_CREDIT_COSTS.technicalPlan} credits
-          </button>
-        ) : null}
+        {!renderedOnly && <button type="button" className="image-regenerate-button" disabled={anyGenerating} onClick={() => { setViewMode("technical"); void onGenerate("technical", "preview"); }}>
+          {sourceLocked
+            ? technicalUrl ? "Regenerate Faithful Redraw" : "Create Faithful Redraw"
+            : technicalUrl ? "Regenerate Detailed Plan" : "Generate Detailed Plan"} · {ARCHITECTURE_CREDIT_COSTS.technicalPlan} credits
+        </button>}
         {!renderedOnly && technicalUrl && <button type="button" className="visual-approve-button" data-approved={visual.is_approved ? "true" : "false"} disabled={anyGenerating || approving} onClick={onApprove}>
           {approving ? "Saving..." : visual.is_approved ? (sourceLocked ? "Redraw approved ✓" : "Approved Plan ✓") : (sourceLocked ? "Approve Redraw" : "Approve Plan")}
         </button>}
@@ -7153,11 +6875,6 @@ const workspaceStyles = `
   .plan-card-copy { display: grid; gap: 4px; padding: 15px 15px 7px; }
   .plan-card-copy span { color: #2563eb; font-size: 8px; font-weight: 900; letter-spacing: .11em; text-transform: uppercase; }
   .plan-card-copy h3 { font-size: 15px; }
-  .plan-reference-status { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-top:6px; }
-  .plan-reference-status b { display:inline-flex; min-height:24px; align-items:center; border-radius:999px; background:#e9f8ef; color:#087947; padding:0 9px; font-size:8px; font-weight:950; text-transform:uppercase; letter-spacing:.08em; }
-  .plan-reference-status b[data-tone="stale"] { background:#fff1e8; color:#b54708; }
-  .plan-reference-status small { flex:1 1 100%; color:#64748b; font-size:9px; line-height:1.5; }
-  .plan-select-toggle:disabled { cursor:not-allowed; opacity:.45; }
   .plan-card-actions { display:flex; flex-wrap:wrap; align-items:stretch; gap:12px; padding:10px 15px 16px; }
   .plan-card-actions .image-regenerate-button, .plan-card-actions .visual-approve-button { position:static !important; flex:1 1 190px; min-height:44px; justify-content:center; }
   .plan-card-actions .plan-generation-locked { border-style:dashed; background:var(--surface); color:var(--text-muted); cursor:not-allowed; opacity:1; }
