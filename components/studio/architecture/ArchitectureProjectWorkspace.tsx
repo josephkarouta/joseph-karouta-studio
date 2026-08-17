@@ -5237,31 +5237,25 @@ function VisualsTab({
   const planRows = visuals.filter(
     (visual) =>
       visual.metadata?.group === "plans" ||
+      visual.visual_type === "plan_foundation_sheet" ||
       isCanonicalFloorVisualType(visual.visual_type),
   );
-  const canonicalPlan = recordValue(recordValue(planSet?.generation_json).canonical_plan);
-  const canonicalLevels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
-  const requiredPlanTypes = floorPlanTypesForLevels(canonicalLevels);
   const existingDesignSource = project.workflow_mode === "plan_to_render" && documents.some(
     (document) => document.category.startsWith("source") && document.mime_type?.startsWith("image/"),
   );
-  const plansReady = existingDesignSource || (
-    requiredPlanTypes.length > 0 && requiredPlanTypes.every((requiredType) => {
-    const plan = planRows.find((visual) => visual.visual_type === requiredType);
-      return Boolean(
-        plan?.is_approved &&
-        (assetPreviewUrl(recordValue(plan.metadata).technical_assets) || plan.image_url),
-      );
-    })
+  const approvedFoundationSheet = planRows.find((visual) => visual.visual_type === "plan_foundation_sheet");
+  const plansReady = existingDesignSource || Boolean(
+    approvedFoundationSheet?.is_approved &&
+    (assetPreviewUrl(recordValue(approvedFoundationSheet.metadata).technical_assets) || approvedFoundationSheet.image_url),
   );
   if (!plansReady) {
     return (
       <StageLocked
-        eyebrow="Approved Plans Required"
-        title="Approve the connected floor plans before creating visuals"
-        body={`Visuals must follow every approved floor plan in this building (${requiredPlanTypes.map((item) => floorPlanDisplayName(item, canonicalLevels)).join(", ")}). Generate, review and approve those plans first so exterior and interior images remain coordinated with the complete building.`}
+        eyebrow="Approved Plan Foundation Required"
+        title="Approve the coordinated Plan Foundation before creating visuals"
+        body="Visuals use the single approved multi-floor Plan Foundation as the building geometry authority, while the selected Direction controls architectural expression."
         onOpenDirections={onOpenPlans}
-        actionLabel="Open Concept Plans →"
+        actionLabel="Open Plan Foundation →"
       />
     );
   }
@@ -5666,28 +5660,23 @@ function EstimateTab({
     const planRows = visuals.filter(
       (visual) =>
         recordValue(visual.metadata).group === "plans" ||
+        visual.visual_type === "plan_foundation_sheet" ||
         isCanonicalFloorVisualType(visual.visual_type),
     );
-    const canonicalPlan = recordValue(recordValue(planSet.generation_json).canonical_plan);
-    const levels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
-    const requiredPlanTypes = floorPlanTypesForLevels(levels);
-    const plansReady = requiredPlanTypes.length > 0 && requiredPlanTypes.every((requiredType) => {
-      const plan = planRows.find((visual) => visual.visual_type === requiredType);
-      const metadata = recordValue(plan?.metadata);
-      return Boolean(
-        plan?.is_approved &&
-        (assetPreviewUrl(metadata.technical_assets) || plan.image_url),
-      );
-    });
+    const foundationSheet = planRows.find((visual) => visual.visual_type === "plan_foundation_sheet");
+    const plansReady = Boolean(
+      foundationSheet?.is_approved &&
+      (assetPreviewUrl(recordValue(foundationSheet.metadata).technical_assets) || foundationSheet.image_url),
+    );
 
     if (!plansReady) {
       return (
         <StageLocked
-          eyebrow="Approved Plans Required"
-          title="Approve the required floor plans before estimating"
-          body={`Approve every generated floor plan (${requiredPlanTypes.map((item) => floorPlanDisplayName(item, levels)).join(", ")}) so quantities and downstream visuals use the complete connected building.`}
+          eyebrow="Approved Plan Foundation Required"
+          title="Approve the coordinated Plan Foundation before estimating"
+          body="The approved multi-floor Plan Foundation is the geometry authority used for quantities, Directions and downstream visuals."
           onOpenDirections={onOpenPlans}
-          actionLabel="Review Plans →"
+          actionLabel="Review Plan Foundation →"
         />
       );
     }
