@@ -266,6 +266,7 @@ function InteriorExperience() {
   const [generatingImage, setGeneratingImage] = useState<GenerationTarget>(null);
   const [approvingAssetId, setApprovingAssetId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<LightboxImage>(null);
+  const [sourcePlanFiles, setSourcePlanFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
 
   const workMode: WorkMode = form.workMode === "professional" ? "professional" : "guided";
@@ -358,13 +359,93 @@ function InteriorExperience() {
     setError("");
   }
 
+  function hasSavedSourcePlans() {
+    return Array.isArray(form.sourcePlanAssetUrls) && form.sourcePlanAssetUrls.length > 0;
+  }
+
+  async function uploadInteriorSourcePlans(projectRecord: ProjectRecord) {
+    if (!user?.id || !sourcePlanFiles.length) return projectRecord;
+
+    const saved: Array<{ url: string; name: string; type: string; aiReference: boolean }> = [];
+
+    for (const [index, file] of sourcePlanFiles.entries()) {
+      if (file.size > 4 * 1024 * 1024) {
+        throw new Error(`${file.name} is larger than the 4 MB beta upload limit.`);
+      }
+      const supported = ["image/png", "image/jpeg", "image/webp", "application/pdf"].includes(file.type);
+      if (!supported) throw new Error(`${file.name} is not a supported floor-plan file. Use PNG, JPG, WebP or PDF.`);
+
+      const safeName = safeFileName(file.name || `floor-plan-${index + 1}`);
+      const path = `${user.id}/${projectRecord.id}/interior-source/${Date.now()}-${index}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("project-assets")
+        .upload(path, file, {
+          contentType: file.type || "application/octet-stream",
+          cacheControl: "31536000",
+          upsert: false,
+        });
+      if (uploadError) throw new Error(uploadError.message || `Could not upload ${file.name}.`);
+
+      const { data: publicData } = supabase.storage.from("project-assets").getPublicUrl(path);
+      const publicUrl = publicData.publicUrl;
+      const aiReference = file.type.startsWith("image/");
+      const { error: assetError } = await supabase.from("project_assets").insert({
+        user_id: user.id,
+        project_id: projectRecord.id,
+        studio: config.databaseId,
+        asset_type: "interior_source_plan",
+        title: `Source plan — ${file.name}`,
+        payload: { original_filename: file.name, mime_type: file.type, intake_mode: "existing_design" },
+        file_url: publicUrl,
+        thumbnail_url: aiReference ? publicUrl : null,
+        metadata: {
+          source: "interior_intake",
+          storage_path: path,
+          content_type: file.type,
+          approved: true,
+          ai_reference: aiReference,
+        },
+      });
+      if (assetError) {
+        await supabase.storage.from("project-assets").remove([path]);
+        throw new Error(assetError.message || `Could not save ${file.name} to the project.`);
+      }
+      saved.push({ url: publicUrl, name: file.name, type: file.type, aiReference });
+    }
+
+    const nextInput: FormState = {
+      ...((projectRecord.input || form) as FormState),
+      projectStartMode: "existing",
+      architectureSource: "Use uploaded floor plans",
+      architectureProjectId: "",
+      sourcePlanAssetUrls: saved.map((item) => item.url),
+      sourcePlanImageUrls: saved.filter((item) => item.aiReference).map((item) => item.url),
+      sourcePlanFileNames: saved.map((item) => item.name),
+    };
+
+    const { error: projectUpdateError } = await supabase
+      .from("studio_projects")
+      .update({ input: nextInput })
+      .eq("id", projectRecord.id)
+      .eq("user_id", user.id)
+      .eq("studio", config.databaseId);
+    if (projectUpdateError) throw new Error(projectUpdateError.message || "The uploaded plans could not be attached to the Interior project.");
+
+    setForm(nextInput);
+    return { ...projectRecord, input: nextInput };
+  }
+
   function nextStep() {
     if (requiredMissing.length) {
       setError(`Complete ${requiredMissing.map((field) => field.label.toLowerCase()).join(", ")} before continuing.`);
       return;
     }
-    if (step === 0 && form.architectureSource === "Use an existing Architecture project" && !String(form.architectureProjectId || "")) {
-      setError("Choose the Architecture project this interior should follow.");
+    if (step === 0 && form.projectStartMode === "architecture" && !String(form.architectureProjectId || "")) {
+      setError("Choose the Architecture project this interior should continue from.");
+      return;
+    }
+    if (step === 0 && form.projectStartMode === "existing" && !sourcePlanFiles.length && !hasSavedSourcePlans()) {
+      setError("Upload at least one existing floor plan before continuing.");
       return;
     }
     setStep((current) => Math.min(activeSteps.length - 1, current + 1));
@@ -377,8 +458,13 @@ function InteriorExperience() {
       setStep(Math.max(0, activeSteps.findIndex((section) => section.fields.some((field) => missing.some((item) => item.id === field.id)))));
       return;
     }
-    if (form.architectureSource === "Use an existing Architecture project" && !String(form.architectureProjectId || "")) {
-      setError("Choose the Architecture project this interior should follow.");
+    if (form.projectStartMode === "architecture" && !String(form.architectureProjectId || "")) {
+      setError("Choose the Architecture project this interior should continue from.");
+      setStep(0);
+      return;
+    }
+    if (form.projectStartMode === "existing" && !sourcePlanFiles.length && !hasSavedSourcePlans()) {
+      setError("Upload at least one existing floor plan before generating the Interior project.");
       setStep(0);
       return;
     }
@@ -393,7 +479,14 @@ function InteriorExperience() {
       const response = await fetch("/api/studios/interior/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ input: { ...form, workMode }, projectId: project?.id || null }),
+        body: JSON.stringify({
+          input: {
+            ...form,
+            workMode,
+            sourcePlanFileNames: sourcePlanFiles.length ? sourcePlanFiles.map((file) => file.name) : form.sourcePlanFileNames || [],
+          },
+          projectId: project?.id || null,
+        }),
       });
       const started = await readStudioAsyncPayload(response, "Interior project generation could not start.");
       if (!response.ok || started.success === false) throw new Error(started.error || "Interior project generation could not start.");
@@ -404,17 +497,20 @@ function InteriorExperience() {
       const nextProject = data.project as ProjectRecord;
       const nextResult = data.output as ResultData;
       if (!nextProject?.id || !nextResult) throw new Error("Interior project generation finished without a saved project.");
+      const savedProject = form.projectStartMode === "existing" && sourcePlanFiles.length && !hasSavedSourcePlans()
+        ? await uploadInteriorSourcePlans(nextProject)
+        : nextProject;
       setResult(nextResult);
-      setProject(nextProject);
+      setProject(savedProject);
       setStep(activeSteps.length);
       setActiveTab("overview");
       await refreshAccount();
-      rememberInteriorWorkspaceTab(nextProject.id, "overview");
+      rememberInteriorWorkspaceTab(savedProject.id, "overview");
       const url = new URL(window.location.href);
-      url.searchParams.set("project", nextProject.id);
+      url.searchParams.set("project", savedProject.id);
       url.searchParams.set("tab", "overview");
       window.history.replaceState({}, "", url);
-      await loadAssets(nextProject.id);
+      await loadAssets(savedProject.id);
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Generation failed.");
     } finally {
@@ -580,11 +676,13 @@ function InteriorExperience() {
             form={form}
             steps={activeSteps}
             architectureProjects={architectureProjects}
+            sourcePlanFiles={sourcePlanFiles}
             workMode={workMode}
             step={step}
             progress={progress}
             generating={generatingConcept}
             onFieldChange={updateField}
+            onSourcePlanFilesChange={setSourcePlanFiles}
             onBack={() => setStep((current) => Math.max(0, current - 1))}
             onContinue={nextStep}
             onGenerate={() => void generateConcept()}
@@ -734,11 +832,13 @@ function OnboardingWorkspace({
   form,
   steps,
   architectureProjects,
+  sourcePlanFiles,
   workMode,
   step,
   progress,
   generating,
   onFieldChange,
+  onSourcePlanFilesChange,
   onBack,
   onContinue,
   onGenerate,
@@ -746,11 +846,13 @@ function OnboardingWorkspace({
   form: FormState;
   steps: Array<{ title: string; description: string; fields: StudioField[] }>;
   architectureProjects: ArchitectureRecord[];
+  sourcePlanFiles: File[];
   workMode: WorkMode;
   step: number;
   progress: number;
   generating: boolean;
   onFieldChange: (id: string, value: string | string[]) => void;
+  onSourcePlanFilesChange: (files: File[]) => void;
   onBack: () => void;
   onContinue: () => void;
   onGenerate: () => void;
@@ -772,10 +874,12 @@ function OnboardingWorkspace({
         </div>
 
         {step === 0 && (
-          <ArchitectureConnection
+          <InteriorProjectStart
             form={form}
             projects={architectureProjects}
+            sourcePlanFiles={sourcePlanFiles}
             onChange={onFieldChange}
+            onFilesChange={onSourcePlanFilesChange}
           />
         )}
 
@@ -1547,70 +1651,144 @@ function ImageLightbox({ image, onClose }: { image: { url: string; title: string
   );
 }
 
-function ArchitectureConnection({
+function InteriorProjectStart({
   form,
   projects,
+  sourcePlanFiles,
   onChange,
+  onFilesChange,
 }: {
   form: FormState;
   projects: ArchitectureRecord[];
+  sourcePlanFiles: File[];
   onChange: (id: string, value: string | string[]) => void;
+  onFilesChange: (files: File[]) => void;
 }) {
-  const options = projects.map((project) => ({
+  const mode = String(form.projectStartMode || "new");
+  const architectureOptions = projects.map((project) => ({
     value: project.id,
     label: `${project.project_name || "Untitled Architecture project"}${project.project_type ? ` · ${project.project_type}` : ""}${project.city || project.country ? ` · ${[project.city, project.country].filter(Boolean).join(", ")}` : ""}`,
   }));
+
+  function selectMode(nextMode: "new" | "existing" | "architecture") {
+    onChange("projectStartMode", nextMode);
+    if (nextMode === "architecture") {
+      onChange("architectureSource", "Use an existing Architecture project");
+    } else if (nextMode === "existing") {
+      onChange("architectureSource", "Use uploaded floor plans");
+      onChange("architectureProjectId", "");
+    } else {
+      onChange("architectureSource", "Start as a standalone interior project");
+      onChange("architectureProjectId", "");
+    }
+  }
+
   return (
-    <div className="mt-7 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 sm:p-5">
-      <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)] text-[var(--accent-strong)]"><Building2 size={18} /></span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-[var(--text-primary)]">Connect this interior to the Architecture project</p>
-          <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">The selected building brief, room programme, approved direction, materials, plans and openings become the fixed architectural context for the interior.</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <HeyySelect
-              value={String(form.architectureSource || "Start as a standalone interior project")}
-              tone="interior"
-              ariaLabel="Architecture source"
-              options={["Use an existing Architecture project", "Start as a standalone interior project", "Upload plans later"]}
-              onChange={(value: string) => {
-                onChange("architectureSource", value);
-                if (value !== "Use an existing Architecture project") onChange("architectureProjectId", "");
-              }}
-            />
-            {form.architectureSource === "Use an existing Architecture project" ? (
-              <HeyySelect
-                value={String(form.architectureProjectId || "")}
-                tone="interior"
-                ariaLabel="Saved Architecture project"
-                placeholder={projects.length ? "Choose an Architecture project" : "No Architecture projects found"}
-                options={options}
-                disabled={!projects.length}
-                onChange={(value: string) => onChange("architectureProjectId", value)}
+    <div className="mt-7 rounded-3xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 sm:p-5">
+      <div>
+        <Eyebrow>Tell us about your project</Eyebrow>
+        <h3 className="mt-2 text-xl font-black tracking-[-.03em]">How are you starting this Interior project?</h3>
+        <p className="mt-2 max-w-3xl text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+          Start from a new brief, bring existing floor plans, or continue directly from one of your Architecture Studio projects.
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {[
+          { id: "new", title: "New design", description: "Start the interior from scratch with your room, goals, style and budget.", icon: <Sparkles size={19} /> },
+          { id: "existing", title: "Existing design", description: "Upload existing floor plans and use them as the geometry reference for plans and visuals.", icon: <FileText size={19} /> },
+          { id: "architecture", title: "Continue from Architecture", description: "Choose a Heyy Studio Architecture project and carry its approved context into Interior.", icon: <Building2 size={19} /> },
+        ].map((option) => {
+          const active = mode === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => selectMode(option.id as "new" | "existing" | "architecture")}
+              className={cx(
+                "rounded-2xl border p-4 text-left transition",
+                active
+                  ? "border-[var(--accent)] bg-[var(--surface)] shadow-[0_0_0_1px_var(--accent)]"
+                  : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]",
+              )}
+            >
+              <span className={cx("grid h-10 w-10 place-items-center rounded-xl", active ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-hover)] text-[var(--accent-strong)]")}>{option.icon}</span>
+              <p className="mt-3 text-sm font-black text-[var(--text-primary)]">{option.title}</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{option.description}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {mode === "existing" && (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-black">Upload existing floor plans</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+                PNG, JPG, WebP or PDF · up to 4 MB each. Image plans are used directly as AI geometry references; PDFs are saved with the project for reference.
+              </p>
+            </div>
+            <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-xs font-black text-white transition hover:brightness-95">
+              Choose plans
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,application/pdf"
+                multiple
+                className="hidden"
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  const selected = Array.from(event.target.files || []).slice(0, 6);
+                  onFilesChange(selected);
+                  event.currentTarget.value = "";
+                }}
               />
-            ) : (
-              <div className="flex min-h-12 items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-xs font-bold text-[var(--text-muted)]">The interior can be linked to an Architecture project later.</div>
-            )}
+            </label>
+          </div>
+          {(sourcePlanFiles.length > 0 || (Array.isArray(form.sourcePlanFileNames) && form.sourcePlanFileNames.length > 0)) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(sourcePlanFiles.length ? sourcePlanFiles.map((file) => file.name) : form.sourcePlanFileNames as string[]).map((name) => (
+                <span key={name} className="rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 py-1.5 text-[.65rem] font-black text-[var(--accent-strong)]">{name}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "architecture" && (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <p className="text-sm font-black">Choose the Architecture project</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">Its brief, plan foundation, selected direction and saved project context remain connected to this Interior project.</p>
+          <div className="mt-3">
+            <HeyySelect
+              value={String(form.architectureProjectId || "")}
+              tone="interior"
+              ariaLabel="Saved Architecture project"
+              placeholder={projects.length ? "Choose an Architecture project" : "No Architecture projects found"}
+              options={architectureOptions}
+              disabled={!projects.length}
+              onChange={(value: string) => onChange("architectureProjectId", value)}
+            />
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
 function FieldControl({ field, value, onChange }: { field: StudioField; value: string | string[] | undefined; onChange: (value: string | string[]) => void }) {
   const fullWidth = field.type === "textarea" || field.type === "multiselect";
-  const isPreferredStyle = field.label.trim().toLowerCase() === "preferred style";
+  const isPreferredStyle = /^preferred styles?$/i.test(field.label.trim());
   const baseOptions = field.options || [];
   const options = isPreferredStyle && !baseOptions.includes("Other") ? [...baseOptions, "Other"] : baseOptions;
+  const supportsCustomOther = options.includes("Other");
 
   const scalarValue = Array.isArray(value) ? "" : String(value || "");
-  const scalarOtherSelected = isPreferredStyle && (scalarValue === "Other" || scalarValue.startsWith("Other:"));
+  const scalarOtherSelected = supportsCustomOther && (scalarValue === "Other" || scalarValue.startsWith("Other:"));
   const scalarOtherText = scalarValue.startsWith("Other:") ? scalarValue.replace(/^Other:\s*/, "") : "";
 
   const multiValue = Array.isArray(value) ? value : [];
   const multiOtherEntry = multiValue.find((item) => item === "Other" || item.startsWith("Other:"));
-  const multiOtherSelected = isPreferredStyle && Boolean(multiOtherEntry);
+  const multiOtherSelected = supportsCustomOther && Boolean(multiOtherEntry);
   const multiOtherText = multiOtherEntry?.startsWith("Other:") ? multiOtherEntry.replace(/^Other:\s*/, "") : "";
 
   return (
@@ -1639,7 +1817,7 @@ function FieldControl({ field, value, onChange }: { field: StudioField; value: s
                 const custom = event.target.value;
                 onChange(custom.trim() ? `Other: ${custom}` : "Other");
               }}
-              placeholder="Describe the style you want"
+              placeholder={customOtherPlaceholder(field)}
               className="heyy-form-field mt-3"
             />
           )}
@@ -1648,13 +1826,13 @@ function FieldControl({ field, value, onChange }: { field: StudioField; value: s
         <div className="mt-3">
           <div className="flex flex-wrap gap-2">
             {options.map((option) => {
-              const active = option === "Other" && isPreferredStyle ? multiOtherSelected : multiValue.includes(option);
+              const active = option === "Other" && supportsCustomOther ? multiOtherSelected : multiValue.includes(option);
               return (
                 <button
                   key={option}
                   type="button"
                   onClick={() => {
-                    if (option === "Other" && isPreferredStyle) {
+                    if (option === "Other" && supportsCustomOther) {
                       const withoutOther = multiValue.filter((item) => item !== "Other" && !item.startsWith("Other:"));
                       onChange(multiOtherSelected ? withoutOther : [...withoutOther, "Other"]);
                       return;
@@ -1682,7 +1860,7 @@ function FieldControl({ field, value, onChange }: { field: StudioField; value: s
                 const withoutOther = multiValue.filter((item) => item !== "Other" && !item.startsWith("Other:"));
                 onChange([...withoutOther, custom.trim() ? `Other: ${custom}` : "Other"]);
               }}
-              placeholder="Describe the style you want"
+              placeholder={customOtherPlaceholder(field)}
               className="heyy-form-field mt-3"
             />
           )}
@@ -1692,6 +1870,14 @@ function FieldControl({ field, value, onChange }: { field: StudioField; value: s
       )}
     </div>
   );
+}
+
+
+function customOtherPlaceholder(field: StudioField) {
+  if (field.id === "roomType") return "Type what you're designing, e.g. Club";
+  if (field.id === "projectScope") return "Describe the project scope";
+  if (/style/i.test(field.label)) return "Describe the style you want";
+  return `Type your ${field.label.toLowerCase()}`;
 }
 
 function RenderCards({ value }: { value: unknown }) {
@@ -1940,6 +2126,7 @@ function compactLayoutPriority(value: string) {
 function initialState() {
   const state: FormState = {
     workMode: "guided",
+    projectStartMode: "new",
     architectureSource: "Start as a standalone interior project",
     architectureProjectId: "",
   };
@@ -1967,6 +2154,14 @@ function formatObject(value: unknown) {
   return Object.entries(value as Record<string, unknown>)
     .map(([key, item]) => `${humanize(key)}: ${Array.isArray(item) ? item.join(", ") : String(item)}`)
     .join(" · ");
+}
+
+function safeFileName(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 140) || "floor-plan";
 }
 
 function slugify(value: string) {

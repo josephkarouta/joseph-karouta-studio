@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     if (!(["technical", "preview", "final"] as string[]).includes(stage)) return NextResponse.json({ error: "Choose a valid generation stage." }, { status: 400 });
     if (isVisual && stage === "technical") return NextResponse.json({ error: "Interior visuals begin with a preview, then a professional final." }, { status: 400 });
 
-    const { data: project, error: projectError } = await admin.from("studio_projects").select("id").eq("id", projectId).eq("user_id", auth.user.id).eq("studio", "interior_studio").single();
+    const { data: project, error: projectError } = await admin.from("studio_projects").select("id,input").eq("id", projectId).eq("user_id", auth.user.id).eq("studio", "interior_studio").single();
     if (projectError || !project) return NextResponse.json({ error: projectError?.message || "Interior project not found." }, { status: 404 });
 
     if ((imageType === "furniture_plan" || imageType === "lighting_plan" || isVisual) && !(await hasApprovedInteriorAsset(admin, projectId, "space_plan"))) {
@@ -82,7 +82,19 @@ export async function POST(request: Request) {
       provider_job_id: null,
       credit_reservation_id: reservation.id,
       status: "queued",
-      input: { studio: "interior", projectId, viewType: imageType, stage, credits: reservation.amount },
+      input: {
+        studio: "interior",
+        projectId,
+        viewType: imageType,
+        stage,
+        credits: reservation.amount,
+        sourcePlanImageUrls: Array.isArray((project.input as any)?.sourcePlanImageUrls)
+          ? (project.input as any).sourcePlanImageUrls.slice(0, 5)
+          : [],
+        sourcePlanAssetUrls: Array.isArray((project.input as any)?.sourcePlanAssetUrls)
+          ? (project.input as any).sourcePlanAssetUrls.slice(0, 6)
+          : [],
+      },
       output: {},
     }).select().single();
     if (jobError || !job) throw new Error(jobError?.message || "Interior image job could not be saved.");

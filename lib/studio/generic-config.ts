@@ -58,7 +58,7 @@ export const GUIDED_STUDIOS: Record<GuidedStudioId, GuidedStudioConfig> = {
         description: "A few simple details are enough for Heyy Studio to prepare the first direction.",
         fields: [
           { id: "projectName", label: "Project name", type: "text", required: true, placeholder: "e.g. New York apartment living room" },
-          { id: "roomType", label: "What are you designing?", type: "select", required: true, options: ["Living room", "Kitchen", "Bedroom", "Bathroom", "Home office", "Restaurant", "Cafe", "Retail", "Office", "Whole home", "Other"] },
+          { id: "roomType", label: "What are you designing?", type: "select", required: true, options: ["Living room", "Kitchen", "Bedroom", "Bathroom", "Home office", "Restaurant", "Cafe", "Club / Nightlife", "Retail", "Office", "Whole home", "Other"] },
           { id: "location", label: "Project location", type: "text", placeholder: "City and country" },
           { id: "goal", label: "What should the space feel like and do better?", type: "textarea", required: true, placeholder: "Tell us who uses it, what is not working and what you would love to achieve." },
         ],
@@ -83,7 +83,7 @@ export const GUIDED_STUDIOS: Record<GuidedStudioId, GuidedStudioConfig> = {
         fields: [
           { id: "projectName", label: "Project name", type: "text", required: true, placeholder: "e.g. New York townhouse full fit-out" },
           { id: "projectScope", label: "Project scope", type: "select", required: true, options: ["Single room", "Multiple rooms", "Whole apartment", "Whole house", "Hospitality venue", "Retail fit-out", "Office fit-out", "Other"] },
-          { id: "roomType", label: "Primary space type", type: "select", required: true, options: ["Living room", "Kitchen", "Bedroom", "Bathroom", "Home office", "Restaurant", "Cafe", "Retail", "Office", "Whole home", "Other"] },
+          { id: "roomType", label: "Primary space type", type: "select", required: true, options: ["Living room", "Kitchen", "Bedroom", "Bathroom", "Home office", "Restaurant", "Cafe", "Club / Nightlife", "Retail", "Office", "Whole home", "Other"] },
           { id: "location", label: "Project location", type: "text", required: true, placeholder: "City and country" },
           { id: "siteStatus", label: "Current site status", type: "select", required: true, options: ["New build shell", "Existing occupied property", "Existing vacant property", "Under construction", "Renovation in progress", "Not confirmed"] },
           { id: "dimensions", label: "Approximate area and ceiling height", type: "text", placeholder: "e.g. 420 m² total, 2.9 m ceiling" },
