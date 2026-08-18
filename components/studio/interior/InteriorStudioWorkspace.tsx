@@ -411,24 +411,22 @@ function InteriorExperience() {
       });
     }
 
+    const existingInput = ((projectRecord.input || form) as FormState);
+    const existingAssetUrls = Array.isArray(existingInput.sourcePlanAssetUrls) ? existingInput.sourcePlanAssetUrls : [];
+    const existingImageUrls = Array.isArray(existingInput.sourcePlanImageUrls) ? existingInput.sourcePlanImageUrls : [];
+    const existingFileNames = Array.isArray(existingInput.sourcePlanFileNames) ? existingInput.sourcePlanFileNames : [];
     const nextInput: FormState = {
-      ...((projectRecord.input || form) as FormState),
+      ...existingInput,
       projectStartMode: "existing",
       architectureSource: "Use uploaded floor plans",
       architectureProjectId: "",
-      sourcePlanAssetUrls: saved.map((item) => item.url).filter(Boolean),
-      sourcePlanImageUrls: saved.flatMap((item) => item.aiReferenceUrls).slice(0, 6),
-      sourcePlanFileNames: saved.map((item) => item.name),
+      sourcePlanAssetUrls: Array.from(new Set([...existingAssetUrls, ...saved.map((item) => item.url).filter(Boolean)])),
+      sourcePlanImageUrls: Array.from(new Set([...existingImageUrls, ...saved.flatMap((item) => item.aiReferenceUrls)])).slice(0, 6),
+      sourcePlanFileNames: Array.from(new Set([...existingFileNames, ...saved.map((item) => item.name)])),
     };
 
-    const { error: projectUpdateError } = await supabase
-      .from("studio_projects")
-      .update({ input: nextInput })
-      .eq("id", projectRecord.id)
-      .eq("user_id", user.id)
-      .eq("studio", config.databaseId);
-    if (projectUpdateError) throw new Error(projectUpdateError.message || "The uploaded plans could not be attached to the Interior project.");
-
+    // The API upload route attaches these files to studio_projects using the server-side admin client.
+    // Do not update studio_projects from the browser: the table is intentionally protected by RLS.
     setForm(nextInput);
     return { ...projectRecord, input: nextInput };
   }

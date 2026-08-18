@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const { data: project, error: projectError } = await auth.admin
       .from("studio_projects")
-      .select("id")
+      .select("id,input")
       .eq("id", projectId)
       .eq("user_id", auth.user.id)
       .eq("studio", "interior_studio")
@@ -121,7 +121,40 @@ export async function POST(request: Request) {
       throw new Error("The PDF was saved, but no image preview could be prepared for AI reference.");
     }
 
-    return NextResponse.json({ success: true, documentUrl, aiReferenceUrls });
+    const currentInput = project.input && typeof project.input === "object"
+      ? (project.input as Record<string, unknown>)
+      : {};
+    const currentAssetUrls = Array.isArray(currentInput.sourcePlanAssetUrls)
+      ? currentInput.sourcePlanAssetUrls.map((value) => String(value || "")).filter(Boolean)
+      : [];
+    const currentImageUrls = Array.isArray(currentInput.sourcePlanImageUrls)
+      ? currentInput.sourcePlanImageUrls.map((value) => String(value || "")).filter(Boolean)
+      : [];
+    const currentFileNames = Array.isArray(currentInput.sourcePlanFileNames)
+      ? currentInput.sourcePlanFileNames.map((value) => String(value || "")).filter(Boolean)
+      : [];
+
+    const nextInput = {
+      ...currentInput,
+      projectStartMode: "existing",
+      architectureSource: "Use uploaded floor plans",
+      architectureProjectId: "",
+      sourcePlanAssetUrls: Array.from(new Set([...currentAssetUrls, ...(documentUrl ? [documentUrl] : [])])),
+      sourcePlanImageUrls: Array.from(new Set([...currentImageUrls, ...aiReferenceUrls])).slice(0, 6),
+      sourcePlanFileNames: Array.from(new Set([...currentFileNames, file.name])),
+    };
+
+    const { error: projectUpdateError } = await auth.admin
+      .from("studio_projects")
+      .update({ input: nextInput })
+      .eq("id", projectId)
+      .eq("user_id", auth.user.id)
+      .eq("studio", "interior_studio");
+    if (projectUpdateError) {
+      throw new Error(`Source-plan project link failed: ${projectUpdateError.message}`);
+    }
+
+    return NextResponse.json({ success: true, documentUrl, aiReferenceUrls, input: nextInput });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The source plan could not be uploaded.";
     console.error("Interior source-plan upload error:", error);
