@@ -108,6 +108,7 @@ type WorkspaceTab =
   | "furniture"
   | "lighting"
   | "plans"
+  | "room-mapping"
   | "visuals"
   | "professional-pack"
   | "design-pack"
@@ -118,7 +119,9 @@ type VisualType = "main_space" | "alternate_angle" | "focal_point" | "material_d
 type InteriorImageType = PlanType | VisualType;
 type GenerationStage = "technical" | "preview" | "final";
 type WorkMode = "guided" | "professional";
-type GenerationTarget = { viewType: InteriorImageType; stage: GenerationStage } | null;
+type RoomMapping = { id: string; name: string; notes?: string };
+type RoomVisualContext = { roomKey: string; roomName: string; floorLabel: string; sourcePlanAssetId: string; roomNotes?: string };
+type GenerationTarget = { viewType: InteriorImageType; stage: GenerationStage; roomKey?: string } | null;
 
 type LightboxImage = { url: string; title: string } | null;
 
@@ -135,9 +138,23 @@ const BASE_WORKSPACE_TABS: Array<{ id: WorkspaceTab; label: string }> = [
   { id: "production", label: "Production" },
 ];
 
-function workspaceTabs(workMode: WorkMode, result: ResultData | null) {
-  if (workMode !== "professional" && !result?.professionalPackage) return BASE_WORKSPACE_TABS;
-  const tabs = [...BASE_WORKSPACE_TABS];
+const EXISTING_DESIGN_WORKSPACE_TABS: Array<{ id: WorkspaceTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "brief", label: "Project Brief" },
+  { id: "plans", label: "Uploaded Plans" },
+  { id: "room-mapping", label: "Room Mapping" },
+  { id: "materials", label: "Materials" },
+  { id: "furniture", label: "Furniture" },
+  { id: "lighting", label: "Lighting" },
+  { id: "visuals", label: "Concept Visuals" },
+  { id: "design-pack", label: "Design Pack" },
+  { id: "production", label: "Production" },
+];
+
+function workspaceTabs(workMode: WorkMode, result: ResultData | null, existingDesign = false) {
+  const baseTabs = existingDesign ? EXISTING_DESIGN_WORKSPACE_TABS : BASE_WORKSPACE_TABS;
+  if (workMode !== "professional" && !result?.professionalPackage) return baseTabs;
+  const tabs = [...baseTabs];
   tabs.splice(tabs.findIndex((tab) => tab.id === "design-pack"), 0, { id: "professional-pack", label: "Professional Pack" });
   return tabs;
 }
@@ -264,6 +281,8 @@ function InteriorExperience() {
   const [architectureProjects, setArchitectureProjects] = useState<ArchitectureRecord[]>([]);
   const [generatingConcept, setGeneratingConcept] = useState(false);
   const [generatingImage, setGeneratingImage] = useState<GenerationTarget>(null);
+  const [generatingRoomKeys, setGeneratingRoomKeys] = useState<string[]>([]);
+  const [savingMappingAssetId, setSavingMappingAssetId] = useState<string | null>(null);
   const [approvingAssetId, setApprovingAssetId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<LightboxImage>(null);
   const [sourcePlanFiles, setSourcePlanFiles] = useState<File[]>([]);
@@ -333,7 +352,7 @@ function InteriorExperience() {
     setForm(savedForm);
     setResult(savedResult);
     setStep(record.output ? savedSteps.length : 0);
-    setActiveTab(savedResult ? readInteriorWorkspaceTab(projectId, savedMode, savedResult) : "brief");
+    setActiveTab(savedResult ? readInteriorWorkspaceTab(projectId, savedMode, savedResult, savedForm.projectStartMode === "existing") : "brief");
     await loadAssets(projectId);
   }
 
@@ -514,29 +533,39 @@ function InteriorExperience() {
     }
   }
 
-  async function generateImage(viewType: InteriorImageType, stage: GenerationStage) {
+  async function runInteriorImageGeneration(
+    token: string,
+    viewType: InteriorImageType,
+    stage: GenerationStage,
+    roomContext?: RoomVisualContext,
+  ) {
+    if (!project?.id) throw new Error("Interior project not found.");
+    const response = await fetch("/api/studios/interior/images/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ projectId: project.id, viewType, stage, ...(roomContext || {}) }),
+    });
+    const started = await readStudioAsyncPayload(response, "Interior image generation could not start.");
+    if (!response.ok || started.success === false) throw new Error(started.error || "Interior image generation could not start.");
+    if (started.status !== "succeeded") {
+      await waitForStudioAsyncJob("interior", "image", String(started.jobId || ""), token);
+    }
+  }
+
+  async function generateImage(viewType: InteriorImageType, stage: GenerationStage, roomContext?: RoomVisualContext) {
     if (!project?.id || !result) {
       setError("Generate the interior concept first.");
       return;
     }
-    setGeneratingImage({ viewType, stage });
+    const roomKey = roomContext?.roomKey;
+    setGeneratingImage({ viewType, stage, roomKey });
     setError("");
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Your session expired. Sign in again.");
 
-      const response = await fetch("/api/studios/interior/images/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ projectId: project.id, viewType, stage }),
-      });
-      const started = await readStudioAsyncPayload(response, "Interior image generation could not start.");
-      if (!response.ok || started.success === false) throw new Error(started.error || "Interior image generation could not start.");
-      if (started.status !== "succeeded") {
-        await waitForStudioAsyncJob("interior", "image", String(started.jobId || ""), token);
-      }
-
+      await runInteriorImageGeneration(token, viewType, stage, roomContext);
       await Promise.all([loadAssets(project.id), refreshAccount()]);
       selectWorkspaceTab(viewType.endsWith("_plan") ? "plans" : "visuals");
     } catch (visualError) {
@@ -545,6 +574,49 @@ function InteriorExperience() {
       setGeneratingImage(null);
     }
   }
+
+  async function generateRoomBatch(contexts: RoomVisualContext[]) {
+    if (!project?.id || !result || !contexts.length) return;
+    const unique = Array.from(new Map(contexts.map((item) => [item.roomKey, item])).values());
+    setGeneratingRoomKeys((current) => Array.from(new Set([...current, ...unique.map((item) => item.roomKey)])));
+    setError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Your session expired. Sign in again.");
+      await Promise.all(unique.map((context) => runInteriorImageGeneration(token, "main_space", "preview", context)));
+      await Promise.all([loadAssets(project.id), refreshAccount()]);
+      selectWorkspaceTab("visuals");
+    } catch (batchError) {
+      setError(batchError instanceof Error ? batchError.message : "One or more room concepts could not be generated.");
+    } finally {
+      setGeneratingRoomKeys((current) => current.filter((key) => !unique.some((item) => item.roomKey === key)));
+    }
+  }
+
+  async function saveSourcePlanMapping(assetId: string, floorLabel: string, rooms: RoomMapping[]) {
+    if (!project?.id) return;
+    setSavingMappingAssetId(assetId);
+    setError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Your session expired. Sign in again.");
+      const response = await fetch("/api/studios/interior/source-plans/mapping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectId: project.id, assetId, floorLabel, rooms }),
+      });
+      const payload = await readStudioAsyncPayload(response, "Room mapping could not be saved.");
+      if (!response.ok || payload.success === false) throw new Error(payload.error || "Room mapping could not be saved.");
+      await loadAssets(project.id);
+    } catch (mappingError) {
+      setError(mappingError instanceof Error ? mappingError.message : "Room mapping could not be saved.");
+    } finally {
+      setSavingMappingAssetId(null);
+    }
+  }
+
 
  async function approveAsset(asset: ProjectAsset) {
   if (!project?.id || !asset.id || !user?.id) return;
@@ -609,8 +681,8 @@ function InteriorExperience() {
         })
         .map((asset) => ({ title: asset.title, url: asset.file_url, type: asset.metadata?.view_type, stage: asset.metadata?.stage, approved: asset.metadata?.approved })),
       visuals: assets
-        .filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_"))
-        .map((asset) => ({ title: asset.title, url: asset.file_url, type: asset.metadata?.view_type, stage: asset.metadata?.stage, approved: asset.metadata?.approved })),
+        .filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_") && (form.projectStartMode !== "existing" || Boolean(asset.metadata?.room_key)))
+        .map((asset) => ({ title: asset.title, url: asset.file_url, type: asset.metadata?.view_type, stage: asset.metadata?.stage, approved: asset.metadata?.approved, room: asset.metadata?.room_name, floor: asset.metadata?.floor_label })),
       disclaimer: config.disclaimer,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -622,9 +694,11 @@ function InteriorExperience() {
     URL.revokeObjectURL(url);
   }
 
-  const mainVisual = getInteriorAsset(assets, "main_space", "final") || getInteriorAsset(assets, "main_space", "preview");
   const loading = generatingConcept;
   const existingDesign = form.projectStartMode === "existing";
+  const mainVisual = existingDesign
+    ? assets.find((asset) => String(asset.asset_type || "").startsWith("interior_visual_main_space_") && isApprovedAsset(asset)) || assets.find((asset) => String(asset.asset_type || "").startsWith("interior_visual_main_space_"))
+    : getInteriorAsset(assets, "main_space", "final") || getInteriorAsset(assets, "main_space", "preview");
   const uploadedSourcePlansReady = hasUploadedSourcePlanAssets(assets);
   const spacePlanReady = existingDesign ? uploadedSourcePlansReady : isAnyStageApproved(assets, "space_plan");
   const sourcingMarket = String(form.procurementMarket || form.location || "");
@@ -665,7 +739,7 @@ function InteriorExperience() {
         </section>
 
         {result ? (
-          <InteriorWorkspaceNavigation activeTab={activeTab} workMode={workMode} result={result} onChange={selectWorkspaceTab} />
+          <InteriorWorkspaceNavigation activeTab={activeTab} workMode={workMode} result={result} existingDesign={existingDesign} onChange={selectWorkspaceTab} />
         ) : (
           <OnboardingNavigation step={step} steps={activeSteps} onChange={setStep} disabled={loading} />
         )}
@@ -701,12 +775,34 @@ function InteriorExperience() {
             {activeTab === "plans" && (
               <PlansSection existingDesign={existingDesign} assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenProduction={() => selectWorkspaceTab("production")} />
             )}
+            {activeTab === "room-mapping" && existingDesign && (
+              <RoomMappingSection
+                assets={assets}
+                savingAssetId={savingMappingAssetId}
+                onSave={(assetId, floorLabel, rooms) => void saveSourcePlanMapping(assetId, floorLabel, rooms)}
+                onEnlarge={(image) => setLightbox(image)}
+              />
+            )}
             {activeTab === "visuals" && (
-              <VisualsSection existingDesign={existingDesign} assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} spacePlanReady={spacePlanReady} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenPlans={() => selectWorkspaceTab("plans")} />
+              <VisualsSection
+                existingDesign={existingDesign}
+                assets={assets}
+                generating={generatingImage}
+                generatingRoomKeys={generatingRoomKeys}
+                approvingAssetId={approvingAssetId}
+                spacePlanReady={spacePlanReady}
+                onGenerate={(viewType, stage) => void generateImage(viewType, stage)}
+                onGenerateRoom={(viewType, context) => void generateImage(viewType, "preview", context)}
+                onGenerateRoomBatch={(contexts) => void generateRoomBatch(contexts)}
+                onApprove={(asset) => void approveAsset(asset)}
+                onEnlarge={(image) => setLightbox(image)}
+                onOpenPlans={() => selectWorkspaceTab("plans")}
+                onOpenRoomMapping={() => selectWorkspaceTab("room-mapping")}
+              />
             )}
             {activeTab === "professional-pack" && <ProfessionalPackageSection value={result.professionalPackage} />}
             {activeTab === "design-pack" && (
-              <DesignPackSection result={result} assets={assets} workMode={workMode} onDownload={downloadDesignPack} />
+              <DesignPackSection result={result} assets={assets} workMode={workMode} existingDesign={existingDesign} onDownload={downloadDesignPack} />
             )}
             {activeTab === "production" && (
               <ProductionPanel
@@ -723,7 +819,7 @@ function InteriorExperience() {
                   furniture_schedule: result.furniturePlan,
                   lighting_strategy: result.lightingPlan,
                   professional_package: result.professionalPackage,
-                  approved_visuals: assets.filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_") && isApprovedAsset(asset)),
+                  approved_visuals: assets.filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_") && isApprovedAsset(asset) && (!existingDesign || Boolean(asset.metadata?.room_key))),
                   all_generated_outputs: assets.filter((asset) => {
                     const type = String(asset.asset_type || "");
                     return type.startsWith("interior_plan_") || type.startsWith("interior_visual_");
@@ -801,14 +897,16 @@ function InteriorWorkspaceNavigation({
   activeTab,
   workMode,
   result,
+  existingDesign,
   onChange,
 }: {
   activeTab: WorkspaceTab;
   workMode: WorkMode;
   result: ResultData;
+  existingDesign: boolean;
   onChange: (tab: WorkspaceTab) => void;
 }) {
-  const tabs = workspaceTabs(workMode, result);
+  const tabs = workspaceTabs(workMode, result, existingDesign);
   return (
     <GlassCard className="mt-5 overflow-x-auto p-2">
       <div className="flex min-w-max gap-2">
@@ -1388,33 +1486,56 @@ function VisualsSection({
   existingDesign,
   assets,
   generating,
+  generatingRoomKeys,
   approvingAssetId,
   spacePlanReady,
   onGenerate,
+  onGenerateRoom,
+  onGenerateRoomBatch,
   onApprove,
   onEnlarge,
   onOpenPlans,
+  onOpenRoomMapping,
 }: {
   existingDesign: boolean;
   assets: ProjectAsset[];
   generating: GenerationTarget;
+  generatingRoomKeys: string[];
   approvingAssetId: string | null;
   spacePlanReady: boolean;
   onGenerate: (viewType: VisualType, stage: GenerationStage) => void;
+  onGenerateRoom: (viewType: VisualType, context: RoomVisualContext) => void;
+  onGenerateRoomBatch: (contexts: RoomVisualContext[]) => void;
   onApprove: (asset: ProjectAsset) => void;
   onEnlarge: (image: { url: string; title: string }) => void;
   onOpenPlans: () => void;
+  onOpenRoomMapping: () => void;
 }) {
+  if (existingDesign) {
+    return (
+      <ExistingDesignRoomVisualsSection
+        assets={assets}
+        generating={generating}
+        generatingRoomKeys={generatingRoomKeys}
+        approvingAssetId={approvingAssetId}
+        onGenerateRoom={onGenerateRoom}
+        onGenerateRoomBatch={onGenerateRoomBatch}
+        onApprove={onApprove}
+        onEnlarge={onEnlarge}
+        onOpenPlans={onOpenPlans}
+        onOpenRoomMapping={onOpenRoomMapping}
+      />
+    );
+  }
+
   return (
     <GlassCard className="p-6 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Eyebrow>Interior visuals</Eyebrow>
-          <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">{existingDesign ? "Create visuals from your uploaded plans" : "Create visuals from the approved space plan"}</h2>
+          <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Create visuals from the approved space plan</h2>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            {existingDesign
-              ? "Your uploaded existing plans are already the approved geometry source. Generate the Main Space Perspective directly from those plans, then use the approved main visual as the anchor for additional angles."
-              : "As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Professional Final remains an optional higher-quality output rather than a required step."}
+            As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Professional Final remains an optional higher-quality output rather than a required step.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1426,8 +1547,8 @@ function VisualsSection({
       {!spacePlanReady && (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4">
           <div>
-            <p className="text-sm font-black text-amber-800 dark:text-amber-200">{existingDesign ? "Upload at least one existing plan first" : "Approve the Furniture & Space Plan first"}</p>
-            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">{existingDesign ? "Your uploaded plan becomes the geometry source automatically." : "Once approved, all connected plans and visuals unlock immediately."}</p>
+            <p className="text-sm font-black text-amber-800 dark:text-amber-200">Approve the Furniture & Space Plan first</p>
+            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">Once approved, all connected plans and visuals unlock immediately.</p>
           </div>
           <Button type="button" variant="secondary" onClick={onOpenPlans}><Ruler size={15} /> Open plans</Button>
         </div>
@@ -1435,11 +1556,7 @@ function VisualsSection({
 
       <div className="mt-7 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
         {VISUALS.map((visual) => {
-          const dependency = !spacePlanReady
-            ? existingDesign
-              ? "Upload at least one existing floor plan first."
-              : "Generate and approve the Furniture & Space Plan first."
-            : undefined;
+          const dependency = !spacePlanReady ? "Generate and approve the Furniture & Space Plan first." : undefined;
           return (
             <InteriorWorkflowCard
               key={visual.id}
@@ -1461,6 +1578,360 @@ function VisualsSection({
     </GlassCard>
   );
 }
+
+function RoomMappingSection({
+  assets,
+  savingAssetId,
+  onSave,
+  onEnlarge,
+}: {
+  assets: ProjectAsset[];
+  savingAssetId: string | null;
+  onSave: (assetId: string, floorLabel: string, rooms: RoomMapping[]) => void;
+  onEnlarge: (image: { url: string; title: string }) => void;
+}) {
+  const plans = getUploadedSourcePlanAssets(assets);
+  return (
+    <div className="space-y-5">
+      <GlassCard className="p-6 sm:p-8">
+        <Eyebrow>Existing design · room mapping</Eyebrow>
+        <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Tell Heyy Studio which rooms belong to each uploaded plan</h2>
+        <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
+          Manual room mapping is intentional. It prevents the image model from guessing which floor or room you want to visualise. Add the room names exactly as they appear on the plan, plus a short locator note when useful.
+        </p>
+        <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+          These mappings guide plan-based concept imagery. They improve targeting, but AI concept visuals can still vary from the source drawing and are not exact 3D reconstructions.
+        </div>
+      </GlassCard>
+
+      {!plans.length ? (
+        <GlassCard className="p-8 text-center">
+          <FileText size={34} className="mx-auto text-[var(--accent-strong)]" />
+          <h3 className="mt-4 text-xl font-black">No uploaded plans found</h3>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">Upload source plans in the Project Brief before mapping rooms.</p>
+        </GlassCard>
+      ) : (
+        plans.map((asset, index) => (
+          <PlanRoomMappingCard
+            key={asset.id}
+            asset={asset}
+            index={index}
+            saving={savingAssetId === asset.id}
+            onSave={onSave}
+            onEnlarge={onEnlarge}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+function PlanRoomMappingCard({
+  asset,
+  index,
+  saving,
+  onSave,
+  onEnlarge,
+}: {
+  asset: ProjectAsset;
+  index: number;
+  saving: boolean;
+  onSave: (assetId: string, floorLabel: string, rooms: RoomMapping[]) => void;
+  onEnlarge: (image: { url: string; title: string }) => void;
+}) {
+  const [floorLabel, setFloorLabel] = useState(() => sourcePlanFloorLabel(asset, index));
+  const [rooms, setRooms] = useState<RoomMapping[]>(() => readSourcePlanRooms(asset));
+  const [newRoom, setNewRoom] = useState("");
+  const imageUrl = asset.thumbnail_url || asset.file_url || "";
+
+  useEffect(() => {
+    setFloorLabel(sourcePlanFloorLabel(asset, index));
+    setRooms(readSourcePlanRooms(asset));
+  }, [asset.id, asset.metadata, index]);
+
+  function addRoom() {
+    const name = newRoom.trim();
+    if (!name) return;
+    const id = `${slugify(name) || "room"}-${Date.now().toString(36)}`;
+    setRooms((current) => [...current, { id, name, notes: "" }]);
+    setNewRoom("");
+  }
+
+  return (
+    <GlassCard className="p-5 sm:p-6">
+      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div>
+          <div className="relative grid aspect-[4/3] place-items-center overflow-hidden rounded-2xl bg-[var(--surface-hover)]">
+            {imageUrl ? (
+              <>
+                <img src={imageUrl} alt={sourcePlanDisplayName(asset, index)} className="h-full w-full object-contain p-3" />
+                <button type="button" onClick={() => onEnlarge({ url: imageUrl, title: sourcePlanDisplayName(asset, index) })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl border border-white/45 bg-black/55 px-3 py-2 text-[.65rem] font-black text-white backdrop-blur-md">
+                  <Maximize2 size={13} /> Enlarge
+                </button>
+              </>
+            ) : <FileText size={30} className="text-[var(--accent-strong)]" />}
+          </div>
+          <p className="mt-3 text-xs font-bold text-[var(--text-secondary)]">{sourcePlanDisplayName(asset, index)}</p>
+        </div>
+
+        <div>
+          <label className="text-[.65rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Floor / plan name</label>
+          <input value={floorLabel} onChange={(event) => setFloorLabel(event.target.value)} placeholder="e.g. Ground Floor" className="heyy-form-field mt-2" />
+
+          <div className="mt-5 flex flex-wrap items-end gap-2">
+            <label className="min-w-[220px] flex-1 text-[.65rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">
+              Add room or zone
+              <input
+                value={newRoom}
+                onChange={(event) => setNewRoom(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addRoom(); } }}
+                placeholder="e.g. Living Room"
+                className="heyy-form-field mt-2"
+              />
+            </label>
+            <Button type="button" variant="secondary" onClick={addRoom}>Add room</Button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {rooms.length ? rooms.map((room) => (
+              <div key={room.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <input
+                      value={room.name}
+                      onChange={(event) => setRooms((current) => current.map((item) => item.id === room.id ? { ...item, name: event.target.value } : item))}
+                      className="heyy-form-field"
+                    />
+                    <input
+                      value={room.notes || ""}
+                      onChange={(event) => setRooms((current) => current.map((item) => item.id === room.id ? { ...item, notes: event.target.value } : item))}
+                      placeholder="Optional locator note, e.g. left side beside terrace"
+                      className="heyy-form-field mt-2"
+                    />
+                  </div>
+                  <button type="button" onClick={() => setRooms((current) => current.filter((item) => item.id !== room.id))} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border)] text-[var(--text-muted)] transition hover:border-red-300 hover:text-red-600" aria-label={`Remove ${room.name || "room"}`}>
+                    <X size={15} />
+                  </button>
+                </div>
+              </div>
+            )) : (
+              <p className="rounded-2xl border border-dashed border-[var(--border-strong)] p-4 text-xs font-semibold text-[var(--text-muted)]">No rooms mapped yet. Add every room or zone you want Heyy Studio to visualise.</p>
+            )}
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <Button type="button" onClick={() => onSave(asset.id, floorLabel.trim() || `Plan ${index + 1}`, rooms.filter((room) => room.name.trim()).map((room) => ({ ...room, name: room.name.trim(), notes: room.notes?.trim() || "" })))} disabled={saving}>
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Save room mapping
+            </Button>
+          </div>
+        </div>
+      </div>
+    </GlassCard>
+  );
+}
+
+function ExistingDesignRoomVisualsSection({
+  assets,
+  generating,
+  generatingRoomKeys,
+  approvingAssetId,
+  onGenerateRoom,
+  onGenerateRoomBatch,
+  onApprove,
+  onEnlarge,
+  onOpenPlans,
+  onOpenRoomMapping,
+}: {
+  assets: ProjectAsset[];
+  generating: GenerationTarget;
+  generatingRoomKeys: string[];
+  approvingAssetId: string | null;
+  onGenerateRoom: (viewType: VisualType, context: RoomVisualContext) => void;
+  onGenerateRoomBatch: (contexts: RoomVisualContext[]) => void;
+  onApprove: (asset: ProjectAsset) => void;
+  onEnlarge: (image: { url: string; title: string }) => void;
+  onOpenPlans: () => void;
+  onOpenRoomMapping: () => void;
+}) {
+  const mappedRooms = getMappedRoomContexts(assets);
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
+  const selectedContexts = mappedRooms.filter((item) => selectedRooms.includes(item.roomKey));
+  const anyGenerating = generatingRoomKeys.length > 0 || Boolean(generating?.roomKey);
+
+  return (
+    <div className="space-y-5">
+      <GlassCard className="p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <div>
+            <Eyebrow>Plan-guided concept visuals</Eyebrow>
+            <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate the project room by room</h2>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
+              Each room is generated against one selected uploaded floor plan instead of the entire project at once. Approve the room's Main Concept before creating its alternate angle or feature detail.
+            </p>
+          </div>
+          <CreditPill credits={12} label="per concept view" />
+        </div>
+        <div className="mt-5 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">
+          Plan-guided visuals use the mapped room and selected uploaded plan as the primary spatial reference. They are concept imagery, not guaranteed exact 3D reconstructions.
+        </div>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Button type="button" variant="secondary" onClick={onOpenPlans}><FileText size={15} /> Uploaded plans</Button>
+          <Button type="button" variant="secondary" onClick={onOpenRoomMapping}>Room mapping</Button>
+          {mappedRooms.length > 0 && (
+            <>
+              <Button type="button" variant="secondary" onClick={() => setSelectedRooms(mappedRooms.map((item) => item.roomKey))} disabled={anyGenerating || selectedRooms.length === mappedRooms.length}>Select all rooms</Button>
+              {selectedRooms.length > 0 && <Button type="button" variant="secondary" onClick={() => setSelectedRooms([])} disabled={anyGenerating}>Clear selection</Button>}
+              <Button type="button" onClick={() => onGenerateRoomBatch(selectedContexts)} disabled={!selectedContexts.length || anyGenerating}>
+                <Sparkles size={15} /> Generate selected main concepts · {selectedContexts.length * 12} credits
+              </Button>
+            </>
+          )}
+        </div>
+      </GlassCard>
+
+      {!mappedRooms.length ? (
+        <GlassCard className="p-8 text-center">
+          <LayoutDashboard size={34} className="mx-auto text-[var(--accent-strong)]" />
+          <h3 className="mt-4 text-xl font-black">Map the rooms before generating visuals</h3>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">Open Room Mapping, name the floor and add the rooms you want to render.</p>
+          <Button type="button" className="mt-5" onClick={onOpenRoomMapping}>Open Room Mapping</Button>
+        </GlassCard>
+      ) : (
+        <div className="space-y-5">
+          {mappedRooms.map((context) => {
+            const mainAsset = getRoomVisualAsset(assets, context.roomKey, "main_space", "preview");
+            const alternateAsset = getRoomVisualAsset(assets, context.roomKey, "alternate_angle", "preview");
+            const detailAsset = getRoomVisualAsset(assets, context.roomKey, "focal_point", "preview");
+            const mainApproved = Boolean(mainAsset && isApprovedAsset(mainAsset));
+            const batchGeneratingMain = generatingRoomKeys.includes(context.roomKey);
+            const selected = selectedRooms.includes(context.roomKey);
+            const mainGenerating = batchGeneratingMain || (generating?.roomKey === context.roomKey && generating.viewType === "main_space");
+            const alternateGenerating = generating?.roomKey === context.roomKey && generating.viewType === "alternate_angle";
+            const detailGenerating = generating?.roomKey === context.roomKey && generating.viewType === "focal_point";
+            return (
+              <GlassCard key={context.roomKey} className="p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[.62rem] font-black uppercase tracking-[.14em] text-[var(--accent-strong)]">{context.floorLabel}</p>
+                    <h3 className="mt-1 text-2xl font-black">{context.roomName}</h3>
+                    {context.roomNotes && <p className="mt-2 text-xs font-semibold text-[var(--text-secondary)]">Locator: {context.roomNotes}</p>}
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-black">
+                    <input type="checkbox" checked={selected} onChange={() => setSelectedRooms((current) => selected ? current.filter((key) => key !== context.roomKey) : [...current, context.roomKey])} />
+                    Select for batch
+                  </label>
+                </div>
+
+                <div className="mt-5 grid gap-4 xl:grid-cols-3">
+                  <RoomVisualOutputCard
+                    title="Main Concept"
+                    description="Primary plan-guided room interpretation."
+                    asset={mainAsset}
+                    generating={mainGenerating}
+                    approvingAssetId={approvingAssetId}
+                    onGenerate={() => onGenerateRoom("main_space", context)}
+                    onApprove={onApprove}
+                    onEnlarge={onEnlarge}
+                  />
+                  <RoomVisualOutputCard
+                    title="Alternate Angle"
+                    description="A second view anchored to the approved Main Concept."
+                    asset={alternateAsset}
+                    generating={alternateGenerating}
+                    approvingAssetId={approvingAssetId}
+                    locked={!mainApproved}
+                    lockedMessage="Approve the Main Concept first."
+                    onGenerate={() => onGenerateRoom("alternate_angle", context)}
+                    onApprove={onApprove}
+                    onEnlarge={onEnlarge}
+                  />
+                  <RoomVisualOutputCard
+                    title="Feature Detail"
+                    description="A tighter joinery, material or feature-focused concept."
+                    asset={detailAsset}
+                    generating={detailGenerating}
+                    approvingAssetId={approvingAssetId}
+                    locked={!mainApproved}
+                    lockedMessage="Approve the Main Concept first."
+                    onGenerate={() => onGenerateRoom("focal_point", context)}
+                    onApprove={onApprove}
+                    onEnlarge={onEnlarge}
+                  />
+                </div>
+              </GlassCard>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoomVisualOutputCard({
+  title,
+  description,
+  asset,
+  generating,
+  approvingAssetId,
+  locked = false,
+  lockedMessage,
+  onGenerate,
+  onApprove,
+  onEnlarge,
+}: {
+  title: string;
+  description: string;
+  asset?: ProjectAsset;
+  generating: boolean;
+  approvingAssetId: string | null;
+  locked?: boolean;
+  lockedMessage?: string;
+  onGenerate: () => void;
+  onApprove: (asset: ProjectAsset) => void;
+  onEnlarge: (image: { url: string; title: string }) => void;
+}) {
+  const imageUrl = asset?.file_url || asset?.thumbnail_url || "";
+  const approved = Boolean(asset && isApprovedAsset(asset));
+  return (
+    <article className={cx("overflow-hidden rounded-2xl border bg-[var(--surface)]", approved ? "border-emerald-400" : "border-[var(--border)]")}>
+      <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
+        {imageUrl ? (
+          <>
+            <img src={imageUrl} alt={title} className="h-full w-full object-cover" />
+            <button type="button" onClick={() => onEnlarge({ url: imageUrl, title })} className="absolute right-3 top-3 rounded-xl border border-white/40 bg-black/55 px-3 py-2 text-[.62rem] font-black text-white"><Maximize2 size={13} className="mr-1 inline" /> Enlarge</button>
+          </>
+        ) : (
+          <div className="px-5 text-center">
+            <ImageIcon size={27} className="mx-auto text-[var(--accent-strong)]" />
+            <p className="mt-3 text-xs font-black">Not generated</p>
+          </div>
+        )}
+        {generating && <ImageCardLoading title={title} />}
+      </div>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-black">{title}</p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{description}</p>
+          </div>
+          {approved && <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[.58rem] font-black text-emerald-600">Approved</span>}
+        </div>
+        {locked && <p className="mt-3 rounded-xl bg-amber-500/10 p-2.5 text-[.65rem] font-bold text-amber-700 dark:text-amber-300">{lockedMessage}</p>}
+        <div className="mt-4 grid gap-2">
+          <Button type="button" className="w-full" onClick={onGenerate} disabled={locked || generating}>
+            <Sparkles size={14} /> {imageUrl ? "Regenerate concept" : "Generate concept"} · 12 credits
+          </Button>
+          {asset && (
+            <Button type="button" className="w-full" variant={approved ? "secondary" : "primary"} onClick={() => onApprove(asset)} disabled={approved || approvingAssetId === asset.id || generating}>
+              {approvingAssetId === asset.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {approved ? "Approved source" : "Approve concept"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 
 function InteriorWorkflowCard({
   viewType,
@@ -1644,10 +2115,15 @@ function ProfessionalPackageSection({ value }: { value: unknown }) {
   );
 }
 
-function DesignPackSection({ result, assets, workMode, onDownload }: { result: ResultData; assets: ProjectAsset[]; workMode: WorkMode; onDownload: () => void }) {
+function DesignPackSection({ result, assets, workMode, existingDesign, onDownload }: { result: ResultData; assets: ProjectAsset[]; workMode: WorkMode; existingDesign: boolean; onDownload: () => void }) {
   const uploadedSourcePlans = getUploadedSourcePlanAssets(assets);
   const approvedPlans = PLAN_VIEWS.filter((plan) => isAnyStageApproved(assets, plan.id)).length;
-  const approvedVisuals = VISUALS.filter((visual) => isAnyStageApproved(assets, visual.id)).length;
+  const mappedRooms = existingDesign ? getMappedRoomContexts(assets) : [];
+  const approvedRoomConcepts = existingDesign
+    ? mappedRooms.filter((room) => { const asset = getRoomVisualAsset(assets, room.roomKey, "main_space", "preview"); return Boolean(asset && isApprovedAsset(asset)); }).length
+    : 0;
+  const approvedVisuals = existingDesign ? approvedRoomConcepts : VISUALS.filter((visual) => isAnyStageApproved(assets, visual.id)).length;
+  const visualTarget = existingDesign ? mappedRooms.length : VISUALS.length;
   return (
     <GlassCard className="p-6 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-5">
@@ -1667,7 +2143,7 @@ function DesignPackSection({ result, assets, workMode, onDownload }: { result: R
           ready={uploadedSourcePlans.length > 0 || approvedPlans === PLAN_VIEWS.length}
         />
         <PackStatus label="Material & product schedule" ready={Array.isArray(result.materialPalette) && result.materialPalette.length > 0} />
-        <PackStatus label={`Approved visuals ${approvedVisuals}/${VISUALS.length}`} ready={approvedVisuals === VISUALS.length} />
+        <PackStatus label={existingDesign ? `Approved room concepts ${approvedVisuals}/${visualTarget}` : `Approved visuals ${approvedVisuals}/${visualTarget}`} ready={visualTarget > 0 && approvedVisuals === visualTarget} />
         <PackStatus label="Professional package" ready={workMode !== "professional" || Boolean(result.professionalPackage)} />
       </div>
       <div className="mt-5 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">{config.disclaimer}</div>
@@ -2035,13 +2511,89 @@ function ErrorBanner({ message }: { message: string }) {
   return <div className="mt-5 rounded-2xl border border-red-300/60 bg-red-500/10 p-4 text-sm font-bold text-red-700 dark:text-red-200">{message}</div>;
 }
 
+function readSourcePlanRooms(asset: ProjectAsset): RoomMapping[] {
+  const raw = asset.metadata?.room_mappings;
+  if (!Array.isArray(raw)) return [];
+
+  const rooms: RoomMapping[] = [];
+  raw.forEach((item, index) => {
+    if (typeof item === "string") {
+      const name = item.trim();
+      if (!name) return;
+      rooms.push({
+        id: `${slugify(name) || "room"}-${index + 1}`,
+        name,
+        notes: "",
+      });
+      return;
+    }
+
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const name = String(record.name || "").trim();
+    if (!name) return;
+
+    rooms.push({
+      id: String(record.id || `${slugify(name) || "room"}-${index + 1}`),
+      name,
+      notes: String(record.notes || ""),
+    });
+  });
+
+  return rooms;
+}
+
+function inferFloorLabel(value: string) {
+  const clean = value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const tests: Array<[RegExp, string]> = [
+    [/ground\s*floor|\bgf\b/i, "Ground Floor"],
+    [/first\s*floor|1st\s*floor/i, "First Floor"],
+    [/second\s*floor|2nd\s*floor/i, "Second Floor"],
+    [/third\s*floor|3rd\s*floor/i, "Third Floor"],
+    [/roof/i, "Roof / Terrace"],
+    [/basement|lower\s*ground/i, "Basement / Lower Ground"],
+    [/mezzanine/i, "Mezzanine"],
+    [/mass\s*plan|site\s*plan/i, "Site / Mass Plan"],
+  ];
+  return tests.find(([pattern]) => pattern.test(clean))?.[1] || clean.replace(/\b(model|plan|drawing|source)\b/gi, "").replace(/\s+/g, " ").trim() || "Uploaded Plan";
+}
+
+function sourcePlanFloorLabel(asset: ProjectAsset, index: number) {
+  const saved = String(asset.metadata?.floor_label || "").trim();
+  return saved || inferFloorLabel(sourcePlanDisplayName(asset, index));
+}
+
+function getMappedRoomContexts(assets: ProjectAsset[]): RoomVisualContext[] {
+  return getUploadedSourcePlanAssets(assets).flatMap((asset, index) => {
+    const floorLabel = sourcePlanFloorLabel(asset, index);
+    return readSourcePlanRooms(asset).map((room) => ({
+      roomKey: `${asset.id}:${room.id}`,
+      roomName: room.name,
+      floorLabel,
+      sourcePlanAssetId: asset.id,
+      roomNotes: room.notes || "",
+    }));
+  });
+}
+
+function getRoomVisualAsset(assets: ProjectAsset[], roomKey: string, viewType: VisualType, stage: GenerationStage) {
+  return assets.find((asset) => {
+    const meta = asset.metadata || {};
+    return String(meta.room_key || "") === roomKey
+      && String(meta.view_type || "") === viewType
+      && assetStage(asset, viewType) === stage;
+  });
+}
+
 function getUploadedSourcePlanAssets(assets: ProjectAsset[]) {
   const previews = assets.filter((asset) => String(asset.asset_type || "") === "interior_source_plan_preview");
-  if (previews.length) return previews;
-  return assets.filter((asset) => {
+  const imageDocuments = assets.filter((asset) => {
     const type = String(asset.asset_type || "");
     return type === "interior_source_document" && asset.metadata?.ai_reference === true;
   });
+  if (!previews.length) return imageDocuments;
+  const previewSourceUrls = new Set(previews.map((asset) => String(asset.metadata?.source_document_url || "")).filter(Boolean));
+  return [...previews, ...imageDocuments.filter((asset) => !previewSourceUrls.has(String(asset.file_url || "")))];
 }
 
 function hasUploadedSourcePlanAssets(assets: ProjectAsset[]) {
@@ -2185,12 +2737,12 @@ function countryCodeFromMarket(market: string) {
 
 const INTERIOR_TAB_STORAGE_PREFIX = "heyy:interior:active-tab:";
 
-function readInteriorWorkspaceTab(projectId: string, workMode: WorkMode, result: ResultData): WorkspaceTab {
+function readInteriorWorkspaceTab(projectId: string, workMode: WorkMode, result: ResultData, existingDesign = false): WorkspaceTab {
   if (typeof window === "undefined") return "overview";
   const fromUrl = new URLSearchParams(window.location.search).get("tab");
   const fromStorage = window.localStorage.getItem(`${INTERIOR_TAB_STORAGE_PREFIX}${projectId}`);
   const candidate = fromUrl || fromStorage;
-  const allowed = workspaceTabs(workMode, result).some((tab) => tab.id === candidate);
+  const allowed = workspaceTabs(workMode, result, existingDesign).some((tab) => tab.id === candidate);
   return allowed ? (candidate as WorkspaceTab) : "overview";
 }
 
