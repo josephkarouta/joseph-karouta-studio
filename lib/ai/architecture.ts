@@ -2021,15 +2021,18 @@ function deterministicObservedRequirement(
   const metric = normaliseRequirementMetric(requirement.metric);
   const unit = normaliseRequirementMetric(requirement.unit);
 
-  if (requirement.category === "floor_count" || /floor|storey|story|level/.test(metric)) {
-    return { supported: true, observed: plan.levels?.length || 0, evidence: "canonical_plan.levels.length" };
-  }
-
+  // Area must be checked before floor count. A metric such as "gross floor area"
+  // contains the word "floor" but is an area requirement, not a storey count.
   if (/m2|sqm|square metre|square meter/.test(unit) || /\barea\b/.test(metric)) {
     const area = planScheduleAreaForMetric(planSet, requirement.metric);
     return area === null
       ? { supported: false, observed: 0, evidence: "No deterministic area-schedule match." }
       : { supported: true, observed: area, evidence: "planSet.area_schedule" };
+  }
+
+  const floorCountMetric = /^(floors?|storeys?|stories?|levels?|floor count|storey count|story count|level count)$/i.test(metric);
+  if (requirement.category === "floor_count" || floorCountMetric) {
+    return { supported: true, observed: plan.levels?.length || 0, evidence: "canonical_plan.levels.length" };
   }
 
   let capacityTotal = 0;
@@ -2381,13 +2384,42 @@ export async function generateArchitecturePlanSet(args: {
   const capacityConstraint = parseCapacityConstraint(projectType, args.project);
   const requestedStoreys = requestedProjectStoreys(args.project, args.site);
 
-  const requirementResult = await extractArchitectureRequirementContract({
-    plan: args.plan,
-    project: args.project,
-    site: args.site,
-    planning: args.planning,
-    spaceProgram: args.spaceProgram,
-  });
+  // Plan Foundation is intentionally a fast concept-planning stage. Do not run the
+  // multi-call Requirement Contract extraction/audit pipeline here; it made a simple
+  // concept plan slow and brittle (and could reject otherwise usable plans because
+  // inferred metrics were missing). The complete project brief and Space Program are
+  // still supplied directly to the plan generator below. Keep the heavier contract
+  // workflow only for legacy/non-foundation plan generation.
+  const requirementResult = args.planFoundationMode
+    ? {
+        contract: {
+          summary: "Plan Foundation uses the project brief, site and Space Program directly.",
+          requirements: requestedStoreys
+            ? [{
+                id: "explicit-floor-count",
+                source: "site.desired_floors/source_brief.desired_floors",
+                priority: "hard" as const,
+                validation_scope: "plan" as const,
+                category: "floor_count",
+                statement: `The project must contain exactly ${requestedStoreys} floor${requestedStoreys === 1 ? "" : "s"}.`,
+                measurable: true,
+                metric: "floors",
+                target_value: requestedStoreys,
+                unit: "floors",
+                comparison: "exactly" as const,
+                evidence_hint: "canonical_plan.levels.length",
+              }]
+            : [],
+        } satisfies ArchitectureRequirementContract,
+        usage: null,
+      }
+    : await extractArchitectureRequirementContract({
+        plan: args.plan,
+        project: args.project,
+        site: args.site,
+        planning: args.planning,
+        spaceProgram: args.spaceProgram,
+      });
   const requirementContract = requirementResult.contract;
 
   const hardPlanRequirements = requirementContract.requirements.filter(
@@ -2517,6 +2549,52 @@ export async function generateArchitecturePlanSet(args: {
   let value = repairCanonicalPlanAccess(first.value);
   let correctionUsage: unknown = null;
   let correctionAuditUsage: unknown = null;
+
+  // Focused Concept Studio: Plan Foundation should be fast and dependable.
+  // One structured plan-generation call is enough. We run local geometry checks and,
+  // only when necessary, the deterministic stabiliser. We deliberately do NOT run
+  // independent AI audits or two additional AI correction rounds in this mode.
+  // Those extra calls were the main source of multi-minute waits and intermittent
+  // "validation failed" refunds for conceptual projects.
+  if (args.planFoundationMode) {
+    const initialGeometryIssues = [
+      ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
+    ];
+    const geometryFailurePattern = /overlaps|outside the (?:master building|locked level) outline|no explicit door opening|no clear circulation|door .* wall|opening .* missing source room|stair core .* not stacked|multi-floor building must define/i;
+    if (initialGeometryIssues.some((issue) => geometryFailurePattern.test(issue))) {
+      value = stabilizeCanonicalPlanGeometry(value);
+    }
+
+    const remainingGeometryIssues = [
+      ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
+    ];
+    const foundationWarnings = remainingGeometryIssues.slice(0, 8);
+
+    return {
+      planSet: {
+        ...value,
+        planning_assumptions: [
+          ...value.planning_assumptions,
+          "Plan Foundation prepared as a coordinated AI concept plan. Professional architectural development is required for measured or construction documentation.",
+          ...(foundationWarnings.length
+            ? [`Concept coordination notes: ${foundationWarnings.join(" ")}`]
+            : []),
+        ],
+        plan_images: expandedPlanViews(value, args.architectureDna),
+      },
+      usage: {
+        requirement_extraction: null,
+        plan_generation: first.usage,
+        requirement_audit: null,
+        correction: null,
+        correction_audit: null,
+        plan_foundation_fast_path: true,
+        coordination_warnings: foundationWarnings,
+      },
+    };
+  }
 
   let deterministicIssues = [
     ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
