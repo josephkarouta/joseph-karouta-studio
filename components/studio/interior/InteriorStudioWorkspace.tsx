@@ -603,7 +603,10 @@ function InteriorExperience() {
       concept: result,
       professionalPackage: result.professionalPackage || null,
       plans: assets
-        .filter((asset) => String(asset.asset_type || "").startsWith("interior_plan_"))
+        .filter((asset) => {
+          const type = String(asset.asset_type || "");
+          return type.startsWith("interior_plan_") || type.startsWith("interior_source_");
+        })
         .map((asset) => ({ title: asset.title, url: asset.file_url, type: asset.metadata?.view_type, stage: asset.metadata?.stage, approved: asset.metadata?.approved })),
       visuals: assets
         .filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_"))
@@ -621,7 +624,9 @@ function InteriorExperience() {
 
   const mainVisual = getInteriorAsset(assets, "main_space", "final") || getInteriorAsset(assets, "main_space", "preview");
   const loading = generatingConcept;
-  const spacePlanReady = isAnyStageApproved(assets, "space_plan");
+  const existingDesign = form.projectStartMode === "existing";
+  const uploadedSourcePlansReady = hasUploadedSourcePlanAssets(assets);
+  const spacePlanReady = existingDesign ? uploadedSourcePlansReady : isAnyStageApproved(assets, "space_plan");
   const sourcingMarket = String(form.procurementMarket || form.location || "");
 
   return (
@@ -694,10 +699,10 @@ function InteriorExperience() {
             {activeTab === "furniture" && <ProductDirectionSection domain="furniture" eyebrow="Furniture direction" title="Choose pieces by proportion, placement and function" icon={<Sofa size={21} />} value={result.furniturePlan} location={sourcingMarket} />}
             {activeTab === "lighting" && <ProductDirectionSection domain="lighting" eyebrow="Lighting strategy" title="Build ambient, task and accent lighting as one system" icon={<LampFloor size={21} />} value={result.lightingPlan} location={sourcingMarket} />}
             {activeTab === "plans" && (
-              <PlansSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenProduction={() => selectWorkspaceTab("production")} />
+              <PlansSection existingDesign={existingDesign} assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenProduction={() => selectWorkspaceTab("production")} />
             )}
             {activeTab === "visuals" && (
-              <VisualsSection assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} spacePlanReady={spacePlanReady} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenPlans={() => selectWorkspaceTab("plans")} />
+              <VisualsSection existingDesign={existingDesign} assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} spacePlanReady={spacePlanReady} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenPlans={() => selectWorkspaceTab("plans")} />
             )}
             {activeTab === "professional-pack" && <ProfessionalPackageSection value={result.professionalPackage} />}
             {activeTab === "design-pack" && (
@@ -710,7 +715,10 @@ function InteriorExperience() {
                   project_brief: form,
                   connected_architecture: architectureProjects.find((item) => item.id === form.architectureProjectId) || null,
                   layout_plan: result.layoutPlan,
-                  concept_plans: assets.filter((asset) => String(asset.asset_type || "").startsWith("interior_plan_")),
+                  concept_plans: assets.filter((asset) => {
+                    const type = String(asset.asset_type || "");
+                    return type.startsWith("interior_plan_") || type.startsWith("interior_source_");
+                  }),
                   material_palette: result.materialPalette,
                   furniture_schedule: result.furniturePlan,
                   lighting_strategy: result.lightingPlan,
@@ -1239,6 +1247,7 @@ function ProductRecommendationGrid({
 }
 
 function PlansSection({
+  existingDesign,
   assets,
   generating,
   approvingAssetId,
@@ -1247,6 +1256,7 @@ function PlansSection({
   onEnlarge,
   onOpenProduction,
 }: {
+  existingDesign: boolean;
   assets: ProjectAsset[];
   generating: GenerationTarget;
   approvingAssetId: string | null;
@@ -1255,7 +1265,72 @@ function PlansSection({
   onEnlarge: (image: { url: string; title: string }) => void;
   onOpenProduction: () => void;
 }) {
-  const spacePlanApproved = isAnyStageApproved(assets, "space_plan");
+  const uploadedSourcePlans = getUploadedSourcePlanAssets(assets);
+  const spacePlanApproved = existingDesign ? uploadedSourcePlans.length > 0 : isAnyStageApproved(assets, "space_plan");
+
+  if (existingDesign) {
+    return (
+      <GlassCard className="p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Eyebrow>Existing design · source plans</Eyebrow>
+            <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Your uploaded plans are the project geometry</h2>
+            <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
+              Because this project started from an existing design, Heyy Studio does not ask you to generate a new Furniture & Space Plan. The plans you uploaded are already approved as the geometry reference for Interior visuals.
+            </p>
+          </div>
+          <StatusPill tone={uploadedSourcePlans.length ? "success" : "warning"}>
+            {uploadedSourcePlans.length ? `${uploadedSourcePlans.length} source plan${uploadedSourcePlans.length === 1 ? "" : "s"}` : "No source plans"}
+          </StatusPill>
+        </div>
+
+        {!uploadedSourcePlans.length ? (
+          <div className="mt-6 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4">
+            <p className="text-sm font-black text-amber-800 dark:text-amber-200">No uploaded source plans were found</p>
+            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">Return to the project brief and upload the existing floor plans before generating visuals.</p>
+          </div>
+        ) : (
+          <div className="mt-7 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+            {uploadedSourcePlans.map((asset, index) => {
+              const imageUrl = asset.thumbnail_url || asset.file_url || "";
+              const sourceDocumentUrl = String(asset.metadata?.source_document_url || "");
+              return (
+                <article key={asset.id} className="overflow-hidden rounded-3xl border border-emerald-400 bg-[var(--surface)] shadow-[0_0_0_1px_rgba(16,185,129,.25)]">
+                  <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
+                    {imageUrl ? (
+                      <>
+                        <img src={imageUrl} alt={sourcePlanDisplayName(asset, index)} className="h-full w-full object-contain p-3" />
+                        <button type="button" onClick={() => onEnlarge({ url: imageUrl, title: sourcePlanDisplayName(asset, index) })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl border border-white/45 bg-black/55 px-3 py-2 text-[.65rem] font-black text-white backdrop-blur-md transition hover:bg-black/75">
+                          <Maximize2 size={13} /> Enlarge
+                        </button>
+                      </>
+                    ) : (
+                      <FileText size={32} className="text-[var(--accent-strong)]" />
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-black">{sourcePlanDisplayName(asset, index)}</p>
+                        <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-secondary)]">Uploaded existing plan · used directly as the visual geometry reference.</p>
+                      </div>
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[.62rem] font-black text-emerald-600"><CheckCircle2 size={13} /> Approved source</span>
+                    </div>
+                    {sourceDocumentUrl && (
+                      <a href={sourceDocumentUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-xs font-black text-[var(--accent-strong)] hover:underline">
+                        <ExternalLink size={13} /> Open original file
+                      </a>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </GlassCard>
+    );
+  }
+
   return (
     <GlassCard className="p-6 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1310,6 +1385,7 @@ function PlansSection({
 }
 
 function VisualsSection({
+  existingDesign,
   assets,
   generating,
   approvingAssetId,
@@ -1319,6 +1395,7 @@ function VisualsSection({
   onEnlarge,
   onOpenPlans,
 }: {
+  existingDesign: boolean;
   assets: ProjectAsset[];
   generating: GenerationTarget;
   approvingAssetId: string | null;
@@ -1333,9 +1410,11 @@ function VisualsSection({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Eyebrow>Interior visuals</Eyebrow>
-          <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Create visuals from the approved space plan</h2>
+          <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">{existingDesign ? "Create visuals from your uploaded plans" : "Create visuals from the approved space plan"}</h2>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Professional Final remains an optional higher-quality output rather than a required step.
+            {existingDesign
+              ? "Your uploaded existing plans are already the approved geometry source. Generate the Main Space Perspective directly from those plans, then use the approved main visual as the anchor for additional angles."
+              : "As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Professional Final remains an optional higher-quality output rather than a required step."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1347,8 +1426,8 @@ function VisualsSection({
       {!spacePlanReady && (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4">
           <div>
-            <p className="text-sm font-black text-amber-800 dark:text-amber-200">Approve the Furniture & Space Plan first</p>
-            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">Once approved, all connected plans and visuals unlock immediately.</p>
+            <p className="text-sm font-black text-amber-800 dark:text-amber-200">{existingDesign ? "Upload at least one existing plan first" : "Approve the Furniture & Space Plan first"}</p>
+            <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">{existingDesign ? "Your uploaded plan becomes the geometry source automatically." : "Once approved, all connected plans and visuals unlock immediately."}</p>
           </div>
           <Button type="button" variant="secondary" onClick={onOpenPlans}><Ruler size={15} /> Open plans</Button>
         </div>
@@ -1357,7 +1436,9 @@ function VisualsSection({
       <div className="mt-7 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
         {VISUALS.map((visual) => {
           const dependency = !spacePlanReady
-            ? "Generate and approve the Furniture & Space Plan first."
+            ? existingDesign
+              ? "Upload at least one existing floor plan first."
+              : "Generate and approve the Furniture & Space Plan first."
             : undefined;
           return (
             <InteriorWorkflowCard
@@ -1564,6 +1645,7 @@ function ProfessionalPackageSection({ value }: { value: unknown }) {
 }
 
 function DesignPackSection({ result, assets, workMode, onDownload }: { result: ResultData; assets: ProjectAsset[]; workMode: WorkMode; onDownload: () => void }) {
+  const uploadedSourcePlans = getUploadedSourcePlanAssets(assets);
   const approvedPlans = PLAN_VIEWS.filter((plan) => isAnyStageApproved(assets, plan.id)).length;
   const approvedVisuals = VISUALS.filter((visual) => isAnyStageApproved(assets, visual.id)).length;
   return (
@@ -1580,7 +1662,10 @@ function DesignPackSection({ result, assets, workMode, onDownload }: { result: R
       </div>
       <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <PackStatus label="Concept strategy" ready={Boolean(result.conceptSummary)} />
-        <PackStatus label={`Approved plans ${approvedPlans}/${PLAN_VIEWS.length}`} ready={approvedPlans === PLAN_VIEWS.length} />
+        <PackStatus
+          label={uploadedSourcePlans.length ? `Uploaded source plans ${uploadedSourcePlans.length}` : `Approved plans ${approvedPlans}/${PLAN_VIEWS.length}`}
+          ready={uploadedSourcePlans.length > 0 || approvedPlans === PLAN_VIEWS.length}
+        />
         <PackStatus label="Material & product schedule" ready={Array.isArray(result.materialPalette) && result.materialPalette.length > 0} />
         <PackStatus label={`Approved visuals ${approvedVisuals}/${VISUALS.length}`} ready={approvedVisuals === VISUALS.length} />
         <PackStatus label="Professional package" ready={workMode !== "professional" || Boolean(result.professionalPackage)} />
@@ -1948,6 +2033,30 @@ function PackStatus({ label, ready }: { label: string; ready: boolean }) {
 
 function ErrorBanner({ message }: { message: string }) {
   return <div className="mt-5 rounded-2xl border border-red-300/60 bg-red-500/10 p-4 text-sm font-bold text-red-700 dark:text-red-200">{message}</div>;
+}
+
+function getUploadedSourcePlanAssets(assets: ProjectAsset[]) {
+  const previews = assets.filter((asset) => String(asset.asset_type || "") === "interior_source_plan_preview");
+  if (previews.length) return previews;
+  return assets.filter((asset) => {
+    const type = String(asset.asset_type || "");
+    return type === "interior_source_document" && asset.metadata?.ai_reference === true;
+  });
+}
+
+function hasUploadedSourcePlanAssets(assets: ProjectAsset[]) {
+  return getUploadedSourcePlanAssets(assets).length > 0;
+}
+
+function sourcePlanDisplayName(asset: ProjectAsset, index: number) {
+  const title = String(asset.title || "").trim();
+  if (title) {
+    return title
+      .replace(/^Source plan\s*[—-]\s*/i, "")
+      .replace(/\s*[—-]\s*page\s+\d+\s+AI reference$/i, "")
+      .trim() || `Source plan ${index + 1}`;
+  }
+  return `Source plan ${index + 1}`;
 }
 
 function getInteriorAsset(assets: ProjectAsset[], viewType: InteriorImageType, stage?: GenerationStage) {

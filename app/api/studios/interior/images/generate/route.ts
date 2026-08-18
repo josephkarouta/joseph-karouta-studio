@@ -33,9 +33,13 @@ async function hasApprovedInteriorAsset(admin: any, projectId: string, viewType:
     const approved = meta.approved === true || meta.approved === "true";
     if (!approved) return false;
     if (view === viewType) return true;
-    return viewType === "space_plan"
-      ? type.includes("interior_plan_space_plan")
-      : type.includes("interior_visual_main_space");
+    if (viewType === "space_plan") {
+      if (type.includes("interior_plan_space_plan")) return true;
+      if (type === "interior_source_plan_preview") return true;
+      if (type === "interior_source_document" && meta.ai_reference === true) return true;
+      return false;
+    }
+    return type.includes("interior_visual_main_space");
   });
 }
 
