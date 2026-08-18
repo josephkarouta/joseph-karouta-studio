@@ -89,10 +89,7 @@ export async function POST(request: Request) {
         stage,
         credits: reservation.amount,
         sourcePlanImageUrls: Array.isArray((project.input as any)?.sourcePlanImageUrls)
-          ? (project.input as any).sourcePlanImageUrls.slice(0, 5)
-          : [],
-        sourcePlanAssetUrls: Array.isArray((project.input as any)?.sourcePlanAssetUrls)
-          ? (project.input as any).sourcePlanAssetUrls.slice(0, 6)
+          ? (project.input as any).sourcePlanImageUrls.slice(0, 6)
           : [],
       },
       output: {},

@@ -234,6 +234,7 @@ function buildMarketingVisualPrompt(projectName: string, viewType: MarketingVisu
 
 async function loadInteriorReferences(admin: SupabaseClient, userId: string, projectId: string, imageType: InteriorImageType, stage: GenerationStage, input: Record<string, unknown>) {
   const refs: any[] = [];
+  await addUploadedInteriorPlanReferences(admin, refs, projectId, input, 6);
   const connectedArchitectureId = architectureProjectIdFromInput(input);
   if (connectedArchitectureId) {
     await addArchitectureSourceDrawings(admin, userId, connectedArchitectureId, imageType, refs, 5);
@@ -253,6 +254,37 @@ async function loadInteriorReferences(admin: SupabaseClient, userId: string, pro
   if ((isPlan && imageType !== "space_plan") || !isPlan) await addInteriorAssetRef(admin, refs, projectId, "space_plan", ["final", "preview", "technical"], true);
   if (!isPlan && imageType !== "main_space") await addInteriorAssetRef(admin, refs, projectId, "main_space", ["final", "preview"], false);
   return refs.slice(0, 8);
+}
+
+async function addUploadedInteriorPlanReferences(admin: SupabaseClient, refs: any[], projectId: string, input: Record<string, unknown>, limit: number) {
+  const directUrls = Array.isArray(input.sourcePlanImageUrls)
+    ? input.sourcePlanImageUrls.map((url) => String(url || "").trim()).filter(Boolean)
+    : [];
+
+  const fallbackUrls: string[] = [];
+  if (!directUrls.length) {
+    const { data: assets } = await admin
+      .from("project_assets")
+      .select("file_url,thumbnail_url,asset_type,metadata,created_at")
+      .eq("project_id", projectId)
+      .eq("studio", "interior_studio")
+      .in("asset_type", ["interior_source_plan_preview", "interior_source_document"])
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    for (const asset of assets || []) {
+      const meta = asset.metadata && typeof asset.metadata === "object" ? asset.metadata as Record<string, unknown> : {};
+      const contentType = String(meta.content_type || "").toLowerCase();
+      const aiReference = meta.ai_reference === true || meta.ai_reference === "true";
+      if (!aiReference || !contentType.startsWith("image/")) continue;
+      const url = String(asset.file_url || asset.thumbnail_url || "").trim();
+      if (url) fallbackUrls.push(url);
+    }
+  }
+
+  for (const [index, url] of Array.from(new Set(directUrls.length ? directUrls : fallbackUrls)).slice(0, limit).entries()) {
+    await pushUrlRef(refs, url, `interior-source-plan-${index + 1}.png`);
+  }
 }
 
 async function addInteriorAssetRef(admin: SupabaseClient, refs: any[], projectId: string, viewType: InteriorImageType, stages: GenerationStage[], approvedOnly: boolean) {
@@ -327,7 +359,13 @@ async function latestMarketingAsset(admin: SupabaseClient, projectId: string, vi
 
 async function pushUrlRef(refs: any[], url: string, name: string) {
   if (!url) return;
-  try { const response = await fetch(url); if (!response.ok) return; refs.push(await toFile(Buffer.from(await response.arrayBuffer()), name, { type: response.headers.get("content-type") || "image/png" })); } catch { /* optional ref */ }
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return;
+    const contentType = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) return;
+    refs.push(await toFile(Buffer.from(await response.arrayBuffer()), name, { type: contentType }));
+  } catch { /* optional ref */ }
 }
 
 async function storeGeneratedAsset(admin: SupabaseClient, args: { userId: string; projectId: string; studio: string; assetType: string; title: string; buffer: Buffer; payload: Record<string, unknown>; metadata: Record<string, unknown> }) {

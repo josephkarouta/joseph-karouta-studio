@@ -366,51 +366,49 @@ function InteriorExperience() {
   async function uploadInteriorSourcePlans(projectRecord: ProjectRecord) {
     if (!user?.id || !sourcePlanFiles.length) return projectRecord;
 
-    const saved: Array<{ url: string; name: string; type: string; aiReference: boolean }> = [];
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error("Your session expired. Sign in again.");
 
-    for (const [index, file] of sourcePlanFiles.entries()) {
+    const saved: Array<{ url: string; name: string; type: string; aiReferenceUrls: string[] }> = [];
+    let remainingAiReferences = 6;
+
+    for (const file of sourcePlanFiles) {
       if (file.size > 4 * 1024 * 1024) {
         throw new Error(`${file.name} is larger than the 4 MB beta upload limit.`);
       }
       const supported = ["image/png", "image/jpeg", "image/webp", "application/pdf"].includes(file.type);
       if (!supported) throw new Error(`${file.name} is not a supported floor-plan file. Use PNG, JPG, WebP or PDF.`);
 
-      const safeName = safeFileName(file.name || `floor-plan-${index + 1}`);
-      const path = `${user.id}/${projectRecord.id}/interior-source/${Date.now()}-${index}-${safeName}`;
-      const { error: uploadError } = await supabase.storage
-        .from("project-assets")
-        .upload(path, file, {
-          contentType: file.type || "application/octet-stream",
-          cacheControl: "31536000",
-          upsert: false,
-        });
-      if (uploadError) throw new Error(uploadError.message || `Could not upload ${file.name}.`);
+      const previews = file.type === "application/pdf" && remainingAiReferences > 0
+        ? await renderInteriorPdfPlanPages(file, Math.min(3, remainingAiReferences))
+        : [];
 
-      const { data: publicData } = supabase.storage.from("project-assets").getPublicUrl(path);
-      const publicUrl = publicData.publicUrl;
-      const aiReference = file.type.startsWith("image/");
-      const { error: assetError } = await supabase.from("project_assets").insert({
-        user_id: user.id,
-        project_id: projectRecord.id,
-        studio: config.databaseId,
-        asset_type: "interior_source_plan",
-        title: `Source plan — ${file.name}`,
-        payload: { original_filename: file.name, mime_type: file.type, intake_mode: "existing_design" },
-        file_url: publicUrl,
-        thumbnail_url: aiReference ? publicUrl : null,
-        metadata: {
-          source: "interior_intake",
-          storage_path: path,
-          content_type: file.type,
-          approved: true,
-          ai_reference: aiReference,
-        },
+      const uploadData = new FormData();
+      uploadData.append("projectId", projectRecord.id);
+      uploadData.append("file", file, file.name);
+      previews.forEach((preview) => uploadData.append("preview", preview, preview.name));
+
+      const response = await fetch("/api/studios/interior/source-plans/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: uploadData,
       });
-      if (assetError) {
-        await supabase.storage.from("project-assets").remove([path]);
-        throw new Error(assetError.message || `Could not save ${file.name} to the project.`);
+      const payload = await readStudioAsyncPayload(response, `Could not upload ${file.name}.`);
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || `Could not upload ${file.name}.`);
       }
-      saved.push({ url: publicUrl, name: file.name, type: file.type, aiReference });
+
+      const aiReferenceUrls = Array.isArray(payload.aiReferenceUrls)
+        ? payload.aiReferenceUrls.map((url: unknown) => String(url || "")).filter(Boolean)
+        : [];
+      remainingAiReferences = Math.max(0, remainingAiReferences - aiReferenceUrls.length);
+      saved.push({
+        url: String(payload.documentUrl || ""),
+        name: file.name,
+        type: file.type,
+        aiReferenceUrls,
+      });
     }
 
     const nextInput: FormState = {
@@ -418,8 +416,8 @@ function InteriorExperience() {
       projectStartMode: "existing",
       architectureSource: "Use uploaded floor plans",
       architectureProjectId: "",
-      sourcePlanAssetUrls: saved.map((item) => item.url),
-      sourcePlanImageUrls: saved.filter((item) => item.aiReference).map((item) => item.url),
+      sourcePlanAssetUrls: saved.map((item) => item.url).filter(Boolean),
+      sourcePlanImageUrls: saved.flatMap((item) => item.aiReferenceUrls).slice(0, 6),
       sourcePlanFileNames: saved.map((item) => item.name),
     };
 
@@ -1726,7 +1724,7 @@ function InteriorProjectStart({
             <div>
               <p className="text-sm font-black">Upload existing floor plans</p>
               <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
-                PNG, JPG, WebP or PDF · up to 4 MB each. Image plans are used directly as AI geometry references; PDFs are saved with the project for reference.
+                PNG, JPG, WebP or PDF · up to 4 MB each. PDF pages are automatically converted into image references so the AI can use the drawings instead of sending the PDF directly to the image model.
               </p>
             </div>
             <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl bg-[var(--accent)] px-4 text-xs font-black text-white transition hover:brightness-95">
@@ -2121,6 +2119,51 @@ function compactLayoutPriority(value: string) {
   const words = clean.split(" ");
   if (words.length <= 18) return clean;
   return `${words.slice(0, 18).join(" ")}…`;
+}
+
+async function renderInteriorPdfPlanPages(file: File, maxPages: number) {
+  if (file.type !== "application/pdf" || maxPages <= 0) return [] as File[];
+
+  let pdfjs: any;
+  try {
+    // @ts-ignore -- pdfjs-dist/webpack.mjs is the official webpack entry but currently ships without a matching declaration file.
+    pdfjs = await import("pdfjs-dist/webpack.mjs");
+  } catch {
+    throw new Error("PDF plan preparation is not available yet. Install pdfjs-dist, rebuild, and try again.");
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const loadingTask = pdfjs.getDocument({ data: bytes });
+  const pdf = await loadingTask.promise;
+  const pageCount = Math.min(Number(pdf.numPages || 0), maxPages);
+  if (!pageCount) throw new Error(`${file.name} does not contain a readable PDF page.`);
+
+  const output: File[] = [];
+  const baseName = safeFileName(file.name.replace(/\.pdf$/i, "") || "floor-plan");
+
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const longestSide = Math.max(Number(baseViewport.width || 1), Number(baseViewport.height || 1));
+    const scale = Math.max(1, Math.min(2.4, 1900 / longestSide));
+    const viewport = page.getViewport({ scale });
+    const canvas = window.document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(viewport.width));
+    canvas.height = Math.max(1, Math.ceil(viewport.height));
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error(`Could not prepare page ${pageNumber} of ${file.name}.`);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((value) => value ? resolve(value) : reject(new Error(`Could not convert page ${pageNumber} of ${file.name}.`)), "image/png");
+    });
+    output.push(new File([blob], `${baseName}-page-${pageNumber}.png`, { type: "image/png" }));
+    page.cleanup?.();
+  }
+
+  await pdf.destroy?.();
+  return output;
 }
 
 function initialState() {
