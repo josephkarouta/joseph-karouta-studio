@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   AlertCircle,
   Check,
@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -22,10 +23,11 @@ import {
   DIGITAL_ADAPTATION_PRESETS,
   familyForDimensions,
   type DigitalAdaptationFormat,
-  uniqueFamilies,
+  uniqueCompositionKeys,
 } from "@/lib/tools/digital-adaptations";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import { generationFetch } from "@/lib/client/generation-request";
+import { createBrowserZip } from "@/lib/client/zip";
 
 type AdaptationOutput = DigitalAdaptationFormat & {
   fileName: string;
@@ -37,6 +39,11 @@ type AdaptationResult = {
   outputs: AdaptationOutput[];
   creditsUsed: number;
   reviewNote: string;
+};
+
+type JobProgress = {
+  percent?: number;
+  message?: string;
 };
 
 const starterSelection = new Set([
@@ -61,6 +68,71 @@ export default function DigitalAdaptationsWorkbench() {
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<AdaptationResult | null>(null);
+  const [activeJobId, setActiveJobId] = useState("");
+  const [progress, setProgress] = useState<JobProgress | null>(null);
+  const [previewOutput, setPreviewOutput] = useState<AdaptationOutput | null>(null);
+  const pollRun = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function resumeLatestJob() {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+        if (!session?.access_token || !active) return;
+
+        const storageKey = activeJobStorageKey(session.user.id);
+        const storedJobId = window.localStorage.getItem(storageKey) || "";
+        const endpoint = storedJobId
+          ? `/api/tools/digital-adaptations/status?job=${encodeURIComponent(storedJobId)}`
+          : "/api/tools/digital-adaptations/status";
+        const response = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: "no-store",
+        });
+        const payload = await readJsonResponse(response);
+        if (!active) return;
+        if (!response.ok) {
+          if (storedJobId && response.status === 404) window.localStorage.removeItem(storageKey);
+          throw new Error(payload.error || "Could not check your latest Digital Adaptations job.");
+        }
+        if (payload.status === "idle") return;
+
+        const jobId = String(payload.jobId || storedJobId);
+        if (!jobId) return;
+        if (payload.status === "succeeded") {
+          if (Array.isArray(payload.outputs) && payload.outputs.length) setResult(payload);
+          window.localStorage.removeItem(storageKey);
+          await refreshAccount();
+          return;
+        }
+        if (payload.status === "failed") {
+          window.localStorage.removeItem(storageKey);
+          setError(payload.error || "Digital adaptations failed. Your credits were returned.");
+          await refreshAccount();
+          return;
+        }
+
+        setLoading(true);
+        setActiveJobId(jobId);
+        setProgress(payload.progress || null);
+        window.localStorage.setItem(storageKey, jobId);
+        await poll(jobId, session.access_token, session.user.id);
+        if (active) await refreshAccount();
+      } catch (resumeError) {
+        if (active) setError(resumeError instanceof Error ? resumeError.message : "Could not resume your Digital Adaptations job.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void resumeLatestJob();
+    return () => {
+      active = false;
+      pollRun.current += 1;
+    };
+  }, [supabase]);
 
   useEffect(() => {
     if (!source) {
@@ -71,6 +143,20 @@ export default function DigitalAdaptationsWorkbench() {
     setSourcePreview(url);
     return () => URL.revokeObjectURL(url);
   }, [source]);
+
+  useEffect(() => {
+    if (!previewOutput) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreviewOutput(null);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [previewOutput]);
 
   const allFormats = useMemo(
     () => [
@@ -84,8 +170,8 @@ export default function DigitalAdaptationsWorkbench() {
     () => allFormats.filter((format) => selectedIds.has(format.id)),
     [allFormats, selectedIds],
   );
-  const familyCount = uniqueFamilies(selectedFormats).length;
-  const creditCost = familyCount * CREDIT_COSTS.digitalAdaptationFamily;
+  const compositionCount = uniqueCompositionKeys(selectedFormats).length;
+  const creditCost = compositionCount * CREDIT_COSTS.digitalAdaptationFamily;
 
   function chooseSource(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] || null;
@@ -166,8 +252,9 @@ export default function DigitalAdaptationsWorkbench() {
 
     try {
       const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) throw new Error("Your session expired. Sign in again.");
+      const session = data.session;
+      const token = session?.access_token;
+      if (!session || !token) throw new Error("Your session expired. Sign in again.");
 
       const form = new FormData();
       form.set("source", source);
@@ -194,7 +281,11 @@ export default function DigitalAdaptationsWorkbench() {
       if (payload.status === "succeeded" && Array.isArray(payload.outputs)) {
         setResult(payload);
       } else {
-        await poll(String(payload.jobId || ""), token);
+        const jobId = String(payload.jobId || "");
+        setActiveJobId(jobId);
+        setProgress(payload.progress || { percent: 1, message: "Your job is queued" });
+        window.localStorage.setItem(activeJobStorageKey(session.user.id), jobId);
+        await poll(jobId, token, session.user.id);
       }
       await refreshAccount();
     } catch (generationError) {
@@ -205,11 +296,14 @@ export default function DigitalAdaptationsWorkbench() {
     }
   }
 
-  async function poll(jobId: string, token: string) {
+  async function poll(jobId: string, token: string, userId: string) {
     if (!jobId) throw new Error("Digital adaptations job could not be started.");
+    const runId = ++pollRun.current;
 
     for (let attempt = 0; attempt < 300; attempt += 1) {
+      if (pollRun.current !== runId) return;
       await delay(attempt === 0 ? 1200 : 3000);
+      if (pollRun.current !== runId) return;
       const response = await fetch(`/api/tools/digital-adaptations/status?job=${encodeURIComponent(jobId)}`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
@@ -217,6 +311,9 @@ export default function DigitalAdaptationsWorkbench() {
       const payload = await readJsonResponse(response);
       if (!response.ok) throw new Error(payload.error || "Could not check digital adaptations status.");
       if (payload.status === "failed") {
+        window.localStorage.removeItem(activeJobStorageKey(userId));
+        setActiveJobId("");
+        setProgress(null);
         throw new Error(payload.error || "Digital adaptations failed. Your credits were returned.");
       }
       if (payload.status === "succeeded") {
@@ -224,8 +321,12 @@ export default function DigitalAdaptationsWorkbench() {
           throw new Error("The generated adaptations could not be loaded.");
         }
         setResult(payload);
+        window.localStorage.removeItem(activeJobStorageKey(userId));
+        setActiveJobId("");
+        setProgress(null);
         return;
       }
+      setProgress(payload.progress || { message: "Your adaptations are still processing" });
     }
 
     throw new Error("Your adaptations are still processing. They will remain available in Assets when completed.");
@@ -256,11 +357,29 @@ export default function DigitalAdaptationsWorkbench() {
   async function downloadAll() {
     if (!result?.outputs.length) return;
     setDownloadingAll(true);
-    for (const output of result.outputs) {
-      await downloadOutput(output);
-      await new Promise((resolve) => setTimeout(resolve, 180));
+    setError("");
+    try {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !data.session?.access_token) throw new Error("Your session expired. Sign in again.");
+      const accessToken = data.session.access_token;
+      const files = await mapWithConcurrency(result.outputs, 4, async (output) => {
+        const assetId = String(output.asset?.id || "");
+        const response = assetId
+          ? await fetch(`/api/assets/download?assetId=${encodeURIComponent(assetId)}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          })
+          : await fetch(output.imageUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error(`${output.label} could not be added to the ZIP.`);
+        return { name: output.fileName, data: await response.arrayBuffer() };
+      });
+      const zip = createBrowserZip(files);
+      triggerDownload(zip, `${safeDownloadName(projectName || "digital-campaign")}-adaptations.zip`);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "The ZIP could not be created.");
+    } finally {
+      setDownloadingAll(false);
     }
-    setDownloadingAll(false);
   }
 
   const categories = ["Social", "Web", "Display", ...(customFormats.length ? ["Custom"] : [])];
@@ -300,12 +419,12 @@ export default function DigitalAdaptationsWorkbench() {
             <div>
               <Eyebrow>02 · Art direction</Eyebrow>
               <h2 className="mt-3 text-2xl font-black tracking-[-.045em]">Guide the AI recomposition</h2>
-              <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">AI automatically repositions and extends the approved key visual for every selected aspect family.</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">AI automatically repositions and extends the approved key visual directly for every selected aspect ratio.</p>
             </div>
             <Sparkles className="shrink-0 text-[var(--accent-strong)]" size={24} />
           </div>
-          <div className="mt-4 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4 text-xs font-bold leading-5 text-amber-800 dark:text-amber-100">
-            Review every result before publishing. Small typography, logos or mandatory elements may need final production checking.
+          <div className="mt-4 rounded-2xl border border-emerald-300/60 bg-emerald-500/10 p-4 text-xs font-bold leading-5 text-emerald-800 dark:text-emerald-100">
+            Full-content protection is automatic: every text block, logo, image, icon, CTA and mandatory element is recomposed inside format-aware safe margins while the background continues edge to edge. Review fine typography before publishing.
           </div>
           <label className="mt-5 block text-[.64rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Art-direction notes</label>
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} className="heyy-form-field mt-2 resize-y" placeholder="Keep the product on the right, protect the headline area, maintain the existing CTA..." />
@@ -354,10 +473,17 @@ export default function DigitalAdaptationsWorkbench() {
 
           {error && <div className="mt-5 flex gap-3 rounded-2xl border border-red-300/60 bg-red-500/10 p-4 text-sm font-bold text-red-700 dark:text-red-200"><AlertCircle size={18} className="shrink-0"/>{error}</div>}
 
+          {loading && activeJobId && (
+            <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4">
+              <div className="flex items-center gap-3"><Loader2 size={17} className="animate-spin text-[var(--accent-strong)]"/><div><p className="text-sm font-black">{progress?.message || "Your adaptations are running"}</p><p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">You can safely leave or refresh this page. The job will continue in the background.</p></div></div>
+              {Number(progress?.percent) > 0 && <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#6f2dff,#ef3fb4)] transition-[width]" style={{ width: `${Math.min(100, Number(progress?.percent) || 0)}%` }}/></div>}
+            </div>
+          )}
+
           <Button className="mt-6 w-full" size="lg" onClick={() => void generate()} disabled={loading || !source || !selectedFormats.length}>
             {loading ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16}/>} {loading ? "Creating adaptations…" : `Create ${selectedFormats.length} adaptation${selectedFormats.length === 1 ? "" : "s"} · ${creditCost} credits`}
           </Button>
-          <p className="mt-3 text-center text-[.65rem] font-semibold text-[var(--text-muted)]">Credits are charged once per required aspect family, not once per individual output size.</p>
+          <p className="mt-3 text-center text-[.65rem] font-semibold text-[var(--text-muted)]">Credits are charged once per required aspect-ratio composition. Sizes with the same ratio share one composition.</p>
         </GlassCard>
       </div>
 
@@ -369,7 +495,7 @@ export default function DigitalAdaptationsWorkbench() {
 
         {loading ? (
           <div className="grid min-h-[680px] place-items-center rounded-[1.5rem] border border-dashed border-[var(--border-strong)] bg-[linear-gradient(135deg,var(--surface-hover),rgba(124,58,237,.08))] p-8 text-center">
-            <div><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] shadow-lg"><Loader2 size={25} className="animate-spin text-[var(--accent-strong)]"/></span><p className="mt-4 text-sm font-black">Adapting your campaign artwork</p><p className="mt-1 max-w-sm text-xs font-semibold leading-5 text-[var(--text-muted)]">Creating the required aspect compositions, exporting exact pixel sizes and saving the files.</p></div>
+            <div><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] shadow-lg"><Loader2 size={25} className="animate-spin text-[var(--accent-strong)]"/></span><p className="mt-4 text-sm font-black">{progress?.message || "Adapting your campaign artwork"}</p><p className="mt-1 max-w-sm text-xs font-semibold leading-5 text-[var(--text-muted)]">This durable job continues if you refresh or close the browser. Its status is also available on your Dashboard.</p></div>
           </div>
         ) : result ? (
           <div>
@@ -377,7 +503,10 @@ export default function DigitalAdaptationsWorkbench() {
             <div className="grid gap-4 sm:grid-cols-2">
               {result.outputs.map((output) => (
                 <article key={`${output.id}-${output.width}x${output.height}`} className="overflow-hidden rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-                  <div className="grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]"><img src={output.imageUrl} alt={output.label} className="h-full w-full object-contain"/></div>
+                  <button type="button" onClick={() => setPreviewOutput(output)} className="group/preview relative grid aspect-[4/3] w-full place-items-center overflow-hidden bg-[var(--surface-hover)]" aria-label={`Preview ${output.label}`}>
+                    <img src={output.imageUrl} alt={output.label} className="h-full w-full object-contain transition duration-300 group-hover/preview:scale-[1.02]"/>
+                    <span className="pointer-events-none absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition group-hover/preview:bg-black/20 group-hover/preview:opacity-100"><span className="inline-flex items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-xs font-black text-white shadow-lg"><Maximize2 size={14}/> Preview</span></span>
+                  </button>
                   <div className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate text-sm font-black">{output.label}</h3><p className="mt-1 text-[.68rem] font-bold text-[var(--text-muted)]">{output.width} × {output.height} · {output.platform}</p></div><button type="button" onClick={() => void downloadOutput(output)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-strong)] text-[var(--accent-strong)] transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]" aria-label={`Download ${output.label}`}><Download size={16}/></button></div></div>
                 </article>
               ))}
@@ -385,10 +514,27 @@ export default function DigitalAdaptationsWorkbench() {
           </div>
         ) : (
           <div className="grid min-h-[680px] place-items-center rounded-[1.5rem] border border-dashed border-[var(--border-strong)] bg-[linear-gradient(135deg,var(--surface-hover),rgba(124,58,237,.08))] p-8 text-center">
-            <div className="max-w-sm"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-sm"><LayoutGrid size={25}/></span><h3 className="mt-4 text-xl font-black">Your complete size pack appears here</h3><p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Upload the approved KV, add any art-direction notes and choose the digital sizes. AI will intelligently recompose the artwork for each required aspect family.</p><div className="mt-5 flex items-center justify-center gap-2 text-xs font-black text-[var(--text-muted)]"><Maximize2 size={15}/> Exact pixel exports</div></div>
+            <div className="max-w-sm"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-sm"><LayoutGrid size={25}/></span><h3 className="mt-4 text-xl font-black">Your complete size pack appears here</h3><p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Upload the approved KV, add any art-direction notes and choose the digital sizes. AI will intelligently recompose the artwork directly for each required aspect ratio.</p><div className="mt-5 flex items-center justify-center gap-2 text-xs font-black text-[var(--text-muted)]"><Maximize2 size={15}/> Exact pixel exports</div></div>
           </div>
         )}
       </GlassCard>
+
+      {previewOutput && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-3 backdrop-blur-md sm:p-6" role="dialog" aria-modal="true" aria-label={`${previewOutput.label} preview`} onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOutput(null); }}>
+          <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[1.6rem] border border-white/15 bg-[#111016] shadow-2xl">
+            <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white sm:px-5">
+              <div className="min-w-0"><h3 className="truncate text-sm font-black sm:text-base">{previewOutput.label}</h3><p className="mt-0.5 text-[.68rem] font-bold text-white/60">{previewOutput.width} × {previewOutput.height} · {previewOutput.platform}</p></div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => void downloadOutput(previewOutput)} className="inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-xs font-black text-black transition hover:bg-white/85"><Download size={15}/> Download</button>
+                <button type="button" onClick={() => setPreviewOutput(null)} className="grid h-10 w-10 place-items-center rounded-full border border-white/20 text-white transition hover:bg-white/10" aria-label="Close preview"><X size={17}/></button>
+              </div>
+            </header>
+            <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-5">
+              <img src={previewOutput.imageUrl} alt={previewOutput.label} className="mx-auto max-h-[calc(94vh-90px)] max-w-full object-contain"/>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -410,6 +556,43 @@ async function readJsonResponse(response: Response): Promise<any> {
   }
 }
 
+function activeJobStorageKey(userId: string) {
+  return `heyy:digital-adaptations:active-job:${userId}`;
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function safeDownloadName(value: string) {
+  return String(value || "digital-campaign")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 70) || "digital-campaign";
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, task: (item: T) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await task(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
 }

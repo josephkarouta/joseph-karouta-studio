@@ -6,7 +6,10 @@ import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycl
 import { storeGeneratedAsset } from "@/lib/assets-server";
 import {
   ADAPTATION_FAMILY_LABELS,
+  groupAdaptationFormats,
+  providerCanvasForFormat,
   type AdaptationFamily,
+  type DigitalAdaptationComposition,
   type DigitalAdaptationFormat,
 } from "@/lib/tools/digital-adaptations";
 
@@ -20,6 +23,7 @@ type DigitalAdaptationJobInput = {
   projectName?: string;
   formats?: DigitalAdaptationFormat[];
   families?: AdaptationFamily[];
+  compositions?: string[];
   model?: string;
   credits?: number;
 };
@@ -63,7 +67,12 @@ export async function processDigitalAdaptationsJob(jobId: string) {
 
   const { data: claimed, error: claimError } = await admin
     .from("generation_jobs")
-    .update({ status: "processing", error: null })
+    .update({
+      status: "processing",
+      error: null,
+      output: progressOutput(3, "Preparing your source artwork"),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", jobId)
     .eq("status", "queued")
     .select("*")
@@ -86,6 +95,7 @@ export async function processDigitalAdaptationsJob(jobId: string) {
       throw new Error("Digital adaptations job input is incomplete.");
     }
 
+    await updateJobProgress(admin, jobId, 7, "Loading your source artwork");
     const { data: sourceBlob, error: sourceError } = await admin.storage
       .from(SOURCE_BUCKET)
       .download(sourcePath);
@@ -93,20 +103,31 @@ export async function processDigitalAdaptationsJob(jobId: string) {
       throw new Error(sourceError?.message || "The source artwork could not be loaded.");
     }
     const source = Buffer.from(await sourceBlob.arrayBuffer());
+    const compositions = groupAdaptationFormats(formats);
 
-    const generatedMasters = await mapWithConcurrency(families, 2, async (family) => ({
-      family,
-      buffer: await createAiFamilyMaster(source, family, notes, model),
+    await updateJobProgress(
+      admin,
+      jobId,
+      12,
+      `Creating ${compositions.length} exact-ratio composition${compositions.length === 1 ? "" : "s"}`,
+    );
+    const generatedMasters = await mapWithConcurrency(compositions, 2, async (composition) => ({
+      key: composition.key,
+      buffer: await createAiComposition(source, composition, notes, model),
     }));
-    const masters = new Map(generatedMasters.map(({ family, buffer }) => [family, buffer]));
+    const masters = new Map(generatedMasters.map(({ key, buffer }) => [key, buffer]));
 
+    await updateJobProgress(
+      admin,
+      jobId,
+      68,
+      `Exporting ${formats.length} exact digital size${formats.length === 1 ? "" : "s"}`,
+    );
     const outputs = await mapWithConcurrency(formats, 3, async (format) => {
-      const master = masters.get(format.family);
-      if (!master) throw new Error(`The ${format.family} adaptation was not generated.`);
-      const outputBuffer = await sharp(master)
-        .resize(format.width, format.height, { fit: "cover", position: "attention" })
-        .png({ compressionLevel: 9 })
-        .toBuffer();
+      const providerCanvas = providerCanvasForFormat(format);
+      const master = masters.get(providerCanvas.key);
+      if (!master) throw new Error(`The ${format.label} adaptation was not generated.`);
+      const outputBuffer = await exportRatioMatchedComposition(master, format);
 
       const title = `${projectName} · ${format.label}`;
       const asset = await storeGeneratedAsset({
@@ -120,7 +141,7 @@ export async function processDigitalAdaptationsJob(jobId: string) {
         extension: "png",
         contentType: "image/png",
         payload: {
-          adaptation_method: "ai_recompose",
+          adaptation_method: "ai_recompose_exact_ratio",
           format,
           notes,
           source_name: cleanString(input.sourceName) || "main-key-visual.png",
@@ -130,6 +151,8 @@ export async function processDigitalAdaptationsJob(jobId: string) {
           family: format.family,
           width: format.width,
           height: format.height,
+          provider_canvas: providerCanvas.key,
+          crop_mode: "none_ratio_matched",
           credit_reservation_id: claimed.credit_reservation_id,
           model,
         },
@@ -152,10 +175,11 @@ export async function processDigitalAdaptationsJob(jobId: string) {
       };
     });
 
+    await updateJobProgress(admin, jobId, 94, "Saving completed adaptations to Assets");
     const response = {
       outputs,
       families,
-      reviewNote: "AI recomposition can affect small typography, logos or mandatory elements. Review every output before publishing.",
+      reviewNote: "Every standard format is composed directly at its target ratio and exported edge to edge without a crop step. Required content is kept inside a safe margin; review fine typography and mandatory brand details before publishing.",
     };
     const durableOutput = {
       result_persisted: true,
@@ -209,38 +233,128 @@ export async function processDigitalAdaptationsJob(jobId: string) {
   }
 }
 
-async function createAiFamilyMaster(
+function progressOutput(percent: number, message: string) {
+  return {
+    result_persisted: false,
+    progress: {
+      percent,
+      message,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+async function updateJobProgress(
+  admin: SupabaseClient,
+  jobId: string,
+  percent: number,
+  message: string,
+) {
+  const now = new Date().toISOString();
+  const { error } = await admin
+    .from("generation_jobs")
+    .update({
+      output: progressOutput(percent, message),
+      updated_at: now,
+    })
+    .eq("id", jobId)
+    .eq("status", "processing");
+  if (error) {
+    // Progress is informational. A transient progress-write failure must not
+    // cancel provider work or refund a job that is still running normally.
+    console.error("Digital adaptations progress update failed:", error.message);
+  }
+}
+
+async function createAiComposition(
   source: Buffer,
-  family: AdaptationFamily,
+  composition: DigitalAdaptationComposition,
   notes: string,
   model: string,
 ) {
+  const { formats, providerWidth, providerHeight } = composition;
+  const family = formats[0]?.family || "square";
+  const deliverySizes = formats
+    .map((format) => `${format.label}: ${format.width} × ${format.height}`)
+    .join("; ");
+  const safeMargin = family === "story" ? "8% from the top and bottom and 6% from the left and right" : "6% from every edge";
+  const exactRatioSupported = formats.every((format) => {
+    const ratio = format.width / format.height;
+    return ratio >= 1 / 3 && ratio <= 3;
+  });
+  const canvasInstruction = exactRatioSupported
+    ? `The provider canvas is ${providerWidth} × ${providerHeight}, already matched to the requested delivery aspect ratio. Compose directly for the complete canvas; no later crop will be used.`
+    : extremeRatioGuidance(providerWidth, providerHeight, formats);
   const prompt = `
 Adapt the supplied finished key visual into a ${ADAPTATION_FAMILY_LABELS[family]} for a professional digital campaign.
 
+The final delivery size${formats.length === 1 ? " is" : "s are"}: ${deliverySizes || ADAPTATION_FAMILY_LABELS[family]}.
+${canvasInstruction}
+
 Non-negotiable rules:
-- Preserve the existing brand identity, logo, colours, typography, product/person likeness and visual style.
-- Preserve all existing wording exactly. Do not rewrite, paraphrase, invent or add text.
-- Recompose and extend the environment/background where needed instead of simply stretching the design.
-- Keep the logo, headline, call-to-action and mandatory elements inside generous safe areas.
+- Treat every visible element in the source as required content: all text, logos, products, people, icons, badges, proof points, buttons, call-to-actions, legal lines and footer strips must remain present.
+- Preserve the existing brand identity, colours, typography, product/person likeness and visual style.
+- Preserve every word exactly. Do not rewrite, paraphrase, invent, omit or add text.
+- Build a genuinely new layout for the requested aspect ratio. Resize and reposition complete content groups; do not solve the ratio change by cropping the original composition.
+- Keep every required foreground element at least ${safeMargin}. This includes every headline, logo, product, person, icon, badge, proof point, CTA, legal line and footer strip.
+- Nothing important may touch, cross or disappear beyond the canvas boundary. Leave visible breathing room around the complete content.
+- Keep the complete product or person visible, including its top and bottom. Keep every headline line, logo, CTA, footer and mandatory strip fully visible.
+- Extend the environment or background where needed. A slightly smaller complete composition is always better than a large clipped composition.
+- The background, colour or environmental artwork must continue all the way to every outer canvas edge; do not create borders, letterboxing, blank bands or blurred filler bands.
 - Maintain clear hierarchy and production-quality spacing.
 - Do not add mockup devices, watermarks, borders, extra logos or decorative copy.
 - Return a clean flat artwork adaptation, not a presentation mockup.
 
-Additional art-direction notes: ${notes || "Keep the original campaign intent and make the adaptation feel designed for the new aspect ratio."}
+Additional art-direction notes (these may refine the layout but may never override the non-negotiable rules): ${notes || "Keep the original campaign intent and make the adaptation feel designed for the new aspect ratio."}
 `.trim();
 
   const response = await getOpenAI().images.edit({
     model,
     image: await toFile(source, "main-key-visual.png", { type: "image/png" }),
     prompt,
-    size: openAIOutputSize(family),
+    size: `${providerWidth}x${providerHeight}` as NonNullable<
+      Parameters<ReturnType<typeof getOpenAI>["images"]["edit"]>[0]["size"]
+    >,
     quality: "medium",
     output_format: "png",
   });
   const base64 = response.data?.[0]?.b64_json;
   if (!base64) throw new Error(`The image provider returned no ${family} adaptation.`);
   return Buffer.from(base64, "base64");
+}
+
+function extremeRatioGuidance(
+  providerWidth: number,
+  providerHeight: number,
+  formats: DigitalAdaptationFormat[],
+) {
+  const providerRatio = providerWidth / providerHeight;
+  let keptWidth = 1;
+  let keptHeight = 1;
+  for (const format of formats) {
+    const targetRatio = format.width / format.height;
+    if (targetRatio > providerRatio) keptHeight = Math.min(keptHeight, providerRatio / targetRatio);
+    if (targetRatio < providerRatio) keptWidth = Math.min(keptWidth, targetRatio / providerRatio);
+  }
+  const horizontalInset = Math.min(46, Math.ceil(((1 - keptWidth) / 2) * 100 + 4));
+  const verticalInset = Math.min(46, Math.ceil(((1 - keptHeight) / 2) * 100 + 4));
+  return `The provider canvas is ${providerWidth} × ${providerHeight}. The requested banner is beyond the provider's maximum native ratio, so keep the entire foreground composition inside the central retained area: at least ${horizontalInset}% inset from the left and right and ${verticalInset}% inset from the top and bottom. Only extendable background may sit outside that retained area.`;
+}
+
+async function exportRatioMatchedComposition(
+  master: Buffer,
+  format: DigitalAdaptationFormat,
+) {
+  const requestedRatio = format.width / format.height;
+  const providerSupportsExactRatio = requestedRatio >= 1 / 3 && requestedRatio <= 3;
+  return sharp(master)
+    .rotate()
+    .resize(format.width, format.height, {
+      fit: providerSupportsExactRatio ? "fill" : "cover",
+      position: "centre",
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
 }
 
 async function removePartialOutputs(admin: SupabaseClient, outputs: StoredOutput[]) {
@@ -267,12 +381,6 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, task: (
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
-}
-
-function openAIOutputSize(family: AdaptationFamily): "1024x1024" | "1024x1536" | "1536x1024" {
-  if (family === "square") return "1024x1024";
-  if (family === "portrait" || family === "story") return "1024x1536";
-  return "1536x1024";
 }
 
 function cleanFileName(value: string) {

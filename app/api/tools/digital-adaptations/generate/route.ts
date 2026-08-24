@@ -15,6 +15,7 @@ import { normalizeDigitalAdaptationSource, processDigitalAdaptationsJob } from "
 import {
   type DigitalAdaptationFormat,
   uniqueFamilies,
+  uniqueCompositionKeys,
   validateAdaptationFormat,
 } from "@/lib/tools/digital-adaptations";
 
@@ -59,7 +60,8 @@ export async function POST(request: Request) {
     const source = await normalizeDigitalAdaptationSource(Buffer.from(await sourceFile.arrayBuffer()));
     const sourceHash = createHash("sha256").update(source).digest("hex");
     const families = uniqueFamilies(formats);
-    const creditAmount = families.length * CREDIT_COSTS.digitalAdaptationFamily;
+    const compositions = uniqueCompositionKeys(formats);
+    const creditAmount = compositions.length * CREDIT_COSTS.digitalAdaptationFamily;
     const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
     sourcePath = `${auth.user.id}/tools/digital-adaptation-sources/${sourceHash}.png`;
 
@@ -76,10 +78,11 @@ export async function POST(request: Request) {
       amountOverride: creditAmount,
       metadata: {
         tool: "digital_adaptations",
-        adaptation_method: "ai_recompose",
+        adaptation_method: "ai_recompose_exact_ratio",
         project_id: projectId,
         format_count: formats.length,
         aspect_families: families,
+        aspect_compositions: compositions,
         model,
       },
       input: {
@@ -91,6 +94,7 @@ export async function POST(request: Request) {
         projectName,
         formats,
         families,
+        compositions,
         model,
         credits: creditAmount,
       },
