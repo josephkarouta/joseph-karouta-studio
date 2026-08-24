@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   generationReconciliationSignature,
   validGenerationReconciliationSignature,
@@ -66,7 +66,7 @@ export default async function handler(request: Request) {
   }
 }
 
-async function finishPersistedResults(admin: ReturnType<typeof createClient>) {
+async function finishPersistedResults(admin: SupabaseClient) {
   const { data, error } = await admin
     .from("generation_jobs")
     .select("id,output")
@@ -90,7 +90,7 @@ async function finishPersistedResults(admin: ReturnType<typeof createClient>) {
   }
 }
 
-async function refundAbandonedStarts(admin: ReturnType<typeof createClient>) {
+async function refundAbandonedStarts(admin: SupabaseClient) {
   // Netlify background functions stop after 15 minutes. Waiting 30 minutes
   // before refunding provider-less work avoids touching a legitimate invocation.
   const cutoff = new Date(Date.now() - 30 * 60_000).toISOString();
