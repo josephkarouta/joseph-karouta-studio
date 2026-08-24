@@ -308,7 +308,7 @@ export default function DashboardPage() {
             <Eyebrow>Credit overview</Eyebrow>
             <div className="mt-3 flex items-end justify-between gap-4"><div><p className="text-5xl font-black tracking-[-.06em]">{credits.available}</p><p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">credits available</p></div><CreditPill credits={plan} label="plan" /></div>
             <div className="mt-6 h-2 overflow-hidden rounded-full bg-[var(--surface-hover)]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#6f2dff,#ef3fb4)]" style={{ width: `${Math.min(100, credits.monthly ? (credits.available / credits.monthly) * 100 : 0)}%` }} /></div>
-            <div className="mt-5 flex flex-wrap gap-2"><ButtonLink href="/credits" variant="secondary" size="sm">View history</ButtonLink><ButtonLink href="/billing" variant="ghost" size="sm">Manage plan</ButtonLink></div>
+            <div className="mt-5 flex flex-wrap gap-2"><ButtonLink href="/credits" variant="secondary" size="sm">Manage credits</ButtonLink><ButtonLink href="/billing" variant="ghost" size="sm">Manage plan</ButtonLink></div>
           </GlassCard>
 
           <GlassCard className="p-5 sm:p-6">

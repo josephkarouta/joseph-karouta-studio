@@ -8,6 +8,7 @@ import {
   CreditCard,
   ExternalLink,
   LoaderCircle,
+  PlusCircle,
   ReceiptText,
   RefreshCw,
   Settings2,
@@ -33,7 +34,11 @@ type BillingDetails = {
   subscriptionId: string | null;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
+  subscriptionStartedAt: string | null;
   cancelAtPeriodEnd: boolean;
+  autoRenewal: boolean;
+  nextRenewalAt: string | null;
+  accessEndsAt: string | null;
   canceledAt: string | null;
   scheduledCancelAt: string | null;
   currency: string | null;
@@ -58,6 +63,24 @@ function formatStatus(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function formatPlanPrice(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+  fallbackUsd: number,
+) {
+  const value = typeof amount === "number" ? amount / 100 : fallbackUsd;
+  const normalizedCurrency = String(currency || "usd").toUpperCase();
+  try {
+    return `${new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizedCurrency,
+      maximumFractionDigits: value % 1 === 0 ? 0 : 2,
+    }).format(value)}/month`;
+  } catch {
+    return `$${value}/month`;
+  }
+}
+
 function statusTone(status: string): "neutral" | "success" | "warning" | "info" {
   if (["active", "trialing"].includes(status)) return "success";
   if (["past_due", "unpaid", "incomplete"].includes(status)) return "warning";
@@ -67,11 +90,11 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "info" 
 
 export default function BillingPage() {
   const { user, plan, credits, refreshAccount } = useAuth();
-  const definition = getPlan(plan);
   const [billing, setBilling] = useState<BillingDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [error, setError] = useState("");
+  const definition = getPlan(billing?.plan || plan);
 
   const hasPaidSubscription = Boolean(billing?.subscriptionId);
 
@@ -236,6 +259,58 @@ export default function BillingPage() {
             <Metric label="Reserved now" value={credits.reserved} />
           </div>
 
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <BillingDetail
+              label="Subscription started"
+              value={hasPaidSubscription ? formatDate(billing?.subscriptionStartedAt || null) : "Not applicable"}
+            />
+            <BillingDetail
+              label="Current period starts"
+              value={hasPaidSubscription ? formatDate(billing?.currentPeriodStart || null) : "Not applicable"}
+            />
+            <BillingDetail
+              label="Current period ends"
+              value={hasPaidSubscription ? formatDate(billing?.currentPeriodEnd || null) : "Not applicable"}
+            />
+            <BillingDetail
+              label={billing?.autoRenewal ? "Next renewal" : "Access expiry"}
+              value={
+                hasPaidSubscription
+                  ? billing?.autoRenewal
+                    ? formatDate(billing.nextRenewalAt)
+                    : formatDate(billing?.accessEndsAt || billing?.currentPeriodEnd || null)
+                  : "Not applicable"
+              }
+            />
+            <BillingDetail
+              label="Auto-renewal"
+              value={hasPaidSubscription ? (billing?.autoRenewal ? "On" : "Off") : "Not applicable"}
+              tone={hasPaidSubscription ? (billing?.autoRenewal ? "success" : "warning") : "neutral"}
+            />
+            <BillingDetail
+              label="Plan price"
+              value={formatPlanPrice(billing?.amount, billing?.currency, definition.monthlyPriceUsd)}
+            />
+            <BillingDetail
+              label="Subscription status"
+              value={hasPaidSubscription ? formatStatus(String(billing?.status || "active")) : "Free"}
+              tone={
+                hasPaidSubscription && ["active", "trialing"].includes(String(billing?.status || "").toLowerCase())
+                  ? "success"
+                  : hasPaidSubscription && ["past_due", "unpaid", "incomplete"].includes(String(billing?.status || "").toLowerCase())
+                    ? "warning"
+                    : "neutral"
+              }
+            />
+            {billing?.canceledAt && (
+              <BillingDetail
+                label="Cancellation recorded"
+                value={formatDate(billing.canceledAt)}
+                tone="warning"
+              />
+            )}
+          </div>
+
           <div className="mt-6 rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-start gap-3">
@@ -273,8 +348,9 @@ export default function BillingPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <ButtonLink href="/credits" variant="secondary">
-              View credit history
+            <ButtonLink href="/credits#buy-credits" variant="secondary">
+              <PlusCircle size={15} />
+              Buy or manage credits
             </ButtonLink>
           </div>
         </GlassCard>
@@ -329,6 +405,33 @@ function Metric({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <p className="text-[.62rem] font-black uppercase tracking-[.13em] text-[var(--text-muted)]">{label}</p>
       <p className="mt-2 text-2xl font-black">{value.toLocaleString("en-US")}</p>
+    </div>
+  );
+}
+
+
+function BillingDetail({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "success" | "warning";
+}) {
+  const valueClass =
+    tone === "success"
+      ? "text-emerald-600 dark:text-emerald-300"
+      : tone === "warning"
+        ? "text-amber-600 dark:text-amber-300"
+        : "text-[var(--text-primary)]";
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <p className="text-[.62rem] font-black uppercase tracking-[.13em] text-[var(--text-muted)]">
+        {label}
+      </p>
+      <p className={`mt-2 text-sm font-black ${valueClass}`}>{value}</p>
     </div>
   );
 }

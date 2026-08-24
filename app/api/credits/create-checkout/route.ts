@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import { getStripe, resolveStripeCustomer } from "@/lib/billing/stripe";
+import { CreditError, ensureCreditWallet } from "@/lib/credits/server";
 import { getCreditPack } from "@/lib/platform/plans";
 
 export const runtime = "nodejs";
@@ -15,6 +16,21 @@ export async function POST(request: Request) {
 
     if (!pack) {
       return NextResponse.json({ error: "Invalid credit pack." }, { status: 400 });
+    }
+
+    const account = await ensureCreditWallet({
+      admin,
+      userId: user.id,
+      user,
+    });
+    if (account.plan === "free") {
+      return NextResponse.json(
+        {
+          error: "Credit top-ups are available with an active Starter or Pro plan.",
+          code: "SUBSCRIPTION_REQUIRED",
+        },
+        { status: 403 },
+      );
     }
 
     const stripe = getStripe();
@@ -31,6 +47,7 @@ export async function POST(request: Request) {
 
     const site = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
     const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
       mode: "payment",
       customer: customer.id,
       client_reference_id: user.id,
@@ -61,7 +78,12 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not create credit checkout." },
-      { status: error instanceof ApiAuthError ? error.status : 500 },
+      {
+        status:
+          error instanceof ApiAuthError || error instanceof CreditError
+            ? error.status
+            : 500,
+      },
     );
   }
 }

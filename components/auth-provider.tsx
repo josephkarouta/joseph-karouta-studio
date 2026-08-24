@@ -11,7 +11,6 @@ import {
 } from "react";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { getPlan } from "@/lib/platform/plans";
 
 type CreditSummary = {
   available: number;
@@ -38,8 +37,8 @@ type AuthContextType = {
 };
 
 const defaultCredits: CreditSummary = {
-  available: getPlan("free").monthlyCredits,
-  monthly: getPlan("free").monthlyCredits,
+  available: 0,
+  monthly: 0,
   purchased: 0,
   reserved: 0,
   periodEnd: null,
@@ -137,16 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         const fallback = await response.json();
         const fallbackPlan = String(fallback?.plan || "free");
-        const definition = getPlan(fallbackPlan);
         const nextPlan = fallbackPlan.toUpperCase();
-        const nextCredits = normaliseCredits({
-          available: definition.monthlyCredits,
-          monthly: definition.monthlyCredits,
-        });
 
         setPlan(nextPlan);
-        setCredits(nextCredits);
-        cacheAccount(currentUser.id, nextPlan, nextCredits);
       } catch {
         // Keep the cached account summary already shown in the interface.
       }

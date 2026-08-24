@@ -17,6 +17,11 @@ import { normalizePlan } from "@/lib/platform/plans";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function isoFromUnixSeconds(value: unknown) {
+  const seconds = Number(value || 0);
+  return seconds > 0 ? new Date(seconds * 1000).toISOString() : null;
+}
+
 export async function GET(request: Request) {
   try {
     const { user, admin } = await requireApiUser(request);
@@ -83,6 +88,15 @@ export async function GET(request: Request) {
     const scheduledCancelAt =
       liveScheduledCancelAt ||
       (cancelAtPeriodEnd ? payload.current_period_end : null);
+    const terminalStatus = ["cancelled", "canceled", "inactive", "incomplete_expired"].includes(
+      String(payload.status || "").toLowerCase(),
+    );
+    const autoRenewal = Boolean(
+      payload.stripe_subscription_id && !cancelAtPeriodEnd && !terminalStatus,
+    );
+    const subscriptionStartedAt = subscription
+      ? isoFromUnixSeconds(subscription.created)
+      : String(row?.created_at || "").trim() || null;
 
     return NextResponse.json({
       success: true,
@@ -94,7 +108,15 @@ export async function GET(request: Request) {
         priceId: payload.stripe_price_id,
         currentPeriodStart: payload.current_period_start,
         currentPeriodEnd: payload.current_period_end,
+        subscriptionStartedAt,
         cancelAtPeriodEnd,
+        autoRenewal,
+        nextRenewalAt: autoRenewal ? payload.current_period_end : null,
+        accessEndsAt: cancelAtPeriodEnd
+          ? scheduledCancelAt
+          : terminalStatus
+            ? payload.canceled_at || payload.current_period_end
+            : null,
         scheduledCancelAt,
         canceledAt: payload.canceled_at,
         currency: payload.currency,

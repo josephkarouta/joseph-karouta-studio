@@ -159,7 +159,7 @@ export default function SiteHeader() {
                     <MenuLink href="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
                     <MenuLink href="/account" icon={<Settings size={16} />} label="Account" />
                     <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
-                    <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credit history" />
+                    <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credits" />
                     <MenuLink href="/help" icon={<BadgeHelp size={16} />} label="Help center" />
                   </div>
 
@@ -219,7 +219,7 @@ export default function SiteHeader() {
               <MenuLink href="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
               <MenuLink href="/account" icon={<Settings size={16} />} label="Account" />
               <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
-              <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credit history" />
+              <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credits" />
               <MenuLink href="/help" icon={<BadgeHelp size={16} />} label="Help center" />
               <button type="button" onClick={handleSignOut} className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/10">
                 <LogOut size={16} /> Sign out

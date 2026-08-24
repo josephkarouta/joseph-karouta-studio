@@ -111,10 +111,10 @@ export default function CreditsPage() {
         <div>
           <Eyebrow>Credits</Eyebrow>
           <h1 className="mt-3 text-4xl font-black tracking-[-.055em] sm:text-5xl">
-            Usage history
+            Credits
           </h1>
           <p className="mt-3 text-sm font-semibold text-[var(--text-secondary)]">
-            Every reservation, successful charge and automatic release in one place.
+            Review your balance, purchase top-ups and track every credit movement.
           </p>
         </div>
         <CreditPill credits={credits.available} />
@@ -132,10 +132,26 @@ export default function CreditsPage() {
         </div>
       )}
 
-      <GlassCard className="mt-7 overflow-hidden">
+      <GlassCard className="mt-7 grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+        <CreditMetric label="Available now" value={credits.available} accent />
+        <CreditMetric label="Monthly balance" value={credits.monthly} />
+        <CreditMetric label="Purchased" value={credits.purchased} />
+        <CreditMetric label="Reserved now" value={credits.reserved} />
+      </GlassCard>
+
+      <div className="mt-8">
+        <CreditTopUps />
+      </div>
+
+      <GlassCard className="mt-9 overflow-hidden">
         <div className="flex items-center gap-3 border-b border-[var(--border)] p-6">
           <History size={20} className="text-[var(--accent-strong)]" />
-          <h2 className="text-xl font-black">Recent activity</h2>
+          <div>
+            <h2 className="text-xl font-black">Credit history</h2>
+            <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">
+              Reservations, successful charges, refunds, renewals and purchases.
+            </p>
+          </div>
         </div>
 
         {loading ? (
@@ -202,8 +218,31 @@ export default function CreditsPage() {
           </div>
         )}
       </GlassCard>
-
-      <CreditTopUps />
     </AccountLayout>
+  );
+}
+
+function CreditMetric({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${
+        accent
+          ? "border-[var(--accent-border)] bg-[var(--accent-soft)]"
+          : "border-[var(--border)] bg-[var(--surface)]"
+      }`}
+    >
+      <p className="text-[.62rem] font-black uppercase tracking-[.13em] text-[var(--text-muted)]">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-black">{value.toLocaleString("en-US")}</p>
+    </div>
   );
 }

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { processQuotePayment } from "../../../lib/payments/process-quote-payment";
-import { getPlan, normalizePlan } from "@/lib/platform/plans";
+import { applyMonthlyCredits } from "@/lib/credits/server";
+import { getCreditPack, getPlan, normalizePlan } from "@/lib/platform/plans";
 import {
   getStripe,
   planFromSubscription,
@@ -43,22 +44,37 @@ async function applyMonthlyPlanCredits({
   const plan = getPlan(normalizePlan(planValue));
   const period = subscription
     ? subscriptionPeriod(subscription)
-    : {
-        start: Math.floor(Date.now() / 1000),
-        end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-      };
+    : currentCalendarPeriod();
+  const periodStart = new Date(period.start * 1000).toISOString();
+  const periodEnd = new Date(period.end * 1000).toISOString();
+  const subscriptionId = subscription?.id || null;
 
-  const { error } = await supabase.from("credit_wallets").upsert(
-    {
-      user_id: userId,
-      monthly_balance: plan.monthlyCredits,
-      period_start: new Date(period.start * 1000).toISOString(),
-      period_end: new Date(period.end * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
+  await applyMonthlyCredits(supabase, {
+    userId,
+    plan: plan.id,
+    amount: plan.monthlyCredits,
+    periodStart,
+    periodEnd,
+    grantKey: subscriptionId
+      ? `stripe:${subscriptionId}:${periodStart}`
+      : `${plan.id}:calendar:${periodStart}`,
+    source: subscriptionId ? "stripe_webhook" : "subscription_ended",
+    metadata: {
+      stripe_subscription_id: subscriptionId,
     },
-    { onConflict: "user_id" },
-  );
-  if (error) throw error;
+  });
+}
+
+function currentCalendarPeriod() {
+  const start = new Date();
+  start.setUTCDate(1);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  return {
+    start: Math.floor(start.getTime() / 1000),
+    end: Math.floor(end.getTime() / 1000),
+  };
 }
 
 async function retrieveSubscription(value: string | Stripe.Subscription | null | undefined) {
@@ -115,8 +131,12 @@ export async function POST(req: Request) {
       if (userId && topUpType === "credit_top_up") {
         const credits = Number(session.metadata?.credits || 0);
         const packId = String(session.metadata?.pack_id || "custom");
-        if (!Number.isFinite(credits) || credits <= 0) {
+        const pack = getCreditPack(packId);
+        if (!pack || !Number.isFinite(credits) || credits !== pack.credits) {
           throw new Error("Invalid credit top-up metadata.");
+        }
+        if (session.payment_status !== "paid") {
+          throw new Error("Credit top-up payment is not confirmed.");
         }
         const { error } = await supabase.rpc("heyy_apply_credit_top_up", {
           p_user_id: userId,

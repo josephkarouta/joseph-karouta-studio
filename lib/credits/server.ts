@@ -26,6 +26,18 @@ export type EnsuredCreditWallet = {
   plan: PlanId;
   wallet: CreditWalletRow;
   subscription: Record<string, unknown> | null;
+  renewalPending: boolean;
+};
+
+export type MonthlyCreditGrant = {
+  userId: string;
+  plan: PlanId;
+  amount: number;
+  periodStart: string;
+  periodEnd: string;
+  grantKey: string;
+  source: string;
+  metadata?: Record<string, unknown>;
 };
 
 export class CreditError extends Error {
@@ -57,15 +69,71 @@ function currentMonthlyPeriod() {
   };
 }
 
+function validIsoDate(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function monthlyPeriodForPlan(
+  plan: PlanId,
+  subscription: Record<string, unknown> | null,
+) {
+  if (plan !== "free" && subscription) {
+    const start = validIsoDate(subscription.current_period_start);
+    const end = validIsoDate(subscription.current_period_end);
+    const subscriptionId = String(subscription.stripe_subscription_id || "").trim();
+
+    if (start && end && new Date(end).getTime() > new Date(start).getTime()) {
+      return {
+        start,
+        end,
+        grantKey: `stripe:${subscriptionId || plan}:${start}`,
+        source: "stripe_subscription",
+      };
+    }
+  }
+
+  const period = currentMonthlyPeriod();
+  return {
+    ...period,
+    grantKey: `${plan}:calendar:${period.start}`,
+    source: plan === "free" ? "free_monthly_renewal" : "account_reconciliation",
+  };
+}
+
+export async function applyMonthlyCredits(
+  admin: SupabaseClient,
+  grant: MonthlyCreditGrant,
+) {
+  const { data, error } = await admin.rpc("heyy_apply_monthly_credits", {
+    p_user_id: grant.userId,
+    p_grant_key: grant.grantKey,
+    p_plan: grant.plan,
+    p_amount: grant.amount,
+    p_period_start: grant.periodStart,
+    p_period_end: grant.periodEnd,
+    p_source: grant.source,
+    p_metadata: grant.metadata || {},
+  });
+
+  if (error) {
+    throw creditSystemError(error, "Monthly credits could not be applied.");
+  }
+
+  return data === true;
+}
+
 function creditSystemError(error: unknown, fallback: string) {
   const message =
     error && typeof error === "object" && "message" in error
       ? String((error as { message?: unknown }).message || fallback)
       : fallback;
 
-  if (/does not exist|schema cache|credit_wallets|credit_usage_events/i.test(message)) {
+  if (/does not exist|schema cache|credit_wallets|credit_usage_events|credit_monthly_grants|heyy_apply_monthly_credits/i.test(message)) {
     return new CreditError(
-      "The V13 credit migration has not been applied correctly.",
+      "The required credit database migration has not been applied correctly.",
       "CREDIT_SYSTEM_UNAVAILABLE",
       503,
     );
@@ -143,7 +211,7 @@ export async function ensureCreditWallet({
     authUser,
   );
   const plan = getPlan(resolved.plan);
-  const period = currentMonthlyPeriod();
+  const period = monthlyPeriodForPlan(resolved.plan, resolved.subscription);
 
   // New Free accounts are created with a zero-credit wallet. The allowance is
   // granted only after Supabase has confirmed ownership of the email address.
@@ -174,50 +242,33 @@ export async function ensureCreditWallet({
     wallet = refreshedWallet as CreditWalletRow;
   }
 
+  const periodStartTime = new Date(period.start).getTime();
+  const walletStartTime = wallet?.period_start
+    ? new Date(wallet.period_start).getTime()
+    : 0;
   const walletExpired =
     !wallet?.period_end || new Date(wallet.period_end).getTime() <= Date.now();
-  const untouchedFreeDefault = Boolean(
-    wallet &&
-      resolved.plan !== "free" &&
-      Number(wallet.monthly_balance) === getPlan("free").monthlyCredits &&
-      Number(wallet.purchased_balance || 0) === 0 &&
-      Number(wallet.reserved_balance || 0) === 0,
-  );
+  const periodAdvanced = Number.isFinite(periodStartTime) && periodStartTime > walletStartTime;
+  const needsMonthlyGrant = !wallet || walletExpired || periodAdvanced;
 
-  let zeroBalanceNeedsRepair = false;
-  if (
-    wallet &&
-    resolved.plan !== "free" &&
-    Number(wallet.monthly_balance) === 0 &&
-    Number(wallet.purchased_balance || 0) === 0 &&
-    Number(wallet.reserved_balance || 0) === 0
-  ) {
-    const usageStart = wallet.period_start || period.start;
-    const { count, error } = await admin
-      .from("credit_usage_events")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("event_type", "committed")
-      .gte("created_at", usageStart);
+  if (needsMonthlyGrant) {
+    await applyMonthlyCredits(admin, {
+      userId,
+      plan: resolved.plan,
+      amount: plan.monthlyCredits,
+      periodStart: period.start,
+      periodEnd: period.end,
+      grantKey: period.grantKey,
+      source: period.source,
+      metadata: {
+        stripe_subscription_id: resolved.subscription?.stripe_subscription_id || null,
+      },
+    });
 
-    if (error) throw creditSystemError(error, "Credit usage could not be checked.");
-    zeroBalanceNeedsRepair = Number(count || 0) === 0;
-  }
-
-  if (!wallet || walletExpired || untouchedFreeDefault || zeroBalanceNeedsRepair) {
     const { data, error } = await admin
       .from("credit_wallets")
-      .upsert(
-        {
-          user_id: userId,
-          monthly_balance: plan.monthlyCredits,
-          period_start: period.start,
-          period_end: period.end,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
-      )
       .select("user_id,monthly_balance,purchased_balance,reserved_balance,period_start,period_end,verified_signup_granted_at")
+      .eq("user_id", userId)
       .single();
 
     if (error || !data) {
@@ -226,10 +277,28 @@ export async function ensureCreditWallet({
     wallet = data as CreditWalletRow;
   }
 
+  if (!wallet) {
+    throw new CreditError(
+      "The credit wallet could not be initialized.",
+      "CREDIT_SYSTEM_UNAVAILABLE",
+      503,
+    );
+  }
+
+  const refreshedStartTime = wallet.period_start
+    ? new Date(wallet.period_start).getTime()
+    : 0;
+  const renewalPending = Boolean(
+    needsMonthlyGrant &&
+      (new Date(wallet.period_end || 0).getTime() <= Date.now() ||
+        periodStartTime > refreshedStartTime),
+  );
+
   return {
     plan: resolved.plan,
     wallet,
     subscription: resolved.subscription,
+    renewalPending,
   };
 }
 
@@ -253,7 +322,14 @@ export async function reserveCredits({
 
   // The account badge and the generation APIs now use the exact same wallet.
   // This also repairs untouched Pro/Starter wallets created with the old 40-credit default.
-  await ensureCreditWallet({ admin, userId });
+  const ensured = await ensureCreditWallet({ admin, userId });
+  if (ensured.renewalPending) {
+    throw new CreditError(
+      "Your monthly credits are refreshing. Please try again shortly.",
+      "CREDIT_OPERATION_FAILED",
+      409,
+    );
+  }
 
   const { data, error } = await admin.rpc("heyy_reserve_credits", {
     p_user_id: userId,
@@ -266,14 +342,14 @@ export async function reserveCredits({
     const message = String(error.message || "");
     if (/insufficient/i.test(message)) {
       throw new CreditError(
-        `You need ${amount} credits for this action. Add credits or choose a lower-cost mode.`,
+        `You need ${amount} credits for this action. Buy more credits or choose a lower-cost mode.`,
         "INSUFFICIENT_CREDITS",
         402,
       );
     }
     if (/function.*does not exist|schema cache|heyy_reserve_credits/i.test(message)) {
       throw new CreditError(
-        "The V13 credit migration has not been applied yet.",
+        "The required credit database migration has not been applied yet.",
         "CREDIT_SYSTEM_UNAVAILABLE",
         503,
       );

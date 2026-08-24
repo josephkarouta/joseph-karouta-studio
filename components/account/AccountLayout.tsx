@@ -22,7 +22,7 @@ const nav = [
   ["Preferences", "/account/preferences", SlidersHorizontal],
   ["Privacy & data", "/account/privacy", ShieldCheck],
   ["Billing & plan", "/billing", CreditCard],
-  ["Credit history", "/credits", CircleDollarSign],
+  ["Credits", "/credits", CircleDollarSign],
   ["Notifications", "/notifications", Bell],
 ] as const;
 

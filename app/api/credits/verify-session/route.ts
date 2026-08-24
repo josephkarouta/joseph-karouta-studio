@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
+import { getCreditPack } from "@/lib/platform/plans";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    if (session.metadata?.type !== "credit_top_up") {
+    if (session.mode !== "payment" || session.metadata?.type !== "credit_top_up") {
       return NextResponse.json({ error: "This is not a credit top-up payment." }, { status: 400 });
     }
     if (
@@ -34,7 +35,8 @@ export async function POST(request: Request) {
 
     const credits = Number(session.metadata?.credits || 0);
     const packId = String(session.metadata?.pack_id || "custom");
-    if (!Number.isFinite(credits) || credits <= 0) {
+    const pack = getCreditPack(packId);
+    if (!pack || !Number.isFinite(credits) || credits !== pack.credits) {
       return NextResponse.json({ error: "Invalid credit amount." }, { status: 400 });
     }
 
