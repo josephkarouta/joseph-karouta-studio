@@ -1,7 +1,14 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
+import { failGenerationJob } from "@/lib/credits/lifecycle";
+import {
+  cleanupGenerationStart,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -13,8 +20,9 @@ type VideoMode = "preview" | "high";
 type AspectRatio = "16:9" | "9:16";
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
+  let startedJob: GenerationJobStart | null = null;
+  let providerClaimed = false;
 
   try {
     const auth = await requireApiUser(request);
@@ -45,13 +53,68 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "The source image must be 4 MB or smaller." }, { status: 400 });
     }
 
-    const reservation = await reserveCredits({
+    const sourceHash = createHash("sha256").update(imageBytes).digest("hex");
+    const provider = mode === "high" ? "google_veo_3_1" : "google_gemini_omni";
+    const requestedModel = mode === "high"
+      ? process.env.GEMINI_VIDEO_HIGH_MODEL || "veo-3.1-generate-preview"
+      : process.env.GEMINI_VIDEO_PREVIEW_MODEL || "gemini-omni-flash-preview";
+    const resolution = mode === "high" ? "1080p" : "720p";
+    const durationSeconds = mode === "high" ? 8 : null;
+
+    startedJob = await startGenerationJob({
       admin,
       userId: auth.user.id,
+      request,
+      scope: "image-to-video",
+      dedupe: { sourceHash, prompt, mode, aspect, projectId },
       action: mode === "high" ? "imageToVideoHigh" : "imageToVideoPreview",
+      projectId,
+      tool: "image_to_video",
+      provider,
+      input: {
+        prompt,
+        aspect,
+        mode,
+        mimeType,
+        projectId,
+        model: requestedModel,
+        resolution,
+        duration_seconds: durationSeconds,
+        sourceHash,
+      },
       metadata: { tool: "image_to_video", mode, aspect, project_id: projectId },
     });
-    reservationId = reservation.id;
+
+    if (startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId: startedJob.jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        engine: requestedModel,
+        resolution,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
+
+    const { data: claimedJob, error: claimError } = await admin
+      .from("generation_jobs")
+      .update({ status: "processing", error: null })
+      .eq("id", startedJob.jobId)
+      .eq("status", "queued")
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw new Error(claimError.message || "Video job could not be claimed.");
+    if (!claimedJob) {
+      return NextResponse.json({
+        success: true,
+        jobId: startedJob.jobId,
+        status: "processing",
+        engine: requestedModel,
+        resolution,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
+    providerClaimed = true;
 
     const started = mode === "high"
       ? await startVeoVideo({ imageBase64, mimeType, prompt, aspect })
@@ -59,26 +122,14 @@ export async function POST(request: Request) {
 
     const { data: job, error: jobError } = await admin
       .from("generation_jobs")
-      .insert({
-        user_id: auth.user.id,
-        project_id: projectId,
-        tool: "image_to_video",
-        provider: started.provider,
+      .update({
         provider_job_id: started.providerJobId,
-        credit_reservation_id: reservation.id,
         status: "processing",
-        input: {
-          prompt,
-          aspect,
-          mode,
-          mimeType,
-          projectId,
-          model: started.model,
-          resolution: started.resolution,
-          duration_seconds: started.durationSeconds,
-        },
         output: started.output,
       })
+      .eq("id", startedJob.jobId)
+      .eq("status", "processing")
+      .is("provider_job_id", null)
       .select()
       .single();
 
@@ -92,11 +143,44 @@ export async function POST(request: Request) {
       status: "processing",
       engine: started.model,
       resolution: started.resolution,
-      creditsReserved: reservation.amount,
+      creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {
-    if (reservationId && admin) {
-      await refundCredits(admin, reservationId, error instanceof Error ? error.message : "Video start failed");
+    const message = error instanceof Error ? error.message : "Video start failed";
+    if (admin && startedJob && providerClaimed) {
+      try {
+        const failed = await failGenerationJob(admin, {
+          jobId: startedJob.jobId,
+          expectedStatus: "processing",
+          requireMissingProviderId: true,
+          reason: message,
+          publicError: "Video generation could not start. Your credits were returned.",
+        });
+        if (!failed) {
+          const { data: activeJob } = await admin
+            .from("generation_jobs")
+            .select("status,provider_job_id")
+            .eq("id", startedJob.jobId)
+            .maybeSingle();
+          if (activeJob?.provider_job_id && ["processing", "finalizing", "succeeded"].includes(String(activeJob.status))) {
+            return NextResponse.json({
+              success: true,
+              jobId: startedJob.jobId,
+              status: activeJob.status === "succeeded" ? "succeeded" : "processing",
+              creditsReserved: startedJob.creditsReserved,
+            });
+          }
+        }
+      } catch (cleanupError) {
+        console.error("Image-to-video start cleanup failed:", cleanupError);
+      }
+    } else if (admin && startedJob) {
+      await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Video generation could not start. Your credits were returned.",
+      });
     }
     console.error("Image-to-video start error:", error);
     if (error instanceof ApiAuthError) {

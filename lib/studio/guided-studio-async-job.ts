@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 type StudioId = "interior" | "marketing";
 type WorkMode = "guided" | "professional";
@@ -105,15 +106,6 @@ export async function processGuidedStudioJob(jobId: string) {
     });
     if (assetError) throw new Error(assetError.message || "Generated concept could not be added to project assets.");
 
-    if (claimed.credit_reservation_id) {
-      const { error: commitError } = await admin.rpc("heyy_commit_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_metadata: { studio: databaseId, project_id: String(project.id), tool: "guided_studio", work_mode: workMode },
-      });
-      if (commitError) throw new Error(commitError.message || "Credits could not be committed.");
-      creditsCommitted = true;
-    }
-
     const finalOutput = {
       project_id: String(project.id),
       work_mode: workMode,
@@ -121,12 +113,22 @@ export async function processGuidedStudioJob(jobId: string) {
       model: providerData?.model || process.env.STUDIO_TEXT_MODEL || process.env.OPENAI_TEXT_MODEL || null,
       usage: providerData?.usage || null,
     };
-    await finalizeSucceededJob(admin, jobId, String(project.id), finalOutput);
+    await completeGenerationJob(admin, jobId, finalOutput, {
+      studio: databaseId,
+      project_id: String(project.id),
+      tool: "guided_studio",
+      work_mode: workMode,
+    });
+    creditsCommitted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Studio generation failed.";
     if (!creditsCommitted) {
-      await refundJob(admin, claimed, message);
-      await admin.from("generation_jobs").update({ status: "failed", error: publicError(studio, message), completed_at: new Date().toISOString() }).eq("id", jobId);
+      await failGenerationJob(admin, {
+        jobId,
+        expectedStatus: "processing",
+        reason: message,
+        publicError: publicError(studio, message),
+      });
     } else {
       // The provider output/project already exists and the credit reservation was committed.
       // Never refund a completed paid generation only because the final job-status write had a transient failure.
@@ -134,29 +136,6 @@ export async function processGuidedStudioJob(jobId: string) {
     }
     console.error("Guided Studio background error:", { jobId, studio, message });
   }
-}
-
-async function finalizeSucceededJob(admin: SupabaseClient, jobId: string, projectId: string, output: Record<string, unknown>) {
-  let lastError: string | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { error } = await admin.from("generation_jobs").update({
-      project_id: projectId,
-      status: "succeeded",
-      error: null,
-      output,
-      completed_at: new Date().toISOString(),
-    }).eq("id", jobId);
-    if (!error) return;
-    lastError = error.message || "Studio generation job could not be finalized.";
-    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
-  }
-  throw new Error(lastError || "Studio generation job could not be finalized.");
-}
-
-async function refundJob(admin: SupabaseClient, job: any, message: string) {
-  if (!job.credit_reservation_id) return;
-  const { error } = await admin.rpc("heyy_refund_credits", { p_reservation_id: job.credit_reservation_id, p_reason: message.slice(0, 500) });
-  if (error) console.error("Guided Studio background refund failed:", error);
 }
 
 function publicError(studio: StudioId | undefined, message: string) {

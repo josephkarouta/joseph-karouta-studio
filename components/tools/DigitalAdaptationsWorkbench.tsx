@@ -25,6 +25,7 @@ import {
   uniqueFamilies,
 } from "@/lib/tools/digital-adaptations";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { generationFetch } from "@/lib/client/generation-request";
 
 type AdaptationOutput = DigitalAdaptationFormat & {
   fileName: string;
@@ -175,10 +176,18 @@ export default function DigitalAdaptationsWorkbench() {
       form.set("projectId", new URLSearchParams(window.location.search).get("project") || "");
       form.set("formats", JSON.stringify(selectedFormats.map(({ id, label, platform, width, height, family }) => ({ id, label, platform, width, height, family }))));
 
-      const response = await fetch("/api/tools/digital-adaptations/generate", {
+      const response = await generationFetch("/api/tools/digital-adaptations/generate", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: form,
+      }, {
+        scope: "digital-adaptations",
+        payload: {
+          source: { name: source.name, size: source.size, lastModified: source.lastModified },
+          notes,
+          projectName: projectName.trim() || "Digital campaign",
+          formats: selectedFormats.map(({ id, width, height, family }) => ({ id, width, height, family })),
+        },
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Digital adaptations failed.");

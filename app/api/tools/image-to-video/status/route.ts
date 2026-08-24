@@ -1,37 +1,63 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { commitCredits, refundCredits } from "@/lib/credits/server";
+import { ApiAuthError } from "@/lib/server/auth";
 import { storeGeneratedAsset } from "@/lib/assets-server";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
+import {
+  requireGenerationStatusAccess,
+  type GenerationStatusAccess,
+} from "@/lib/generation-jobs/reconciliation-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const MAX_DELIVERY_ATTEMPTS = 3;
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireApiUser(request);
     const jobId = new URL(request.url).searchParams.get("job");
     if (!jobId) return NextResponse.json({ error: "Job ID is required." }, { status: 400 });
+    const auth = await requireGenerationStatusAccess(request, jobId, "image_to_video");
 
-    const { data: job, error } = await auth.admin
+    const { data: loadedJob, error } = await auth.admin
       .from("generation_jobs")
       .select("*")
       .eq("id", jobId)
       .eq("user_id", auth.user.id)
       .single();
 
-    if (error || !job) return NextResponse.json({ error: "Generation job not found." }, { status: 404 });
+    if (error || !loadedJob) return NextResponse.json({ error: "Generation job not found." }, { status: 404 });
+    let job = loadedJob;
     if (job.status === "succeeded") {
       return NextResponse.json({ success: true, status: "succeeded", fileUrl: job.output?.asset_url || null });
     }
-    if (job.status === "failed") {
+    if (job.status === "failed" || job.status === "cancelled") {
       return NextResponse.json({ success: true, status: "failed", error: job.error || "Video generation failed." });
+    }
+    if (job.status === "finalizing") {
+      const claimAge = Date.now() - new Date(job.updated_at || 0).getTime();
+      if (Number.isFinite(claimAge) && claimAge >= 5 * 60_000) {
+        const { data: reclaimed } = await auth.admin
+          .from("generation_jobs")
+          .update({ status: "processing" })
+          .eq("id", job.id)
+          .eq("status", "finalizing")
+          .eq("updated_at", job.updated_at)
+          .select("*")
+          .maybeSingle();
+        if (reclaimed) job = reclaimed;
+      }
+    }
+    if (job.status === "finalizing") {
+      return NextResponse.json({ success: true, status: "processing", providerState: "finalizing" });
     }
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ error: "GEMINI_API_KEY is missing." }, { status: 503 });
+    }
+    if (!job.provider_job_id) {
+      return NextResponse.json({ success: true, status: "processing", providerState: "starting" });
     }
 
     if (job.provider === "google_veo_3_1") {
@@ -50,7 +76,7 @@ export async function GET(request: Request) {
   }
 }
 
-async function checkOmni(auth: Awaited<ReturnType<typeof requireApiUser>>, job: any) {
+async function checkOmni(auth: GenerationStatusAccess, job: any) {
   const response = await fetch(`${GEMINI_BASE}/files/${encodeURIComponent(job.provider_job_id)}`, {
     headers: { "x-goog-api-key": process.env.GEMINI_API_KEY! },
     cache: "no-store",
@@ -65,8 +91,7 @@ async function checkOmni(auth: Awaited<ReturnType<typeof requireApiUser>>, job: 
   if (state === "ACTIVE") {
     const videoUri = String(job.output?.video_uri || data?.uri || "");
     if (!videoUri) throw new Error("Gemini Omni completed without a downloadable video URI.");
-    const assetUrl = await persistVideo(auth, job, videoUri, String(job.input?.model || "gemini-omni-flash-preview"));
-    return NextResponse.json({ success: true, status: "succeeded", fileUrl: assetUrl });
+    return await claimAndPersistVideo(auth, job, videoUri, String(job.input?.model || "gemini-omni-flash-preview"));
   }
 
   await auth.admin
@@ -76,7 +101,7 @@ async function checkOmni(auth: Awaited<ReturnType<typeof requireApiUser>>, job: 
   return NextResponse.json({ success: true, status: "processing", providerState: state });
 }
 
-async function checkVeo(auth: Awaited<ReturnType<typeof requireApiUser>>, job: any) {
+async function checkVeo(auth: GenerationStatusAccess, job: any) {
   const operationName = String(job.provider_job_id || job.output?.operation_name || "");
   if (!operationName) throw new Error("Veo operation ID is missing.");
 
@@ -105,17 +130,92 @@ async function checkVeo(auth: Awaited<ReturnType<typeof requireApiUser>>, job: a
     return await failJob(auth, job, "Veo 3.1 completed without a downloadable video.", data);
   }
 
-  const assetUrl = await persistVideo(auth, job, videoUri, String(job.input?.model || "veo-3.1-generate-preview"));
-  return NextResponse.json({ success: true, status: "succeeded", fileUrl: assetUrl });
+  return await claimAndPersistVideo(auth, job, videoUri, String(job.input?.model || "veo-3.1-generate-preview"));
+}
+
+async function claimAndPersistVideo(
+  auth: GenerationStatusAccess,
+  job: any,
+  videoUri: string,
+  model: string,
+) {
+  const { data: claimed, error: claimError } = await auth.admin
+    .from("generation_jobs")
+    .update({
+      status: "finalizing",
+      error: null,
+      output: { ...(job.output || {}), video_uri: videoUri },
+    })
+    .eq("id", job.id)
+    .eq("status", "processing")
+    .select("*")
+    .maybeSingle();
+  if (claimError) throw new Error(claimError.message || "Video delivery could not be claimed.");
+  if (!claimed) {
+    return NextResponse.json({ success: true, status: "processing", providerState: "finalizing" });
+  }
+
+  try {
+    const assetUrl = await persistVideo(auth, claimed, videoUri, model);
+    return NextResponse.json({ success: true, status: "succeeded", fileUrl: assetUrl });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Finished video could not be saved.";
+    const { data: currentJob } = await auth.admin
+      .from("generation_jobs")
+      .select("output")
+      .eq("id", claimed.id)
+      .maybeSingle();
+    const latestOutput = currentJob?.output || claimed.output || {};
+    const attempts = Number(latestOutput?.delivery_attempts || 0) + 1;
+
+    if (attempts >= MAX_DELIVERY_ATTEMPTS && !latestOutput?.asset_url) {
+      return await failJob(auth, claimed, "The video finished, but its file could not be saved. Your credits were returned.", {
+        delivery_attempts: attempts,
+        delivery_error: message,
+      });
+    }
+
+    const { error: releaseError } = await auth.admin
+      .from("generation_jobs")
+      .update({
+        status: "processing",
+        error: null,
+        output: {
+          ...(claimed.output || {}),
+          ...latestOutput,
+          video_uri: videoUri,
+          delivery_attempts: attempts,
+          delivery_error: message,
+        },
+      })
+      .eq("id", claimed.id)
+      .eq("status", "finalizing");
+    if (releaseError) throw new Error(releaseError.message || "Video delivery retry could not be recorded.");
+
+    return NextResponse.json({ success: true, status: "processing", providerState: "finalizing" });
+  }
 }
 
 async function persistVideo(
-  auth: Awaited<ReturnType<typeof requireApiUser>>,
+  auth: GenerationStatusAccess,
   job: any,
   videoUri: string,
   fallbackModel: string,
 ) {
-  if (job.output?.asset_url) return String(job.output.asset_url);
+  const model = String(job.input?.model || job.output?.model || fallbackModel);
+
+  if (job.output?.asset_url) {
+    await completeGenerationJob(auth.admin, String(job.id), {
+      ...(job.output || {}),
+      model,
+      delivery_error: null,
+    }, {
+      provider_job_id: job.provider_job_id,
+      model,
+      asset_id: job.output?.asset_id || null,
+    });
+    return String(job.output.asset_url);
+  }
 
   const providerUrl = job.provider === "google_gemini_omni"
     ? `${GEMINI_BASE}/files/${encodeURIComponent(String(job.provider_job_id))}:download?alt=media`
@@ -131,7 +231,6 @@ async function persistVideo(
   const buffer = Buffer.from(await response.arrayBuffer());
   if (!buffer.length) throw new Error("The finished video file was empty.");
 
-  const model = String(job.input?.model || job.output?.model || fallbackModel);
   const title = String(job.input?.prompt || "Generated video").slice(0, 70);
   const asset = await storeGeneratedAsset({
     admin: auth.admin,
@@ -157,45 +256,50 @@ async function persistVideo(
     },
   });
 
-  await commitCredits(auth.admin, job.credit_reservation_id, {
+  const storedOutput = {
+    ...(job.output || {}),
+    video_uri: videoUri,
+    asset_url: asset.file_url,
+    asset_id: asset.id,
+    model,
+  };
+  const { error: saveOutputError } = await auth.admin
+    .from("generation_jobs")
+    .update({ status: "finalizing", error: null, output: storedOutput })
+    .eq("id", job.id)
+    .eq("status", "finalizing");
+  if (saveOutputError) {
+    await auth.admin.from("project_assets").delete().eq("id", asset.id);
+    const storagePath = String(asset.metadata?.storage_path || "");
+    if (storagePath) await auth.admin.storage.from("project-assets").remove([storagePath]);
+    throw new Error(saveOutputError.message || "Saved video link could not be recorded.");
+  }
+
+  await completeGenerationJob(auth.admin, String(job.id), {
+    ...storedOutput,
+    delivery_error: null,
+  }, {
     provider_job_id: job.provider_job_id,
     model,
     asset_id: asset.id,
   });
-  await auth.admin
-    .from("generation_jobs")
-    .update({
-      status: "succeeded",
-      output: {
-        ...(job.output || {}),
-        video_uri: videoUri,
-        asset_url: asset.file_url,
-        asset_id: asset.id,
-        model,
-      },
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", job.id);
 
   return String(asset.file_url || "");
 }
 
 async function failJob(
-  auth: Awaited<ReturnType<typeof requireApiUser>>,
+  auth: GenerationStatusAccess,
   job: any,
   message: string,
   providerData?: unknown,
 ) {
-  await refundCredits(auth.admin, job.credit_reservation_id, message);
-  await auth.admin
-    .from("generation_jobs")
-    .update({
-      status: "failed",
-      error: message,
-      output: { ...(job.output || {}), provider_error: providerData || null },
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", job.id);
+  await failGenerationJob(auth.admin, {
+    jobId: String(job.id),
+    expectedStatus: job.status === "finalizing" ? "finalizing" : "processing",
+    reason: message,
+    publicError: message,
+    outputPatch: { provider_error: providerData || null },
+  });
   return NextResponse.json({ success: true, status: "failed", error: message });
 }
 

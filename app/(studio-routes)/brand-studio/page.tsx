@@ -32,6 +32,7 @@ import AuthModal from "@/app/AuthModal";
 import StudioAccessGate from "@/components/studio-access-gate";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { generationFetch } from "@/lib/client/generation-request";
 import {
   BRAND_APPLICATION_FIELDS,
   BRAND_AUDIENCES,
@@ -839,10 +840,13 @@ export default function BrandStudioPage() {
         const accessToken = sessionData.session?.access_token;
         if (!accessToken) throw new Error("Your session expired. Sign in again.");
 
-        const response = await fetch("/api/brand-studio/generate", {
+        const response = await generationFetch("/api/brand-studio/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
           body: JSON.stringify(requestPayload),
+        }, {
+          scope: "brand-system",
+          payload: requestPayload,
         });
         const started = await readBrandApiJson(
           response,

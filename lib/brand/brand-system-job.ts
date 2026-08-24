@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 type BrandSystemJobInput = {
   businessName?: string;
@@ -164,31 +165,13 @@ export async function processBrandSystemJob(jobId: string) {
       throw new Error(outputError.message || "Brand generation result could not be recorded.");
     }
 
-    if (claimed.credit_reservation_id) {
-      await commitReservation(admin, String(claimed.credit_reservation_id), {
-        studio: "brand_studio",
-        tool: "brand_system",
-        project_id: projectId,
-        project_name: businessName,
-        model,
-      });
-    }
-
-    const { error: completeError } = await admin
-      .from("generation_jobs")
-      .update({
-        status: "succeeded",
-        error: null,
-        output: durableOutput,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
-
-    if (completeError) {
-      // The status endpoint can recover from this because project_id/output and
-      // the committed reservation already exist.
-      console.error("Brand job final status update failed:", completeError.message);
-    }
+    await completeGenerationJob(admin, jobId, durableOutput, {
+      studio: "brand_studio",
+      tool: "brand_system",
+      project_id: projectId,
+      project_name: businessName,
+      model,
+    });
   } catch (error) {
     const internalMessage = error instanceof Error ? error.message : "Brand workspace generation failed.";
     const reservationStatus = claimed.credit_reservation_id
@@ -216,6 +199,13 @@ export async function processBrandSystemJob(jobId: string) {
       return;
     }
 
+    await failGenerationJob(admin, {
+      jobId,
+      expectedStatus: "processing",
+      reason: internalMessage,
+      publicError: publicGenerationError(internalMessage),
+    });
+
     if (projectId) {
       const { error: deleteError } = await admin
         .from("brand_projects")
@@ -227,59 +217,8 @@ export async function processBrandSystemJob(jobId: string) {
       }
     }
 
-    if (claimed.credit_reservation_id) {
-      await refundIfReserved(
-        admin,
-        String(claimed.credit_reservation_id),
-        internalMessage,
-      );
-    }
-
-    await admin
-      .from("generation_jobs")
-      .update({
-        status: "failed",
-        error: publicGenerationError(internalMessage),
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
-
     console.error("Brand Studio background error:", internalMessage);
   }
-}
-
-async function commitReservation(
-  admin: SupabaseClient,
-  reservationId: string,
-  metadata: Record<string, unknown>,
-) {
-  const { error } = await admin.rpc("heyy_commit_credits", {
-    p_reservation_id: reservationId,
-    p_metadata: metadata,
-  });
-
-  if (!error) return;
-
-  // A network/schema-cache edge can report an error after the database has
-  // already committed. Verify before deciding that the generation failed.
-  const status = await getReservationStatus(admin, reservationId);
-  if (status === "committed") return;
-  throw new Error(error.message || "Credits could not be committed.");
-}
-
-async function refundIfReserved(
-  admin: SupabaseClient,
-  reservationId: string,
-  reason: string,
-) {
-  const status = await getReservationStatus(admin, reservationId);
-  if (status !== "reserved") return;
-
-  const { error } = await admin.rpc("heyy_refund_credits", {
-    p_reservation_id: reservationId,
-    p_reason: reason.slice(0, 500),
-  });
-  if (error) console.error("Brand background refund failed:", error.message);
 }
 
 async function getReservationStatus(admin: SupabaseClient, reservationId: string) {

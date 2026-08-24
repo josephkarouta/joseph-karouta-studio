@@ -4,6 +4,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import BriefCard from "@/components/brief-card";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { generationFetch } from "@/lib/client/generation-request";
 
 function getProjectQuickActions(projectBrief: string) {
   const brief = (projectBrief || "").toLowerCase();
@@ -282,7 +283,7 @@ async function generateImage(prompt: string) {
   setGeneratingImage(true);
 
   try {
-    const response = await fetch("/api/generate-image", {
+    const response = await generationFetch("/api/generate-image", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -292,11 +293,14 @@ async function generateImage(prompt: string) {
         project_id: Number(id),
         prompt,
       }),
+    }, {
+      scope: "legacy-project-ai-image",
+      payload: { projectId: Number(id), prompt },
     });
 
     const data = await response.json();
 
-    if (!data.success) {
+    if (!response.ok || !data.success) {
       setMessages((prev) => [
         ...prev,
         {
@@ -313,13 +317,38 @@ async function generateImage(prompt: string) {
       return;
     }
 
+    const jobId = String(data.jobId || "");
+    if (!jobId) throw new Error("Image generation returned no job identifier.");
+
+    let completed: any = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const statusResponse = await fetch(
+        `/api/tools/text-to-image/status?job=${encodeURIComponent(jobId)}`,
+        { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" },
+      );
+      const statusPayload = await statusResponse.json();
+      if (!statusResponse.ok) throw new Error(statusPayload.error || "Could not check image status.");
+      if (statusPayload.status === "succeeded") {
+        completed = statusPayload;
+        break;
+      }
+      if (statusPayload.status === "failed") {
+        throw new Error(statusPayload.error || "Image generation failed. Your credits were returned.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+
+    if (!completed?.imageUrl) {
+      throw new Error("Image generation is still processing. Check the Assets Library shortly.");
+    }
+
     setMessages((prev) => [
   ...prev,
   {
-    id: Date.now(),
-    project_id: Number(id),
-    role: "assistant",
-    message: `[IMAGE]${data.image_url}`,
+      id: Date.now(),
+      project_id: Number(id),
+      role: "assistant",
+      message: `[IMAGE]${completed.imageUrl}`,
     created_at: new Date().toISOString(),
   },
 ]);
@@ -337,6 +366,7 @@ async function generateImage(prompt: string) {
       },
     ]);
   } finally {
+    window.dispatchEvent(new Event("heyy:credits-changed"));
     setGeneratingImage(false);
   }
 }

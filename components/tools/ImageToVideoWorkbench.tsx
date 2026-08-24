@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { generationFetch } from "@/lib/client/generation-request";
 
 type VideoMode = "preview" | "high";
 
@@ -76,10 +77,13 @@ export default function ImageToVideoWorkbench() {
       if (!token) throw new Error("Your session expired. Sign in again.");
 
       const imageBase64 = await fileToBase64(file);
-      const response = await fetch("/api/tools/image-to-video/generate", {
+      const response = await generationFetch("/api/tools/image-to-video/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ imageBase64, mimeType: file.type, prompt, mode, aspect }),
+      }, {
+        scope: "image-to-video",
+        payload: { file: { name: file.name, size: file.size, modified: file.lastModified }, prompt, mode, aspect },
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Video generation could not start.");

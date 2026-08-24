@@ -9,6 +9,7 @@ import ProductionPanel from "@/components/studio/production/ProductionPanel";
 import HeyySelect from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
+import { generationFetch } from "@/lib/client/generation-request";
 import { AlertTriangle, Check, ChevronDown, ChevronUp, DraftingCompass, FileText } from "lucide-react";
 import ArchitecturePresentationExport from "@/components/studio/architecture/ArchitecturePresentationExport";
 import {
@@ -1592,16 +1593,14 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     }
 
     try {
-      const response = await fetch("/api/architecture/directions/generate", {
+      const generationPayload = { projectId, directionNumber };
+      const response = await generationFetch("/api/architecture/directions/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          projectId,
-          directionNumber,
-        }),
-      });
+        body: JSON.stringify(generationPayload),
+      }, { scope: "architecture-direction", payload: generationPayload });
 
       const started = await readArchitectureDirectionResponse(
         response,
@@ -1847,11 +1846,12 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     }
 
     try {
-      const response = await fetch(route, {
+      const generationPayload = { projectId, stage };
+      const response = await generationFetch(route, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, stage }),
-      });
+        body: JSON.stringify(generationPayload),
+      }, { scope: "architecture-stage", payload: generationPayload });
 
       let payload = await readArchitectureStageResponse(
         response,
@@ -2000,17 +2000,12 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         }
       }
 
-      const response = await fetch("/api/architecture/images/regenerate", {
+      const generationPayload = { projectId, targetType, targetId, quality, planMode };
+      const response = await generationFetch("/api/architecture/images/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId,
-          targetType,
-          targetId,
-          quality,
-          planMode,
-        }),
-      });
+        body: JSON.stringify(generationPayload),
+      }, { scope: "architecture-image", payload: generationPayload });
       const started = await readArchitectureImageResponse(
         response,
         "Architecture image generation could not be started.",

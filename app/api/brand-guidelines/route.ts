@@ -1,8 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { requireBrandImageProject } from "@/lib/brand/generated-image-storage";
-import { CreditError, withCreditReservation } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import { extractLogoPaletteFromUrl } from "@/lib/brand/logo-palette";
+import { runSynchronousGenerationJob } from "@/lib/generation-jobs/synchronous";
 
 export const runtime = "nodejs";
 
@@ -288,11 +289,20 @@ Rules:
 `;
 
     const context = await requireBrandImageProject(project.id);
-    const { result, reservation } = await withCreditReservation({
+    const metadata = { project_id: context.projectId, studio: "brand_studio", tool: "brand_guidelines" };
+    const { result, job } = await runSynchronousGenerationJob({
       admin: context.admin,
       userId: context.userId,
+      request,
+      scope: "brand-guidelines",
+      dedupe: { projectId: context.projectId, project, brand: brandWithLogoPalette },
+      projectId: context.projectId,
+      tool: "brand_guidelines",
+      provider: "openai",
       action: "brandGuidelines",
-      metadata: { project_id: context.projectId, studio: "brand_studio", tool: "brand_guidelines" },
+      input: { project, brand: brandWithLogoPalette },
+      metadata,
+      publicError: "Brand guidelines could not be completed. Your credits were returned.",
       work: async () => {
         const response = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
@@ -319,7 +329,7 @@ Rules:
         };
       },
     });
-    return NextResponse.json({ success: true, ...result, creditsUsed: reservation.amount });
+    return NextResponse.json({ success: true, ...result, creditsUsed: job.creditsReserved });
   } catch (error) {
     console.error("Brand guideline generation error:", error);
     if (error instanceof CreditError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });

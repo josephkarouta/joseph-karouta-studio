@@ -3,9 +3,15 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import { GUIDED_STUDIOS, type GuidedStudioId } from "@/lib/studio/generic-config";
 import { processGuidedStudioJob } from "@/lib/studio/guided-studio-async-job";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -19,8 +25,8 @@ function signature(jobId: string) {
 }
 
 export async function POST(request: Request, context: { params: Promise<{ studio: string }> }) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
 
@@ -50,10 +56,25 @@ export async function POST(request: Request, context: { params: Promise<{ studio
       ? config.professionalCreditAction
       : config.creditAction;
 
-    const reservation = await reserveCredits({
+    startedJob = await startGenerationJob({
       admin,
       userId: auth.user.id,
+      request,
+      scope: `guided-studio:${studio}`,
+      dedupe: { studio, projectId: body?.projectId || null, projectName, workMode, input },
       action: creditAction,
+      projectId: body?.projectId || null,
+      tool: "guided_studio",
+      provider: "openai",
+      input: {
+        studio,
+        databaseId: config.databaseId,
+        projectTypeField: config.projectTypeField,
+        projectId: body?.projectId || null,
+        projectName,
+        workMode,
+        input,
+      },
       metadata: {
         studio: config.databaseId,
         project_id: body?.projectId || null,
@@ -62,35 +83,16 @@ export async function POST(request: Request, context: { params: Promise<{ studio
         async_generation: true,
       },
     });
-    reservationId = reservation.id;
+    jobId = startedJob.jobId;
 
-    const { data: job, error: jobError } = await admin
-      .from("generation_jobs")
-      .insert({
-        user_id: auth.user.id,
-        project_id: body?.projectId || null,
-        tool: "guided_studio",
-        provider: "openai",
-        provider_job_id: null,
-        credit_reservation_id: reservation.id,
-        status: "queued",
-        input: {
-          studio,
-          databaseId: config.databaseId,
-          projectTypeField: config.projectTypeField,
-          projectId: body?.projectId || null,
-          projectName,
-          workMode,
-          input,
-          credits: reservation.amount,
-        },
-        output: {},
-      })
-      .select()
-      .single();
-
-    if (jobError || !job) throw new Error(jobError?.message || "Studio generation job could not be saved.");
-    jobId = String(job.id);
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
 
     const origin = new URL(request.url).origin;
     const backgroundResponse = await fetch(`${origin}/.netlify/functions/guided-studio-background`, {
@@ -109,21 +111,24 @@ export async function POST(request: Request, context: { params: Promise<{ studio
       throw new Error(`Studio background generation could not start (${backgroundResponse?.status || "unavailable"}).`);
     }
 
-    return NextResponse.json({ success: true, status: "processing", jobId, creditsReserved: reservation.amount });
+    return NextResponse.json({ success: true, status: "processing", jobId, creditsReserved: startedJob.creditsReserved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Studio generation could not start.";
-    if (!accepted && admin && jobId) {
-      const { data: failedQueuedJob, error: cleanupError } = await admin
-        .from("generation_jobs")
-        .update({ status: "failed", error: "Generation could not start. Your credits were returned.", completed_at: new Date().toISOString() })
-        .eq("id", jobId)
-        .eq("status", "queued")
-        .select("id")
-        .maybeSingle();
-      if (cleanupError) console.error("Guided Studio start cleanup failed:", cleanupError.message);
-      else if (failedQueuedJob && reservationId) await refundCredits(admin, reservationId, message);
-    } else if (!accepted && admin && reservationId) {
-      await refundCredits(admin, reservationId, message);
+    if (!accepted && admin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
+      }
     }
     console.error("Guided Studio async start error:", error);
     if (error instanceof ApiAuthError) return NextResponse.json({ error: error.message }, { status: error.status });

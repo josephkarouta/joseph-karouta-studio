@@ -3,9 +3,15 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import type { CreditAction } from "@/lib/credits/config";
 import { processStudioImageJob } from "@/lib/studio/studio-image-async-job";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -55,8 +61,8 @@ async function hasApprovedRoomMain(admin: any, projectId: string, roomKey: strin
 }
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
 
@@ -124,10 +130,29 @@ export async function POST(request: Request) {
     }
 
     const action: CreditAction = stage === "technical" ? "interiorTechnicalPlan" : stage === "preview" ? "interiorPreview" : "interiorProfessionalFinal";
-    const reservation = await reserveCredits({
+    const jobInput = {
+      studio: "interior",
+      projectId,
+      viewType: imageType,
+      stage,
+      sourcePlanImageUrls: Array.isArray(projectInput.sourcePlanImageUrls) ? projectInput.sourcePlanImageUrls.slice(0, 6) : [],
+      roomKey: roomKey || null,
+      roomName: roomName || null,
+      floorLabel: floorLabel || null,
+      roomNotes: roomNotes || null,
+      sourcePlanAssetId: sourcePlanAssetId || null,
+    };
+    startedJob = await startGenerationJob({
       admin,
       userId: auth.user.id,
+      request,
+      scope: "interior-image",
+      dedupe: jobInput,
       action,
+      projectId,
+      tool: "studio_image",
+      provider: "openai",
+      input: jobInput,
       metadata: {
         studio: "interior_studio",
         project_id: projectId,
@@ -139,33 +164,16 @@ export async function POST(request: Request) {
         source_plan_asset_id: sourcePlanAssetId || null,
       },
     });
-    reservationId = reservation.id;
+    jobId = startedJob.jobId;
 
-    const { data: job, error: jobError } = await admin.from("generation_jobs").insert({
-      user_id: auth.user.id,
-      project_id: projectId,
-      tool: "studio_image",
-      provider: "openai",
-      provider_job_id: null,
-      credit_reservation_id: reservation.id,
-      status: "queued",
-      input: {
-        studio: "interior",
-        projectId,
-        viewType: imageType,
-        stage,
-        credits: reservation.amount,
-        sourcePlanImageUrls: Array.isArray(projectInput.sourcePlanImageUrls) ? projectInput.sourcePlanImageUrls.slice(0, 6) : [],
-        roomKey: roomKey || null,
-        roomName: roomName || null,
-        floorLabel: floorLabel || null,
-        roomNotes: roomNotes || null,
-        sourcePlanAssetId: sourcePlanAssetId || null,
-      },
-      output: {},
-    }).select().single();
-    if (jobError || !job) throw new Error(jobError?.message || "Interior image job could not be saved.");
-    jobId = String(job.id);
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
 
     const origin = new URL(request.url).origin;
     const response = await fetch(`${origin}/.netlify/functions/studio-image-background`, {
@@ -178,17 +186,24 @@ export async function POST(request: Request) {
     else if (["localhost", "127.0.0.1"].includes(new URL(request.url).hostname)) { accepted = true; await processStudioImageJob(jobId); }
     else throw new Error(`Interior background generation could not start (${response?.status || "unavailable"}).`);
 
-    return NextResponse.json({ success: true, status: "processing", jobId, creditsReserved: reservation.amount });
+    return NextResponse.json({ success: true, status: "processing", jobId, creditsReserved: startedJob.creditsReserved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Interior image generation could not start.";
-    if (!accepted && admin && jobId) {
-      const { data: failedQueuedJob, error: cleanupError } = await admin.from("generation_jobs")
-        .update({ status: "failed", error: "Interior image generation could not start. Your credits were returned.", completed_at: new Date().toISOString() })
-        .eq("id", jobId).eq("status", "queued").select("id").maybeSingle();
-      if (cleanupError) console.error("Interior image start cleanup failed:", cleanupError.message);
-      else if (failedQueuedJob && reservationId) await refundCredits(admin, reservationId, message);
-    } else if (!accepted && admin && reservationId) {
-      await refundCredits(admin, reservationId, message);
+    if (!accepted && admin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Interior image generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
+      }
     }
     console.error("Interior image async start error:", error);
     if (error instanceof ApiAuthError) return NextResponse.json({ error: error.message }, { status: error.status });

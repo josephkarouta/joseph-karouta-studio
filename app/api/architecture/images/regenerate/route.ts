@@ -7,8 +7,14 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getAiMode, resolveAiPlan, type ImageGenerationTier } from "@/lib/ai/config";
 import { assertRateLimit } from "@/lib/ai/rate-limit";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import type { CreditAction } from "@/lib/credits/config";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -115,8 +121,8 @@ async function validateTargetAndResolveAction(args: {
 }
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
   let admin: SupabaseClient | null = null;
 
@@ -177,53 +183,43 @@ export async function POST(request: Request) {
     );
 
     const mode = process.env.NEXT_PUBLIC_MOCK_IMAGES === "true" ? "demo" : getAiMode();
-    let credits = 0;
-    if (mode !== "demo") {
-      const reservation = await reserveCredits({
-        admin,
-        userId: user.id,
-        action,
-        metadata: {
-          project_id: projectId,
-          studio: "architecture_studio",
-          target: targetType,
-          target_id: targetId,
-          quality,
-          plan_mode: planMode,
-        },
-      });
-      reservationId = reservation.id;
-      credits = reservation.amount;
-    }
-
-    const { data: job, error: jobError } = await admin
-      .from("generation_jobs")
-      .insert({
-        user_id: user.id,
+    startedJob = await startGenerationJob({
+      admin,
+      userId: user.id,
+      request,
+      scope: "architecture-image",
+      dedupe: { projectId, targetType, targetId, quality, planMode, mode },
+      projectId,
+      tool: "architecture_image",
+      provider: mode === "demo" ? "demo" : "openai",
+      action: mode === "demo" ? undefined : action,
+      input: {
+        projectId,
+        targetType,
+        targetId,
+        quality,
+        planMode,
+        planName: resolveAiPlan(user),
+      },
+      metadata: {
         project_id: projectId,
-        tool: "architecture_image",
-        provider: mode === "demo" ? "demo" : "openai",
-        provider_job_id: null,
-        credit_reservation_id: reservationId,
-        status: "queued",
-        input: {
-          projectId,
-          targetType,
-          targetId,
-          quality,
-          planMode,
-          planName: resolveAiPlan(user),
-          credits,
-        },
-        output: {},
-      })
-      .select()
-      .single();
+        studio: "architecture_studio",
+        target: targetType,
+        target_id: targetId,
+        quality,
+        plan_mode: planMode,
+      },
+    });
+    jobId = startedJob.jobId;
 
-    if (jobError || !job) {
-      throw new Error(jobError?.message || "Architecture generation job could not be saved.");
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
     }
-    jobId = String(job.id);
 
     const origin = new URL(request.url).origin;
     const signature = createHmac("sha256", requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"))
@@ -259,31 +255,26 @@ export async function POST(request: Request) {
       success: true,
       jobId,
       status: "processing",
-      creditsReserved: credits,
+      creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Architecture image generation could not start.";
 
-    if (!accepted && admin && jobId) {
-      const { data: failedQueuedJob, error: failError } = await admin
-        .from("generation_jobs")
-        .update({
-          status: "failed",
-          error: "Architecture image generation could not start. Your credits were returned.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId)
-        .eq("status", "queued")
-        .select("id")
-        .maybeSingle();
-
-      if (failError) {
-        console.error("Architecture generation start cleanup failed:", failError.message);
-      } else if (failedQueuedJob && reservationId) {
-        await refundCredits(admin, reservationId, message);
+    if (!accepted && admin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Architecture image generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
       }
-    } else if (!accepted && admin && reservationId) {
-      await refundCredits(admin, reservationId, message);
     }
 
     console.error("Architecture image start error:", error);

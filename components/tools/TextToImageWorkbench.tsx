@@ -17,6 +17,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { generationFetch } from "@/lib/client/generation-request";
 
 type Result = {
   imageUrl: string;
@@ -109,10 +110,22 @@ export default function TextToImageWorkbench() {
       formData.append("projectId", new URLSearchParams(window.location.search).get("project") || "");
       if (referenceImage) formData.append("referenceImage", referenceImage, referenceImage.name);
 
-      const response = await fetch("/api/tools/text-to-image/generate", {
+      const response = await generationFetch("/api/tools/text-to-image/generate", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
+      }, {
+        scope: "text-to-image",
+        payload: {
+          prompt,
+          styleNotes,
+          size,
+          quality,
+          projectId: new URLSearchParams(window.location.search).get("project") || null,
+          reference: referenceImage
+            ? { name: referenceImage.name, size: referenceImage.size, modified: referenceImage.lastModified }
+            : null,
+        },
       });
       const payload = await readJsonResponse(response);
       if (!response.ok) throw new Error(payload.error || "Image generation could not start.");

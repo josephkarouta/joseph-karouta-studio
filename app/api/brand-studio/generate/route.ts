@@ -3,11 +3,13 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
+import { CreditError } from "@/lib/credits/server";
 import {
-  CreditError,
-  refundCredits,
-  reserveCredits,
-} from "@/lib/credits/server";
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 import { processBrandSystemJob } from "@/lib/brand/brand-system-job";
 
 export const runtime = "nodejs";
@@ -24,8 +26,8 @@ type BrandStudioInput = {
 };
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
 
@@ -63,10 +65,32 @@ export async function POST(request: Request) {
       process.env.OPENAI_MODEL ||
       "gpt-4.1-mini";
 
-    const reservation = await reserveCredits({
+    startedJob = await startGenerationJob({
       admin,
       userId: auth.user.id,
+      request,
+      scope: "brand-system",
+      dedupe: {
+        businessName,
+        industry,
+        audience,
+        style,
+        description,
+        projectJourney,
+      },
       action: "brandSystemText",
+      projectId: null,
+      tool: "brand_system",
+      provider: "openai",
+      input: {
+        businessName,
+        industry,
+        audience,
+        style,
+        description,
+        projectJourney,
+        model,
+      },
       metadata: {
         studio: "brand_studio",
         tool: "brand_system",
@@ -74,38 +98,16 @@ export async function POST(request: Request) {
         model,
       },
     });
-    reservationId = reservation.id;
+    jobId = startedJob.jobId;
 
-    const { data: job, error: jobError } = await admin
-      .from("generation_jobs")
-      .insert({
-        user_id: auth.user.id,
-        project_id: null,
-        tool: "brand_system",
-        provider: "openai",
-        provider_job_id: null,
-        credit_reservation_id: reservation.id,
-        status: "queued",
-        input: {
-          businessName,
-          industry,
-          audience,
-          style,
-          description,
-          projectJourney,
-          model,
-          credits: reservation.amount,
-        },
-        output: {},
-      })
-      .select("id")
-      .single();
-
-    if (jobError || !job?.id) {
-      throw new Error(jobError?.message || "Brand generation job could not be created.");
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
     }
-
-    jobId = String(job.id);
     const signature = signJob(jobId);
     const origin = new URL(request.url).origin;
     const backgroundResponse = await fetch(
@@ -138,46 +140,27 @@ export async function POST(request: Request) {
       success: true,
       jobId,
       status: "processing",
-      creditsReserved: reservation.amount,
+      creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Brand workspace generation could not start.";
 
-    if (!accepted && admin && jobId) {
-      const { data: failedQueuedJob, error: cleanupError } = await admin
-        .from("generation_jobs")
-        .update({
-          status: "failed",
-          error: "Brand workspace generation could not start. Your credits were returned.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId)
-        .eq("status", "queued")
-        .select("id")
-        .maybeSingle();
-
-      if (cleanupError) {
-        console.error("Brand generation start cleanup failed:", cleanupError.message);
-      } else if (failedQueuedJob && reservationId) {
-        await refundCredits(admin, reservationId, message);
-      } else if (!failedQueuedJob) {
-        const { data: activeJob } = await admin
-          .from("generation_jobs")
-          .select("status")
-          .eq("id", jobId)
-          .maybeSingle();
-
-        if (activeJob && ["processing", "succeeded"].includes(String(activeJob.status))) {
-          return NextResponse.json({
-            success: true,
-            jobId,
-            status: activeJob.status === "succeeded" ? "succeeded" : "processing",
-          });
-        }
+    if (!accepted && admin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Brand workspace generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
       }
-    } else if (!accepted && admin && reservationId) {
-      await refundCredits(admin, reservationId, message);
     }
 
     console.error("Brand Studio generation start error:", error);

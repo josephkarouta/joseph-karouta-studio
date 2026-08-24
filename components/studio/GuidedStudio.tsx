@@ -26,6 +26,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { GuidedStudioConfig, StudioField } from "@/lib/studio/generic-config";
 import { Button, ButtonLink, CreditPill, Eyebrow, GlassCard, PageContainer, StatusPill, cx } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
+import { generationFetch } from "@/lib/client/generation-request";
 
 type FormState = Record<string, string | string[]>;
 type ResultData = Record<string, unknown> & { visualPrompt?: string; expertNotes?: string[] };
@@ -108,10 +109,13 @@ function StudioExperience({ config }: { config: GuidedStudioConfig }) {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Your session expired. Sign in again.");
-      const response = await fetch(`/api/studios/${config.id}/generate`, {
+      const response = await generationFetch(`/api/studios/${config.id}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ input: form, projectId }),
+      }, {
+        scope: `guided-studio:${config.id}`,
+        payload: { input: form, projectId },
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Generation failed.");

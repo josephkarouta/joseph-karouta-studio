@@ -1,9 +1,15 @@
 import "server-only";
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import { processTextToImageJob } from "@/lib/tools/text-to-image-job";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,8 +29,8 @@ type RequestInput = {
 };
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let referencePath: string | null = null;
   let accepted = false;
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
@@ -39,6 +45,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Describe the image in more detail." }, { status: 400 });
     }
 
+    let referenceBuffer: Buffer | null = null;
+    let referenceHash: string | null = null;
     if (referenceImage) {
       if (!REFERENCE_TYPES.includes(referenceImage.type)) {
         return NextResponse.json({ error: "Reference image must be PNG, JPEG or WebP." }, { status: 400 });
@@ -48,22 +56,43 @@ export async function POST(request: Request) {
       }
 
       const extension = referenceImage.type === "image/png" ? "png" : referenceImage.type === "image/webp" ? "webp" : "jpg";
-      referencePath = `${auth.user.id}/tools/text-to-image-references/${Date.now()}-${randomUUID()}.${extension}`;
-      const { error: uploadError } = await auth.admin.storage
-        .from("project-assets")
-        .upload(referencePath, Buffer.from(await referenceImage.arrayBuffer()), {
-          contentType: referenceImage.type,
-          cacheControl: "3600",
-          upsert: false,
-        });
-      if (uploadError) throw new Error(`Reference upload failed: ${uploadError.message}`);
+      referenceBuffer = Buffer.from(await referenceImage.arrayBuffer());
+      referenceHash = createHash("sha256")
+        .update(referenceBuffer)
+        .update(JSON.stringify({ prompt, styleNotes, quality, size, projectId }))
+        .digest("hex");
+      referencePath = `${auth.user.id}/tools/text-to-image-references/${referenceHash}.${extension}`;
     }
 
     const action = quality === "high" ? "textToImageHigh" : "textToImagePreview";
-    const reservation = await reserveCredits({
+    const referenceInstruction = referenceImage
+      ? "\nA reference image is attached. Use it as a genuine visual reference for the subject, identity, composition, materials, colors, styling, or design language wherever relevant to the user's request. Follow the written prompt as the primary instruction. Do not add text, logos, or details from the reference unless the prompt asks for them."
+      : "";
+    const fullPrompt = `${prompt}\n\nArt direction and restrictions: ${styleNotes || "Use premium composition, coherent lighting, realistic material detail and no unnecessary readable text."}${referenceInstruction}\nNo watermark. Avoid fake logos and unreadable decorative paragraphs.`;
+    const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+
+    startedJob = await startGenerationJob({
       admin: auth.admin,
       userId: auth.user.id,
+      request,
+      scope: "text-to-image",
+      dedupe: { prompt, styleNotes, quality, size, projectId, referenceHash },
       action,
+      projectId,
+      tool: "text_to_image",
+      provider: "openai",
+      input: {
+        prompt,
+        fullPrompt,
+        styleNotes,
+        quality,
+        size,
+        projectId,
+        model,
+        referencePath,
+        referenceName: referenceImage?.name || null,
+        referenceType: referenceImage?.type || null,
+      },
       metadata: {
         tool: "text_to_image",
         project_id: projectId,
@@ -72,44 +101,27 @@ export async function POST(request: Request) {
         reference_image: Boolean(referenceImage),
       },
     });
-    reservationId = reservation.id;
+    jobId = startedJob.jobId;
 
-    const referenceInstruction = referenceImage
-      ? "\nA reference image is attached. Use it as a genuine visual reference for the subject, identity, composition, materials, colors, styling, or design language wherever relevant to the user's request. Follow the written prompt as the primary instruction. Do not add text, logos, or details from the reference unless the prompt asks for them."
-      : "";
-    const fullPrompt = `${prompt}\n\nArt direction and restrictions: ${styleNotes || "Use premium composition, coherent lighting, realistic material detail and no unnecessary readable text."}${referenceInstruction}\nNo watermark. Avoid fake logos and unreadable decorative paragraphs.`;
-    const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
 
-    const { data: job, error: jobError } = await auth.admin
-      .from("generation_jobs")
-      .insert({
-        user_id: auth.user.id,
-        project_id: projectId,
-        tool: "text_to_image",
-        provider: "openai",
-        provider_job_id: null,
-        credit_reservation_id: reservation.id,
-        status: "queued",
-        input: {
-          prompt,
-          fullPrompt,
-          styleNotes,
-          quality,
-          size,
-          projectId,
-          model,
-          credits: reservation.amount,
-          referencePath,
-          referenceName: referenceImage?.name || null,
-          referenceType: referenceImage?.type || null,
-        },
-        output: {},
-      })
-      .select()
-      .single();
-
-    if (jobError || !job) throw new Error(jobError?.message || "Generation job could not be saved.");
-    jobId = String(job.id);
+    if (referencePath && referenceImage && referenceBuffer) {
+      const { error: uploadError } = await auth.admin.storage
+        .from("project-assets")
+        .upload(referencePath, referenceBuffer, {
+          contentType: referenceImage.type,
+          cacheControl: "3600",
+          upsert: true,
+        });
+      if (uploadError) throw new Error(`Reference upload failed: ${uploadError.message}`);
+    }
 
     const origin = new URL(request.url).origin;
     const signature = createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || "")
@@ -143,50 +155,29 @@ export async function POST(request: Request) {
       success: true,
       jobId,
       status: "processing",
-      creditsReserved: reservation.amount,
+      creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Image generation could not start.";
 
-    // A reference file is safe to remove when no durable job exists, or when
-    // this request successfully changed its still-queued job to failed below.
-    // If the worker already claimed the job, it may still need the reference.
-    let failedBeforeStart = !jobId;
-    if (!accepted && admin && jobId) {
-      const { data: failedQueuedJob, error: cleanupError } = await admin
-        .from("generation_jobs")
-        .update({ status: "failed", error: "Image generation could not start. Your credits were returned.", completed_at: new Date().toISOString() })
-        .eq("id", jobId)
-        .eq("status", "queued")
-        .select("id")
-        .maybeSingle();
-
-      if (cleanupError) {
-        console.error("Text-to-image start cleanup failed:", cleanupError.message);
-      } else if (failedQueuedJob) {
-        failedBeforeStart = true;
-        if (reservationId) await refundCredits(admin, reservationId, message);
-      } else {
-        const { data: activeJob } = await admin
-          .from("generation_jobs")
-          .select("status")
-          .eq("id", jobId)
-          .maybeSingle();
-
-        if (activeJob && ["processing", "succeeded"].includes(String(activeJob.status))) {
-          return NextResponse.json({
-            success: true,
-            jobId,
-            status: activeJob.status === "succeeded" ? "succeeded" : "processing",
-          });
-        }
+    if (!accepted && admin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Image generation could not start. Your credits were returned.",
+      });
+      if (startedJob.created && status === "failed" && referencePath) {
+        await admin.storage.from("project-assets").remove([referencePath]);
       }
-    } else if (!accepted && admin && reservationId) {
-      failedBeforeStart = true;
-      await refundCredits(admin, reservationId, message);
-    }
-    if (!accepted && admin && referencePath && failedBeforeStart) {
-      await admin.storage.from("project-assets").remove([referencePath]);
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
+      }
     }
 
     console.error("Text-to-image start error:", error);

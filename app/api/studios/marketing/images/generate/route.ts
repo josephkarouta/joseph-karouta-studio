@@ -3,9 +3,15 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import type { CreditAction } from "@/lib/credits/config";
 import { processStudioImageJob } from "@/lib/studio/studio-image-async-job";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,8 +32,8 @@ async function latestPreview(admin: any, projectId: string, viewType: string) {
 }
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
 
@@ -50,22 +56,29 @@ export async function POST(request: Request) {
     }
 
     const action: CreditAction = stage === "final" ? "marketingProfessionalFinal" : "marketingVisualPreview";
-    const reservation = await reserveCredits({ admin, userId: auth.user.id, action, metadata: { studio: "marketing_studio", project_id: projectId, visual_type: viewType, stage, async_generation: true } });
-    reservationId = reservation.id;
-
-    const { data: job, error: jobError } = await admin.from("generation_jobs").insert({
-      user_id: auth.user.id,
-      project_id: projectId,
+    startedJob = await startGenerationJob({
+      admin,
+      userId: auth.user.id,
+      request,
+      scope: "marketing-image",
+      dedupe: { projectId, viewType, stage, tweak: tweak || null },
+      action,
+      projectId,
       tool: "studio_image",
       provider: "openai",
-      provider_job_id: null,
-      credit_reservation_id: reservation.id,
-      status: "queued",
-      input: { studio: "marketing", projectId, viewType, stage, tweak: tweak || null, credits: reservation.amount },
-      output: {},
-    }).select().single();
-    if (jobError || !job) throw new Error(jobError?.message || "Marketing visual job could not be saved.");
-    jobId = String(job.id);
+      input: { studio: "marketing", projectId, viewType, stage, tweak: tweak || null },
+      metadata: { studio: "marketing_studio", project_id: projectId, visual_type: viewType, stage, async_generation: true },
+    });
+    jobId = startedJob.jobId;
+
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
 
     const origin = new URL(request.url).origin;
     const response = await fetch(`${origin}/.netlify/functions/studio-image-background`, {
@@ -78,17 +91,24 @@ export async function POST(request: Request) {
     else if (["localhost", "127.0.0.1"].includes(new URL(request.url).hostname)) { accepted = true; await processStudioImageJob(jobId); }
     else throw new Error(`Marketing background generation could not start (${response?.status || "unavailable"}).`);
 
-    return NextResponse.json({ success: true, status: "processing", jobId, creditsReserved: reservation.amount });
+    return NextResponse.json({ success: true, status: "processing", jobId, creditsReserved: startedJob.creditsReserved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Marketing visual generation could not start.";
-    if (!accepted && admin && jobId) {
-      const { data: failedQueuedJob, error: cleanupError } = await admin.from("generation_jobs")
-        .update({ status: "failed", error: "Marketing visual generation could not start. Your credits were returned.", completed_at: new Date().toISOString() })
-        .eq("id", jobId).eq("status", "queued").select("id").maybeSingle();
-      if (cleanupError) console.error("Marketing image start cleanup failed:", cleanupError.message);
-      else if (failedQueuedJob && reservationId) await refundCredits(admin, reservationId, message);
-    } else if (!accepted && admin && reservationId) {
-      await refundCredits(admin, reservationId, message);
+    if (!accepted && admin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Marketing visual generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
+      }
     }
     console.error("Marketing image async start error:", error);
     if (error instanceof ApiAuthError) return NextResponse.json({ error: error.message }, { status: error.status });

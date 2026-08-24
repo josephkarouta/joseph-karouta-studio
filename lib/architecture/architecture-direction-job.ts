@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { generateArchitectureDirection } from "@/lib/ai/architecture";
 import { getAiPlanConfig, type AiPlan } from "@/lib/ai/config";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 export type ArchitectureDirectionJobInput = {
   projectId?: string;
@@ -447,6 +448,7 @@ export async function processArchitectureDirectionJob(jobId: string) {
   const directionNumber = input.directionNumber;
   const planName = input.planName || "free";
   const mode = input.mode || "live";
+  let creditsCommitted = false;
 
   try {
     if (!projectId || !userId) throw new Error("Architecture direction job is missing project context.");
@@ -460,56 +462,38 @@ export async function processArchitectureDirectionJob(jobId: string) {
       mode,
     });
 
-    if (claimed.credit_reservation_id) {
-      const { error: commitError } = await admin.rpc("heyy_commit_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_metadata: {
-          studio: "architecture_studio",
-          tool: "directions",
-          project_id: projectId,
-          direction_number: directionNumber || "all",
-        },
-      });
-      if (commitError) throw new Error(commitError.message || "Architecture direction credits could not be committed.");
-    }
-
-    const { error: completeError } = await admin
+    const durableOutput = {
+      mode,
+      plan: planName,
+      credits_used: Number(input.credits || 0),
+      direction_number: directionNumber || null,
+      directions_count: result.directions.length,
+      project_status: result.project?.status || null,
+    };
+    const { error: outputError } = await admin
       .from("generation_jobs")
-      .update({
-        status: "succeeded",
-        error: null,
-        output: {
-          mode,
-          plan: planName,
-          credits_used: Number(input.credits || 0),
-          direction_number: directionNumber || null,
-          directions_count: result.directions.length,
-          project_status: result.project?.status || null,
-        },
-        completed_at: new Date().toISOString(),
-      })
+      .update({ output: durableOutput })
       .eq("id", jobId);
+    if (outputError) throw new Error(outputError.message || "Architecture direction result could not be recorded.");
 
-    if (completeError) throw new Error(completeError.message || "Architecture direction job could not be completed.");
+    await completeGenerationJob(admin, jobId, durableOutput, {
+      studio: "architecture_studio",
+      tool: "directions",
+      project_id: projectId,
+      direction_number: directionNumber || "all",
+    });
+    creditsCommitted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Architecture direction generation failed.";
 
-    if (claimed.credit_reservation_id) {
-      const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_reason: message.slice(0, 500),
+    if (!creditsCommitted) {
+      await failGenerationJob(admin, {
+        jobId,
+        expectedStatus: "processing",
+        reason: message,
+        publicError: publicGenerationError(message),
       });
-      if (refundError) console.error("Architecture direction background refund failed:", refundError);
     }
-
-    await admin
-      .from("generation_jobs")
-      .update({
-        status: "failed",
-        error: publicGenerationError(message),
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
 
     console.error("Architecture direction background error:", {
       jobId,

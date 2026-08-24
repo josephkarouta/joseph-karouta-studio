@@ -1,4 +1,4 @@
-import type { CreditAction } from "@/lib/credits/config";
+import { CREDIT_COSTS, type CreditAction } from "@/lib/credits/config";
 
 export type GuidedStudioId = "interior" | "marketing";
 
@@ -45,9 +45,9 @@ export const GUIDED_STUDIOS: Record<GuidedStudioId, GuidedStudioConfig> = {
     accent: "#d06b14",
     soft: "rgba(255,177,81,.15)",
     creditAction: "interiorConcept",
-    creditCost: 8,
+    creditCost: CREDIT_COSTS.interiorConcept,
     professionalCreditAction: "interiorProfessionalConcept",
-    professionalCreditCost: 16,
+    professionalCreditCost: CREDIT_COSTS.interiorProfessionalConcept,
     projectNameField: "projectName",
     projectTypeField: "roomType",
     // Guided Mode is intentionally short. It is for people who want professional direction
@@ -149,9 +149,9 @@ export const GUIDED_STUDIOS: Record<GuidedStudioId, GuidedStudioConfig> = {
     accent: "#eb3d87",
     soft: "rgba(255,94,167,.14)",
     creditAction: "marketingCampaign",
-    creditCost: 6,
+    creditCost: CREDIT_COSTS.marketingCampaign,
     professionalCreditAction: "marketingCreativePack",
-    professionalCreditCost: 12,
+    professionalCreditCost: CREDIT_COSTS.marketingCreativePack,
     projectNameField: "campaignName",
     projectTypeField: "objective",
     steps: [

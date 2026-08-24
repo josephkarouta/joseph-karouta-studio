@@ -5,7 +5,13 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getAiMode, resolveAiPlan } from "@/lib/ai/config";
 import { assertRateLimit } from "@/lib/ai/rate-limit";
-import { CreditError, refundCredits, reserveCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 import { processArchitectureDirectionJob } from "@/lib/architecture/architecture-direction-job";
 
 export const runtime = "nodejs";
@@ -45,10 +51,9 @@ async function createAuthenticatedSupabaseClient() {
 }
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
-  let reservedCredits = 0;
   let creditAdmin: SupabaseClient | null = null;
 
   try {
@@ -178,48 +183,38 @@ export async function POST(request: Request) {
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
 
-    if (mode !== "demo") {
-      const reservation = await reserveCredits({
-        admin: creditAdmin,
-        userId: user.id,
-        action: "architectureText",
-        metadata: {
-          project_id: projectId,
-          studio: "architecture_studio",
-          tool: "directions",
-          direction_number: directionNumber || "all",
-        },
-      });
-      reservationId = reservation.id;
-      reservedCredits = reservation.amount;
-    }
-
-    const { data: job, error: jobError } = await creditAdmin
-      .from("generation_jobs")
-      .insert({
-        user_id: user.id,
+    startedJob = await startGenerationJob({
+      admin: creditAdmin,
+      userId: user.id,
+      request,
+      scope: "architecture-direction",
+      dedupe: { projectId, directionNumber: directionNumber || "all", mode },
+      projectId,
+      tool: "architecture_direction",
+      provider: mode === "demo" ? "demo" : "openai",
+      action: mode === "demo" ? undefined : "architectureText",
+      input: {
+        projectId,
+        directionNumber: directionNumber || null,
+        planName,
+        mode,
+      },
+      metadata: {
         project_id: projectId,
-        tool: "architecture_direction",
-        provider: mode === "demo" ? "demo" : "openai",
-        provider_job_id: null,
-        credit_reservation_id: reservationId,
-        status: "queued",
-        input: {
-          projectId,
-          directionNumber: directionNumber || null,
-          planName,
-          mode,
-          credits: reservedCredits,
-        },
-        output: {},
-      })
-      .select()
-      .single();
+        studio: "architecture_studio",
+        tool: "directions",
+        direction_number: directionNumber || "all",
+      },
+    });
+    jobId = startedJob.jobId;
 
-    if (jobError || !job) {
-      throw new Error(jobError?.message || "Architecture direction job could not be saved.");
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+      });
     }
-    jobId = String(job.id);
 
     const origin = new URL(request.url).origin;
     const signature = createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || "")
@@ -253,40 +248,20 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Architecture Direction generation could not start.";
 
-    if (!accepted && creditAdmin && jobId) {
-      const { data: failedQueuedJob, error: cleanupError } = await creditAdmin
-        .from("generation_jobs")
-        .update({
-          status: "failed",
-          error: "Architecture Direction generation could not start. Your credits were returned.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId)
-        .eq("status", "queued")
-        .select("id")
-        .maybeSingle();
-
-      if (cleanupError) {
-        console.error("Architecture direction start cleanup failed:", cleanupError.message);
-      } else if (failedQueuedJob && reservationId) {
-        await refundCredits(creditAdmin, reservationId, message);
-      } else if (!failedQueuedJob) {
-        const { data: activeJob } = await creditAdmin
-          .from("generation_jobs")
-          .select("status")
-          .eq("id", jobId)
-          .maybeSingle();
-
-        if (activeJob && ["processing", "succeeded"].includes(String(activeJob.status))) {
-          return NextResponse.json({
-            success: true,
-            jobId,
-            status: activeJob.status === "succeeded" ? "succeeded" : "processing",
-          });
-        }
+    if (!accepted && creditAdmin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin: creditAdmin,
+        job: startedJob,
+        reason: message,
+        publicError: "Architecture Direction generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+        });
       }
-    } else if (!accepted && creditAdmin && reservationId) {
-      await refundCredits(creditAdmin, reservationId, message);
     }
 
     console.error("Architecture direction start error:", error);

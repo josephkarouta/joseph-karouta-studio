@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import {
   generateArchitectureDna,
   generateArchitecturePlanSet,
@@ -11,7 +11,8 @@ import {
 } from "@/lib/ai/architecture";
 import { getAiMode, getAiPlanConfig, resolveAiPlan } from "@/lib/ai/config";
 import { assertRateLimit } from "@/lib/ai/rate-limit";
-import { CreditError, commitCredits, refundCredits, reserveCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
+import { runSynchronousGenerationJob } from "@/lib/generation-jobs/synchronous";
 
 export const runtime = "nodejs";
 
@@ -201,9 +202,6 @@ async function markAffectedOutputs(args: {
 }
 
 export async function POST(request: Request) {
-  let creditReservationId: string | null = null;
-  let creditAdmin: SupabaseClient | null = null;
-
   try {
     const body = await request.json() as RequestBody;
     const projectId = body.projectId?.trim();
@@ -304,19 +302,31 @@ export async function POST(request: Request) {
     assertRateLimit(`architecture-plan-tweak:${user.id}`, 6, 60_000);
     const aiPlanName = resolveAiPlan(user);
     const aiPlan = getAiPlanConfig(aiPlanName);
-    creditAdmin = createClient(
+    const creditAdmin = createClient(
       requiredEnvironment("NEXT_PUBLIC_SUPABASE_URL"),
       requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
-    const reservation = await reserveCredits({
+    const creditMetadata = {
+      project_id: projectId,
+      studio: "architecture_studio",
+      tool: "small_tweak",
+      scope,
+    };
+    const { result } = await runSynchronousGenerationJob({
       admin: creditAdmin,
       userId: user.id,
+      request,
+      scope: "architecture-plan-tweak",
+      dedupe: { projectId, instruction, scope, currentVersion },
+      projectId,
+      tool: "architecture_plan_tweak",
+      provider: "openai",
       action: "architectureText",
-      metadata: { project_id: projectId, studio: "architecture_studio", tool: "small_tweak", scope },
-    });
-    creditReservationId = reservation.id;
-
+      input: { projectId, instruction, scope, currentVersion },
+      metadata: creditMetadata,
+      publicError: "The plan tweak could not be completed. Your credits were returned.",
+      work: async () => {
     const project = projectResult.data as Record<string, unknown>;
     const direction = directionResult.data as Record<string, unknown>;
     const site = siteResult.data as Record<string, unknown> | null;
@@ -419,22 +429,17 @@ export async function POST(request: Request) {
       instruction,
     });
 
-    if (creditReservationId && creditAdmin) {
-      await commitCredits(creditAdmin, creditReservationId, { project_id: projectId, scope, plan_version: nextVersion });
-      creditReservationId = null;
-    }
-
-    return NextResponse.json({
-      success: true,
+    return {
       planSet: savedPlan,
       visuals,
       affected,
       planVersion: nextVersion,
+    };
+      },
     });
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    if (creditReservationId && creditAdmin) {
-      await refundCredits(creditAdmin, creditReservationId, error instanceof Error ? error.message : "Architecture plan tweak failed");
-    }
     if (error instanceof CreditError) {
       return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: error.status });
     }

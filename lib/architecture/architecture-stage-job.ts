@@ -10,6 +10,7 @@ import {
   type LiveVisualPrompt,
 } from "@/lib/ai/architecture";
 import { getAiPlanConfig, type AiPlan } from "@/lib/ai/config";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 export type ArchitectureStage = "concept" | "plans" | "visuals" | "design-pack" | "all";
 
@@ -91,61 +92,44 @@ export async function processArchitectureStageJob(jobId: string) {
   const stage = input.stage || "all";
   const planName = input.planName || "free";
   const userId = String(claimed.user_id || "").trim();
+  let creditsCommitted = false;
 
   try {
     if (!projectId || !userId) throw new Error("Architecture generation job is missing project context.");
 
     const state = await runArchitectureStage({ admin, userId, projectId, stage, planName });
 
-    if (claimed.credit_reservation_id) {
-      const { error: commitError } = await admin.rpc("heyy_commit_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_metadata: {
-          studio: "architecture_studio",
-          tool: "stage_generation",
-          stage,
-          project_id: projectId,
-        },
-      });
-      if (commitError) throw new Error(commitError.message || "Architecture credits could not be committed.");
-    }
-
-    const { error: completeError } = await admin
+    const durableOutput = {
+      stage,
+      plan: planName,
+      credits_used: Number(input.credits || 0),
+      project_status: state.project?.status || null,
+      project_completion: state.project?.completion || null,
+    };
+    const { error: outputError } = await admin
       .from("generation_jobs")
-      .update({
-        status: "succeeded",
-        error: null,
-        output: {
-          stage,
-          plan: planName,
-          credits_used: Number(input.credits || 0),
-          project_status: state.project?.status || null,
-          project_completion: state.project?.completion || null,
-        },
-        completed_at: new Date().toISOString(),
-      })
+      .update({ output: durableOutput })
       .eq("id", jobId);
+    if (outputError) throw new Error(outputError.message || "Architecture generation result could not be recorded.");
 
-    if (completeError) throw new Error(completeError.message || "Architecture generation job could not be completed.");
+    await completeGenerationJob(admin, jobId, durableOutput, {
+      studio: "architecture_studio",
+      tool: "stage_generation",
+      stage,
+      project_id: projectId,
+    });
+    creditsCommitted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Architecture content generation failed.";
 
-    if (claimed.credit_reservation_id) {
-      const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_reason: message.slice(0, 500),
+    if (!creditsCommitted) {
+      await failGenerationJob(admin, {
+        jobId,
+        expectedStatus: "processing",
+        reason: message,
+        publicError: publicGenerationError(message),
       });
-      if (refundError) console.error("Architecture stage background refund failed:", refundError);
     }
-
-    await admin
-      .from("generation_jobs")
-      .update({
-        status: "failed",
-        error: publicGenerationError(message),
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
 
     console.error("Architecture stage background error:", { jobId, stage, message });
   }

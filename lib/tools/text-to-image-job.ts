@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import OpenAI, { toFile } from "openai";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 const BUCKET = "project-assets";
 
@@ -16,6 +17,8 @@ type JobInput = {
   referenceType?: string | null;
   credits?: number;
   model?: string;
+  source?: "legacy_project_ai" | "text_to_image";
+  projectName?: string | null;
 };
 
 type StoredAsset = {
@@ -66,6 +69,7 @@ export async function processTextToImageJob(jobId: string) {
   const input = (claimed.input || {}) as JobInput;
   const referencePath = cleanString(input.referencePath) || null;
   let asset: StoredAsset | null = null;
+  let creditsCommitted = !claimed.credit_reservation_id;
 
   try {
     const prompt = cleanString(input.prompt);
@@ -140,62 +144,65 @@ export async function processTextToImageJob(jobId: string) {
       },
     });
 
-    if (claimed.credit_reservation_id) {
-      const { error: commitError } = await admin.rpc("heyy_commit_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_metadata: {
-          tool: "text_to_image",
-          model,
-          asset_id: asset.id,
-          size,
-          quality: input.quality === "high" ? "high" : "preview",
-        },
-      });
-      if (commitError) throw new Error(commitError.message || "Credits could not be committed.");
+    if (input.source === "legacy_project_ai" && claimed.project_id) {
+      const results = await Promise.all([
+        admin.from("ai_images").insert({
+          user_id: claimed.user_id,
+          project_id: claimed.project_id,
+          prompt,
+          image_url: asset.file_url,
+        }),
+        admin.from("project_messages").insert({
+          project_id: claimed.project_id,
+          role: "assistant",
+          message: `[IMAGE]${asset.file_url || ""}`,
+        }),
+      ]);
+      const failure = results.find((result) => result.error);
+      if (failure?.error) {
+        throw new Error(failure.error.message || "Project image history could not be saved.");
+      }
     }
 
-    const { error: completeError } = await admin
+    const durableOutput = {
+      asset_url: asset.file_url || null,
+      asset_id: asset.id,
+      model,
+      size,
+      credits_used: Number(input.credits || 0),
+    };
+    const { error: outputError } = await admin
       .from("generation_jobs")
-      .update({
-        status: "succeeded",
-        error: null,
-        output: {
-          asset_url: asset.file_url || null,
-          asset_id: asset.id,
-          model,
-          size,
-          credits_used: Number(input.credits || 0),
-        },
-        completed_at: new Date().toISOString(),
-      })
+      .update({ output: durableOutput })
       .eq("id", jobId);
+    if (outputError) throw new Error(outputError.message || "Generation result could not be recorded.");
 
-    if (completeError) throw new Error(completeError.message || "Generation job could not be completed.");
+    await completeGenerationJob(admin, jobId, durableOutput, {
+      tool: "text_to_image",
+      model,
+      asset_id: asset.id,
+      size,
+      quality: input.quality === "high" ? "high" : "preview",
+      project_id: claimed.project_id || input.projectId || null,
+    });
+    creditsCommitted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Image generation failed.";
 
-    if (asset) {
-      await admin.from("project_assets").delete().eq("id", asset.id);
-      await admin.storage.from(BUCKET).remove([asset.storagePath]);
-      asset = null;
-    }
-
-    if (claimed.credit_reservation_id) {
-      const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_reason: message.slice(0, 500),
+    if (!creditsCommitted) {
+      await failGenerationJob(admin, {
+        jobId,
+        expectedStatus: "processing",
+        reason: message,
+        publicError: publicGenerationError(message),
       });
-      if (refundError) console.error("Text-to-image background refund failed:", refundError);
-    }
+      if (asset) {
+        await admin.from("project_assets").delete().eq("id", asset.id);
+        await admin.storage.from(BUCKET).remove([asset.storagePath]);
+        asset = null;
+      }
 
-    await admin
-      .from("generation_jobs")
-      .update({
-        status: "failed",
-        error: publicGenerationError(message),
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
+    }
 
     console.error("Text-to-image background error:", message);
   } finally {

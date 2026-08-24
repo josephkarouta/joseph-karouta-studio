@@ -3,6 +3,7 @@ import {
   executeArchitectureImageGeneration,
   type ArchitectureImageJobInput,
 } from "./architecture-image-executor";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 export async function processArchitectureImageJob(jobId: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -54,55 +55,32 @@ export async function processArchitectureImageJob(jobId: string) {
       input,
     });
 
-    if (claimed.credit_reservation_id) {
-      const { error: commitError } = await admin.rpc("heyy_commit_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_metadata: {
-          studio: "architecture_studio",
-          tool: "architecture_image",
-          project_id: claimed.project_id || input.projectId || null,
-          target: input.targetType || null,
-          target_id: input.targetId || null,
-          quality: input.quality || "preview",
-          plan_mode: input.planMode || "technical",
-        },
-      });
-      if (commitError) throw new Error(commitError.message || "Credits could not be committed.");
-      creditsCommitted = true;
-    }
+    const durableOutput = {
+      result,
+      credits_used: Number(input.credits || 0),
+    };
+    const outputSaved = await updateJobWithRetry(admin, jobId, { output: durableOutput });
+    if (!outputSaved) throw new Error("Architecture generation result could not be recorded.");
 
-    const completed = await updateJobWithRetry(admin, jobId, {
-      status: "succeeded",
-      error: null,
-      output: {
-        result,
-        credits_used: Number(input.credits || 0),
-      },
-      completed_at: new Date().toISOString(),
+    await completeGenerationJob(admin, jobId, durableOutput, {
+      studio: "architecture_studio",
+      tool: "architecture_image",
+      project_id: claimed.project_id || input.projectId || null,
+      target: input.targetType || null,
+      target_id: input.targetId || null,
+      quality: input.quality || "preview",
+      plan_mode: input.planMode || "technical",
     });
-
-    if (!completed) {
-      console.error(
-        "Architecture image background warning: output was saved and credits were committed, but the job status could not be finalized.",
-        { jobId, projectId: claimed.project_id, targetType: input.targetType, targetId: input.targetId },
-      );
-    }
+    creditsCommitted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Architecture image generation failed.";
 
-    if (!creditsCommitted && claimed.credit_reservation_id) {
-      const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_reason: message.slice(0, 500),
-      });
-      if (refundError) console.error("Architecture image background refund failed:", refundError);
-    }
-
     if (!creditsCommitted) {
-      await updateJobWithRetry(admin, jobId, {
-        status: "failed",
-        error: publicGenerationError(message),
-        completed_at: new Date().toISOString(),
+      await failGenerationJob(admin, {
+        jobId,
+        expectedStatus: "processing",
+        reason: message,
+        publicError: publicGenerationError(message),
       });
     }
 
@@ -120,17 +98,11 @@ async function failJob(
   job: { id: string; credit_reservation_id?: string | null },
   message: string,
 ) {
-  if (job.credit_reservation_id) {
-    const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-      p_reservation_id: job.credit_reservation_id,
-      p_reason: message.slice(0, 500),
-    });
-    if (refundError) console.error("Architecture image background refund failed:", refundError);
-  }
-  await updateJobWithRetry(admin, job.id, {
-    status: "failed",
-    error: publicGenerationError(message),
-    completed_at: new Date().toISOString(),
+  await failGenerationJob(admin, {
+    jobId: job.id,
+    expectedStatus: "processing",
+    reason: message,
+    publicError: publicGenerationError(message),
   });
 }
 

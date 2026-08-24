@@ -36,6 +36,7 @@ import ProductionPanel from "@/components/studio/production/ProductionPanel";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { GUIDED_STUDIOS, type StudioField } from "@/lib/studio/generic-config";
+import { CREDIT_COSTS } from "@/lib/credits/config";
 import {
   Button,
   CreditPill,
@@ -49,6 +50,7 @@ import HeyySelect, { type HeyySelectOption } from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
 import { exportMarketingCampaignPackPdf } from "@/lib/marketing/export-campaign-pack";
+import { generationFetch } from "@/lib/client/generation-request";
 
 const config = GUIDED_STUDIOS.marketing;
 
@@ -405,11 +407,12 @@ function MarketingExperience() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Your session expired. Sign in again.");
-      const response = await fetch("/api/studios/marketing/generate", {
+      const generationPayload = { input: { ...form, workMode }, projectId: project?.id || null };
+      const response = await generationFetch("/api/studios/marketing/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ input: { ...form, workMode }, projectId: project?.id || null }),
-      });
+        body: JSON.stringify(generationPayload),
+      }, { scope: "guided-studio:marketing", payload: generationPayload });
       const started = await readStudioAsyncPayload(response, "Campaign generation could not start.");
       if (!response.ok || started.success === false) throw new Error(started.error || "Campaign generation could not start.");
       const data = started.status === "succeeded"
@@ -443,11 +446,12 @@ function MarketingExperience() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Your session expired. Sign in again.");
-      const response = await fetch("/api/studios/marketing/images/generate", {
+      const generationPayload = { projectId: project.id, viewType, stage, tweak: tweak.trim() || null };
+      const response = await generationFetch("/api/studios/marketing/images/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ projectId: project.id, viewType, stage, tweak: tweak.trim() || null }),
-      });
+        body: JSON.stringify(generationPayload),
+      }, { scope: "marketing-image", payload: generationPayload });
       const started = await readStudioAsyncPayload(response, "Campaign visual generation could not start.");
       if (!response.ok || started.success === false) throw new Error(started.error || "Campaign visual generation could not start.");
       if (started.status !== "succeeded") {
@@ -593,7 +597,7 @@ async function approveAsset(asset: ProjectAsset) {
               />
               <div className="mt-3 flex items-center justify-between gap-3 px-1">
                 <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple campaign questions and a complete direction" : "Integrated strategy, media, testing and launch system"}</span>
-                <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || 12 : config.creditCost} />
+                <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.marketingCreativePack : config.creditCost} />
               </div>
             </div>
           </div>
@@ -1277,7 +1281,7 @@ function VisualsSection({
   const [tweaks, setTweaks] = useState<Partial<Record<MarketingVisualType, string>>>({});
   return (
     <GlassCard className="p-6 sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><Eyebrow>Creative visuals</Eyebrow><h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate the campaign creative without leaving Marketing Studio</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Start with the Campaign Key Visual. Other formats use it as a consistency reference when it is available.</p></div><div className="flex gap-2"><CreditPill credits={12} label="preview" /><CreditPill credits={24} label="final" /></div></div>
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><Eyebrow>Creative visuals</Eyebrow><h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate the campaign creative without leaving Marketing Studio</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Start with the Campaign Key Visual. Other formats use it as a consistency reference when it is available.</p></div><div className="flex gap-2"><CreditPill credits={CREDIT_COSTS.marketingVisualPreview} label="preview" /><CreditPill credits={CREDIT_COSTS.marketingProfessionalFinal} label="final" /></div></div>
       <div className="mt-7 grid gap-5 lg:grid-cols-2">
         {VISUALS.map((definition) => {
           const stage = stages[definition.id];
@@ -1327,7 +1331,7 @@ function VisualsSection({
                     disabled={Boolean(generating) || finalLocked}
                   >
                     {isGenerating ? <Loader2 size={15} className="animate-spin" /> : <WandSparkles size={15} />}
-                    {asset ? "Regenerate" : "Generate"} {stage === "final" ? "Professional Final · 24 credits" : "Preview · 12 credits"}
+                    {asset ? "Regenerate" : "Generate"} {stage === "final" ? `Professional Final · ${CREDIT_COSTS.marketingProfessionalFinal} credits` : `Preview · ${CREDIT_COSTS.marketingVisualPreview} credits`}
                   </Button>
                   {stage === "final" && asset && !approved && (
                     <Button type="button" variant="secondary" disabled={approvingAssetId === asset.id} onClick={() => onApprove(asset)}>

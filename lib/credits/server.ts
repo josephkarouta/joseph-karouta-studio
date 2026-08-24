@@ -5,6 +5,7 @@ import type { CreditAction } from "@/lib/credits/config";
 import { getCreditCost } from "@/lib/credits/config";
 import { getPlan, type PlanId } from "@/lib/platform/plans";
 import { resolveSubscriptionPlan } from "@/lib/server/subscription-plan";
+import { commitReservedCredits } from "@/lib/credits/lifecycle";
 
 export type CreditReservation = {
   id: string;
@@ -367,11 +368,13 @@ export async function commitCredits(
   reservationId: string,
   metadata: Record<string, unknown> = {},
 ) {
-  const { error } = await admin.rpc("heyy_commit_credits", {
-    p_reservation_id: reservationId,
-    p_metadata: metadata,
-  });
-  if (error) throw new CreditError(error.message || "Credits could not be committed.");
+  try {
+    await commitReservedCredits(admin, reservationId, metadata);
+  } catch (error) {
+    throw new CreditError(
+      error instanceof Error ? error.message : "Credits could not be committed.",
+    );
+  }
 }
 
 export async function refundCredits(

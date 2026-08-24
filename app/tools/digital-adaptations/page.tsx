@@ -1,5 +1,6 @@
 import ToolFrame from "@/components/tools/ToolFrame";
 import DigitalAdaptationsWorkbench from "@/components/tools/DigitalAdaptationsWorkbench";
+import { CREDIT_COSTS } from "@/lib/credits/config";
 
 export const metadata = { title: "Digital Adaptations" };
 
@@ -13,7 +14,7 @@ export default function DigitalAdaptationsPage() {
       iconName="adaptation"
       accent="#6f2dff"
       soft="rgba(111,45,255,.12)"
-      creditLabel="8 credits per aspect family"
+      creditLabel={`${CREDIT_COSTS.digitalAdaptationFamily} credits per aspect family`}
     >
       <DigitalAdaptationsWorkbench />
     </ToolFrame>

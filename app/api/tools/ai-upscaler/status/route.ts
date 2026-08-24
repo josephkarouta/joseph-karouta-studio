@@ -1,8 +1,12 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { commitCredits, refundCredits } from "@/lib/credits/server";
+import { ApiAuthError } from "@/lib/server/auth";
 import { storeGeneratedAsset } from "@/lib/assets-server";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
+import {
+  requireGenerationStatusAccess,
+  type GenerationStatusAccess,
+} from "@/lib/generation-jobs/reconciliation-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,22 +16,23 @@ const MAX_DELIVERY_ATTEMPTS = 3;
 
 export async function GET(request: Request) {
   try {
-    const auth = await requireApiUser(request);
     const jobId = new URL(request.url).searchParams.get("job");
     if (!jobId) {
       return NextResponse.json({ error: "Job ID is required." }, { status: 400 });
     }
+    const auth = await requireGenerationStatusAccess(request, jobId, "ai_upscaler");
 
-    const { data: job } = await auth.admin
+    const { data: loadedJob } = await auth.admin
       .from("generation_jobs")
       .select("*")
       .eq("id", jobId)
       .eq("user_id", auth.user.id)
       .single();
 
-    if (!job) {
+    if (!loadedJob) {
       return NextResponse.json({ error: "Enhancement job not found." }, { status: 404 });
     }
+    let job = loadedJob;
 
     if (job.status === "succeeded") {
       return NextResponse.json({
@@ -44,13 +49,40 @@ export async function GET(request: Request) {
         error: job.error || "Enhancement failed.",
       });
     }
+    if (job.status === "finalizing") {
+      const claimAge = Date.now() - new Date(job.updated_at || 0).getTime();
+      if (Number.isFinite(claimAge) && claimAge >= 5 * 60_000) {
+        const { data: reclaimed } = await auth.admin
+          .from("generation_jobs")
+          .update({ status: "processing" })
+          .eq("id", job.id)
+          .eq("status", "finalizing")
+          .eq("updated_at", job.updated_at)
+          .select("*")
+          .maybeSingle();
+        if (reclaimed) job = reclaimed;
+      }
+    }
+    if (job.status === "finalizing") {
+      return NextResponse.json({
+        success: true,
+        status: "processing",
+        providerState: "finalizing",
+        progress: 1,
+      });
+    }
 
     if (!process.env.TOPAZ_API_KEY) {
       return NextResponse.json({ error: "Enhancement service is not configured." }, { status: 503 });
     }
 
     if (!job.provider_job_id) {
-      return NextResponse.json({ error: "Enhancement job is missing its provider reference." }, { status: 502 });
+      return NextResponse.json({
+        success: true,
+        status: "processing",
+        providerState: "starting",
+        progress: null,
+      });
     }
 
     const rememberedState = String(job.output?.provider_state || "").toLowerCase();
@@ -58,7 +90,11 @@ export async function GET(request: Request) {
     // If Topaz already told us the provider job completed, do not depend on the
     // status endpoint remaining available. Retry only the delivery/persistence step.
     if (isCompleteState(rememberedState)) {
-      return await finishCompletedJob(auth, job, job.output?.provider_status || null);
+      return await claimCompletedDelivery(auth, job, job.output?.provider_status || null, {
+        ...(job.output || {}),
+        provider_state: rememberedState,
+        progress: 1,
+      });
     }
 
     const statusTemplate =
@@ -159,17 +195,7 @@ export async function GET(request: Request) {
         eta: data?.eta ?? null,
       };
 
-      await auth.admin
-        .from("generation_jobs")
-        .update({
-          status: "processing",
-          error: null,
-          output: completedOutput,
-        })
-        .eq("id", job.id);
-
-      const completedJob = { ...job, output: completedOutput };
-      return await finishCompletedJob(auth, completedJob, data);
+      return await claimCompletedDelivery(auth, job, data, completedOutput);
     }
 
     await auth.admin
@@ -207,8 +233,33 @@ export async function GET(request: Request) {
   }
 }
 
+async function claimCompletedDelivery(
+  auth: GenerationStatusAccess,
+  job: any,
+  providerStatus: any,
+  output: Record<string, unknown>,
+) {
+  const { data: claimed, error } = await auth.admin
+    .from("generation_jobs")
+    .update({ status: "finalizing", error: null, output })
+    .eq("id", job.id)
+    .eq("status", "processing")
+    .select("*")
+    .maybeSingle();
+  if (error) throw new Error(error.message || "Enhancement delivery could not be claimed.");
+  if (!claimed) {
+    return NextResponse.json({
+      success: true,
+      status: "processing",
+      providerState: "finalizing",
+      progress: 1,
+    });
+  }
+  return await finishCompletedJob(auth, claimed, providerStatus);
+}
+
 async function finishCompletedJob(
-  auth: Awaited<ReturnType<typeof requireApiUser>>,
+  auth: GenerationStatusAccess,
   job: any,
   providerStatus: any,
 ) {
@@ -223,14 +274,20 @@ async function finishCompletedJob(
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Enhanced output could not be saved.";
-    const attempts = Number(job.output?.delivery_attempts || 0) + 1;
+    const { data: currentJob } = await auth.admin
+      .from("generation_jobs")
+      .select("output")
+      .eq("id", job.id)
+      .maybeSingle();
+    const latestOutput = currentJob?.output || job.output || {};
+    const attempts = Number(latestOutput?.delivery_attempts || 0) + 1;
 
     console.error(
       `Topaz delivery attempt ${attempts}/${MAX_DELIVERY_ATTEMPTS} failed:`,
       error,
     );
 
-    if (attempts >= MAX_DELIVERY_ATTEMPTS) {
+    if (attempts >= MAX_DELIVERY_ATTEMPTS && !latestOutput?.asset_url) {
       const userMessage =
         "The enhancement finished, but the final image could not be retrieved. Your credits were returned.";
 
@@ -248,13 +305,14 @@ async function finishCompletedJob(
       });
     }
 
-    await auth.admin
+    const { error: releaseError } = await auth.admin
       .from("generation_jobs")
       .update({
         status: "processing",
         error: null,
         output: {
           ...(job.output || {}),
+          ...latestOutput,
           provider_state: "completed",
           provider_status: providerStatus || job.output?.provider_status || null,
           progress: 1,
@@ -262,7 +320,9 @@ async function finishCompletedJob(
           delivery_error: message,
         },
       })
-      .eq("id", job.id);
+      .eq("id", job.id)
+      .eq("status", "finalizing");
+    if (releaseError) throw new Error(releaseError.message || "Enhancement delivery retry could not be recorded.");
 
     return NextResponse.json({
       success: true,
@@ -274,7 +334,7 @@ async function finishCompletedJob(
 }
 
 async function downloadAndPersist(
-  auth: Awaited<ReturnType<typeof requireApiUser>>,
+  auth: GenerationStatusAccess,
   job: any,
   providerStatus: any,
 ) {
@@ -283,22 +343,16 @@ async function downloadAndPersist(
   // If the asset was already stored during an earlier attempt, only finish the
   // credit/job bookkeeping. This prevents duplicate Assets Library entries.
   if (job.output?.asset_url) {
-    const creditState = await finalizeCredits(auth, job, model, job.output?.asset_id || null);
-
-    await auth.admin
-      .from("generation_jobs")
-      .update({
-        status: "succeeded",
-        error: null,
-        output: {
-          ...(job.output || {}),
-          provider_state: "completed",
-          credit_state: creditState,
-          model,
-        },
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", job.id);
+    await completeGenerationJob(auth.admin, String(job.id), {
+      ...(job.output || {}),
+      provider_state: "completed",
+      credit_state: "committed",
+      model,
+    }, {
+      provider_job_id: job.provider_job_id,
+      model,
+      asset_id: job.output?.asset_id || null,
+    });
 
     return String(job.output.asset_url);
   }
@@ -360,33 +414,31 @@ async function downloadAndPersist(
   const { error: saveAssetLinkError } = await auth.admin
     .from("generation_jobs")
     .update({
-      status: "processing",
+      status: "finalizing",
       error: null,
       output: storedOutput,
     })
-    .eq("id", job.id);
+    .eq("id", job.id)
+    .eq("status", "finalizing");
 
   if (saveAssetLinkError) {
+    await auth.admin.from("project_assets").delete().eq("id", asset.id);
+    const storagePath = String(asset.metadata?.storage_path || "");
+    if (storagePath) await auth.admin.storage.from("project-assets").remove([storagePath]);
     throw new Error(
       saveAssetLinkError.message || "Enhanced asset link could not be saved.",
     );
   }
 
-  const creditState = await finalizeCredits(auth, job, model, asset.id);
-
-  await auth.admin
-    .from("generation_jobs")
-    .update({
-      status: "succeeded",
-      error: null,
-      output: {
-        ...storedOutput,
-        credit_state: creditState,
-        delivery_error: null,
-      },
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", job.id);
+  await completeGenerationJob(auth.admin, String(job.id), {
+    ...storedOutput,
+    credit_state: "committed",
+    delivery_error: null,
+  }, {
+    provider_job_id: job.provider_job_id,
+    model,
+    asset_id: asset.id,
+  });
 
   return String(asset.file_url || "");
 }
@@ -472,67 +524,19 @@ async function requestFreshTopazDownloadUrl(providerJobId: string) {
   return signedUrl;
 }
 
-async function finalizeCredits(
-  auth: Awaited<ReturnType<typeof requireApiUser>>,
-  job: any,
-  model: string,
-  assetId: string | null,
-) {
-  if (!job.credit_reservation_id) return "missing";
-
-  const { data: reservation, error } = await auth.admin
-    .from("credit_reservations")
-    .select("status")
-    .eq("id", job.credit_reservation_id)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message || "Credit reservation could not be checked.");
-  }
-
-  const state = String(reservation?.status || "missing");
-
-  if (state === "reserved") {
-    await commitCredits(auth.admin, job.credit_reservation_id, {
-      provider_job_id: job.provider_job_id,
-      model,
-      asset_id: assetId,
-    });
-    return "committed";
-  }
-
-  // A prior successful commit is idempotently accepted.
-  if (state === "committed") return "committed";
-
-  // If a long-running async job was already automatically refunded/expired,
-  // still deliver the paid provider result instead of breaking the user's asset.
-  if (state === "refunded" || state === "expired") return state;
-
-  return state;
-}
-
 async function failJobAndRefund(
-  auth: Awaited<ReturnType<typeof requireApiUser>>,
+  auth: GenerationStatusAccess,
   job: any,
   message: string,
   outputPatch: Record<string, unknown> = {},
 ) {
-  if (job.credit_reservation_id) {
-    await refundCredits(auth.admin, job.credit_reservation_id, message);
-  }
-
-  await auth.admin
-    .from("generation_jobs")
-    .update({
-      status: "failed",
-      error: message,
-      output: {
-        ...(job.output || {}),
-        ...outputPatch,
-      },
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", job.id);
+  await failGenerationJob(auth.admin, {
+    jobId: String(job.id),
+    expectedStatus: job.status === "finalizing" ? "finalizing" : "processing",
+    reason: message,
+    publicError: message,
+    outputPatch,
+  });
 }
 
 function isFailureState(value: string) {

@@ -2,8 +2,13 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 import type { CreditAction } from "@/lib/credits/config";
-import { reserveCredits, refundCredits } from "@/lib/credits/server";
 import { requireBrandImageProject } from "@/lib/brand/generated-image-storage";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export type BrandImageJobTool =
   | "brand_logo"
@@ -21,16 +26,27 @@ export async function startBrandImageJob(args: {
   input: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
   const storageContext = await requireBrandImageProject(args.projectId);
 
   try {
-    const reservation = await reserveCredits({
+    startedJob = await startGenerationJob({
       admin: storageContext.admin,
       userId: storageContext.userId,
+      request: args.request,
+      scope: `brand-image:${args.tool}`,
+      dedupe: {
+        projectId: storageContext.projectId,
+        tool: args.tool,
+        input: args.input,
+      },
       action: args.action,
+      projectId: storageContext.projectId,
+      tool: args.tool,
+      provider: args.provider,
+      input: args.input,
       metadata: {
         project_id: storageContext.projectId,
         studio: "brand_studio",
@@ -38,31 +54,16 @@ export async function startBrandImageJob(args: {
         ...args.metadata,
       },
     });
-    reservationId = reservation.id;
+    jobId = startedJob.jobId;
 
-    const { data: job, error: jobError } = await storageContext.admin
-      .from("generation_jobs")
-      .insert({
-        user_id: storageContext.userId,
-        project_id: storageContext.projectId,
-        tool: args.tool,
-        provider: args.provider,
-        provider_job_id: null,
-        credit_reservation_id: reservation.id,
-        status: "queued",
-        input: {
-          ...args.input,
-          credits: reservation.amount,
-        },
-        output: {},
-      })
-      .select()
-      .single();
-
-    if (jobError || !job) {
-      throw new Error(jobError?.message || "Brand generation job could not be saved.");
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return {
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" as const : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      };
     }
-    jobId = String(job.id);
 
     const origin = new URL(args.request.url).origin;
     const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -99,33 +100,26 @@ export async function startBrandImageJob(args: {
       success: true,
       jobId,
       status: "processing" as const,
-      creditsReserved: reservation.amount,
+      creditsReserved: startedJob.creditsReserved,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Brand image generation could not start.";
 
-    if (!accepted && jobId) {
-      // Fail/refund only while the job is still queued. If the Background
-      // Function already claimed it, a lost HTTP 202 must not refund a paid job.
-      const { data: failedQueuedJob, error: failError } = await storageContext.admin
-        .from("generation_jobs")
-        .update({
-          status: "failed",
-          error: "Brand image generation could not start. Your credits were returned.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId)
-        .eq("status", "queued")
-        .select("id")
-        .maybeSingle();
-
-      if (failError) {
-        console.error("Brand generation start cleanup failed:", failError.message);
-      } else if (failedQueuedJob && reservationId) {
-        await refundCredits(storageContext.admin, reservationId, message);
+    if (!accepted && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin: storageContext.admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Brand image generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return {
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" as const : status,
+          creditsReserved: startedJob.creditsReserved,
+        };
       }
-    } else if (!accepted && reservationId) {
-      await refundCredits(storageContext.admin, reservationId, message);
     }
 
     throw error;

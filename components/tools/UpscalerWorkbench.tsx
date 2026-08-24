@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { generationFetch } from "@/lib/client/generation-request";
 
 const APPROACHES = [
   "Standard",
@@ -61,10 +62,13 @@ export default function UpscalerWorkbench() {
       if (!token) throw new Error("Your session expired. Sign in again.");
 
       const imageBase64 = await fileToBase64(file);
-      const response = await fetch("/api/tools/ai-upscaler/generate", {
+      const response = await generationFetch("/api/tools/ai-upscaler/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ imageBase64, mimeType: file.type, filename: file.name, scale, model }),
+      }, {
+        scope: "ai-upscaler",
+        payload: { file: { name: file.name, size: file.size, modified: file.lastModified }, scale, model },
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Upscale could not start.");

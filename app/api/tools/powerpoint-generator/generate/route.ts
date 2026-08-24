@@ -2,8 +2,9 @@ import "server-only";
 import { NextResponse } from "next/server";
 import PptxGenJS from "pptxgenjs";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, withCreditReservation } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import { storeGeneratedAsset } from "@/lib/assets-server";
+import { runSynchronousGenerationJob } from "@/lib/generation-jobs/synchronous";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -62,12 +63,20 @@ export async function POST(request: Request) {
       ? process.env.PRESENTATION_TEXT_MODEL_DRAFT || process.env.PRESENTATION_TEXT_MODEL || "gpt-5.6-luna"
       : process.env.PRESENTATION_TEXT_MODEL_FULL || process.env.PRESENTATION_TEXT_MODEL || "gpt-5.6-terra";
 
-    const { result, reservation } = await withCreditReservation({
+    const metadata = { tool: "powerpoint_generator", title, slide_count: slideCount, mode, model };
+    const { result, job } = await runSynchronousGenerationJob({
       admin: auth.admin,
       userId: auth.user.id,
+      request,
+      scope: "powerpoint-generator",
+      dedupe: { title, objective, source, audience, tone, slideCount, mode },
+      tool: "powerpoint_generator",
+      provider: "openai",
       action: mode === "full" ? "powerpointFull" : "powerpointDraft",
-      metadata: { tool: "powerpoint_generator", title, slide_count: slideCount, mode, model },
-      work: async (creditReservation) => {
+      input: { title, objective, source, audience, tone, slideCount, mode, model },
+      metadata,
+      publicError: "Presentation generation could not be completed. Your credits were returned.",
+      work: async (generationJob) => {
         const response = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
           headers: {
@@ -108,7 +117,7 @@ export async function POST(request: Request) {
           metadata: {
             provider: "openai",
             model: provider?.model || model,
-            credit_reservation_id: creditReservation.id,
+            credit_reservation_id: generationJob.reservationId,
           },
         });
 
@@ -116,7 +125,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, ...result, creditsUsed: reservation.amount });
+    return NextResponse.json({ success: true, ...result, creditsUsed: job.creditsReserved });
   } catch (error) {
     console.error("PowerPoint generation error:", error);
     if (error instanceof ApiAuthError) {

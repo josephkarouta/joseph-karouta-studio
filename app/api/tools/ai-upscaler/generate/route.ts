@@ -1,8 +1,15 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
+import { failGenerationJob } from "@/lib/credits/lifecycle";
+import {
+  cleanupGenerationStart,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -17,8 +24,9 @@ type TopazChoice = {
 };
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
+  let startedJob: GenerationJobStart | null = null;
+  let providerClaimed = false;
 
   try {
     const auth = await requireApiUser(request);
@@ -59,10 +67,28 @@ export async function POST(request: Request) {
     }
 
     const choice = getTopazChoice(approach);
-    const reservation = await reserveCredits({
+    const sourceHash = createHash("sha256").update(source).digest("hex");
+    startedJob = await startGenerationJob({
       admin,
       userId: auth.user.id,
+      request,
+      scope: "ai-upscaler",
+      dedupe: { sourceHash, scale, approach, projectId },
       action: scale === 4 ? "aiUpscale4x" : "aiUpscale2x",
+      projectId,
+      tool: "ai_upscaler",
+      provider: "topaz",
+      input: {
+        scale,
+        approach,
+        model: choice.model,
+        mimeType,
+        projectId,
+        outputWidth,
+        outputHeight,
+        generative: choice.generative,
+        sourceHash,
+      },
       metadata: {
         tool: "ai_upscaler",
         scale,
@@ -73,7 +99,37 @@ export async function POST(request: Request) {
         output_height: outputHeight,
       },
     });
-    reservationId = reservation.id;
+
+    if (startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId: startedJob.jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        model: choice.model,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
+
+    // Exactly one request owns provider submission. A retry can safely claim a
+    // queued job whose original HTTP invocation ended before reaching Topaz.
+    const { data: claimedJob, error: claimError } = await admin
+      .from("generation_jobs")
+      .update({ status: "processing", error: null })
+      .eq("id", startedJob.jobId)
+      .eq("status", "queued")
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw new Error(claimError.message || "Enhancement job could not be claimed.");
+    if (!claimedJob) {
+      return NextResponse.json({
+        success: true,
+        jobId: startedJob.jobId,
+        status: "processing",
+        model: choice.model,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
+    providerClaimed = true;
 
     const form = new FormData();
     form.append(
@@ -105,26 +161,14 @@ export async function POST(request: Request) {
 
     const { data: job, error } = await admin
       .from("generation_jobs")
-      .insert({
-        user_id: auth.user.id,
-        project_id: projectId,
-        tool: "ai_upscaler",
-        provider: "topaz",
+      .update({
         provider_job_id: providerId,
-        credit_reservation_id: reservation.id,
         status: "processing",
-        input: {
-          scale,
-          approach,
-          model: choice.model,
-          mimeType,
-          projectId,
-          outputWidth,
-          outputHeight,
-          generative: choice.generative,
-        },
         output: { eta: data?.eta || response.headers.get("x-eta") || null, model: choice.model },
       })
+      .eq("id", startedJob.jobId)
+      .eq("status", "processing")
+      .is("provider_job_id", null)
       .select()
       .single();
 
@@ -135,11 +179,44 @@ export async function POST(request: Request) {
       jobId: job.id,
       status: "processing",
       model: choice.model,
-      creditsReserved: reservation.amount,
+      creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {
-    if (reservationId && admin) {
-      await refundCredits(admin, reservationId, error instanceof Error ? error.message : "Upscale start failed");
+    const message = error instanceof Error ? error.message : "Upscale start failed";
+    if (admin && startedJob && providerClaimed) {
+      try {
+        const failed = await failGenerationJob(admin, {
+          jobId: startedJob.jobId,
+          expectedStatus: "processing",
+          requireMissingProviderId: true,
+          reason: message,
+          publicError: "Enhancement could not start. Your credits were returned.",
+        });
+        if (!failed) {
+          const { data: activeJob } = await admin
+            .from("generation_jobs")
+            .select("status,provider_job_id")
+            .eq("id", startedJob.jobId)
+            .maybeSingle();
+          if (activeJob?.provider_job_id && ["processing", "finalizing", "succeeded"].includes(String(activeJob.status))) {
+            return NextResponse.json({
+              success: true,
+              jobId: startedJob.jobId,
+              status: activeJob.status === "succeeded" ? "succeeded" : "processing",
+              creditsReserved: startedJob.creditsReserved,
+            });
+          }
+        }
+      } catch (cleanupError) {
+        console.error("Topaz start cleanup failed:", cleanupError);
+      }
+    } else if (admin && startedJob) {
+      await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Enhancement could not start. Your credits were returned.",
+      });
     }
     console.error("Topaz start error:", error);
     if (error instanceof ApiAuthError) {

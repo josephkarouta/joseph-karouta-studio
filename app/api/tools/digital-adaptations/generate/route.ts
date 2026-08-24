@@ -1,10 +1,12 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { toFile } from "openai";
 import sharp from "sharp";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
-import { CreditError, withCreditReservation } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { runSynchronousGenerationJob } from "@/lib/generation-jobs/synchronous";
 import { getOpenAI } from "@/lib/ai/openai-server";
 import { storeGeneratedAsset } from "@/lib/assets-server";
 import {
@@ -136,6 +138,7 @@ export async function POST(request: Request) {
     }
 
     const source = await normalizeSource(Buffer.from(await sourceFile.arrayBuffer()));
+    const sourceHash = createHash("sha256").update(source).digest("hex");
     const families = uniqueFamilies(formats);
     const creditAmount = families.length * CREDIT_COSTS.digitalAdaptationFamily;
 
@@ -147,13 +150,28 @@ export async function POST(request: Request) {
       aspect_families: families,
     };
 
-    const { result, reservation } = await withCreditReservation({
+    const { result, job } = await runSynchronousGenerationJob({
       admin: auth.admin,
       userId: auth.user.id,
+      request,
+      scope: "digital-adaptations",
+      dedupe: { sourceHash, notes, projectId, projectName, formats },
+      projectId,
+      tool: "digital_adaptations",
+      provider: "openai",
       action: "digitalAdaptationFamily",
       amountOverride: creditAmount,
       metadata,
-      work: async (creditReservation) => {
+      input: {
+        sourceHash,
+        notes,
+        projectId,
+        projectName,
+        formats,
+        families,
+      },
+      publicError: "Digital adaptations could not be completed. Your credits were returned.",
+      work: async (generationJob) => {
         const masters = new Map<AdaptationFamily, Buffer>();
         const generatedMasters = await mapWithConcurrency(families, 2, async (family) => ({
           family,
@@ -186,7 +204,7 @@ export async function POST(request: Request) {
               family: format.family,
               width: format.width,
               height: format.height,
-              credit_reservation_id: creditReservation.id,
+              credit_reservation_id: generationJob.reservationId,
               model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
             },
           });
@@ -211,7 +229,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       ...result,
-      creditsUsed: reservation.amount,
+      creditsUsed: job.creditsReserved,
       reviewNote: "AI recomposition can affect small typography, logos or mandatory elements. Review every output before publishing.",
     });
   } catch (error) {

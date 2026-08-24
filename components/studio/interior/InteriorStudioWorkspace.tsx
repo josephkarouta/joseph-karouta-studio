@@ -39,6 +39,7 @@ import ProductionPanel from "@/components/studio/production/ProductionPanel";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { GUIDED_STUDIOS, type StudioField } from "@/lib/studio/generic-config";
+import { CREDIT_COSTS } from "@/lib/credits/config";
 import {
   Button,
   CreditPill,
@@ -51,6 +52,7 @@ import {
 import HeyySelect from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
+import { generationFetch } from "@/lib/client/generation-request";
 
 const config = GUIDED_STUDIOS.interior;
 
@@ -164,19 +166,19 @@ const PLAN_VIEWS: Array<{ id: PlanType; title: string; description: string; cred
     id: "space_plan",
     title: "Furniture & Space Plan",
     description: "A complete top-down plan showing walls, openings, circulation, furniture and key dimensions.",
-    credits: 8,
+    credits: CREDIT_COSTS.interiorPlan,
   },
   {
     id: "furniture_plan",
     title: "Furniture Placement Plan",
     description: "A coordinated placement and clearance plan based on the approved space geometry.",
-    credits: 8,
+    credits: CREDIT_COSTS.interiorPlan,
   },
   {
     id: "lighting_plan",
     title: "Lighting & Ceiling Plan",
     description: "A reflected ceiling concept with fixture positions, lighting layers and switching groups.",
-    credits: 8,
+    credits: CREDIT_COSTS.interiorPlan,
   },
 ];
 
@@ -491,18 +493,19 @@ function InteriorExperience() {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Your session expired. Sign in again.");
 
-      const response = await fetch("/api/studios/interior/generate", {
+      const generationPayload = {
+        input: {
+          ...form,
+          workMode,
+          sourcePlanFileNames: sourcePlanFiles.length ? sourcePlanFiles.map((file) => file.name) : form.sourcePlanFileNames || [],
+        },
+        projectId: project?.id || null,
+      };
+      const response = await generationFetch("/api/studios/interior/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          input: {
-            ...form,
-            workMode,
-            sourcePlanFileNames: sourcePlanFiles.length ? sourcePlanFiles.map((file) => file.name) : form.sourcePlanFileNames || [],
-          },
-          projectId: project?.id || null,
-        }),
-      });
+        body: JSON.stringify(generationPayload),
+      }, { scope: "guided-studio:interior", payload: generationPayload });
       const started = await readStudioAsyncPayload(response, "Interior project generation could not start.");
       if (!response.ok || started.success === false) throw new Error(started.error || "Interior project generation could not start.");
       const data = started.status === "succeeded"
@@ -540,11 +543,12 @@ function InteriorExperience() {
     roomContext?: RoomVisualContext,
   ) {
     if (!project?.id) throw new Error("Interior project not found.");
-    const response = await fetch("/api/studios/interior/images/generate", {
+    const generationPayload = { projectId: project.id, viewType, stage, ...(roomContext || {}) };
+    const response = await generationFetch("/api/studios/interior/images/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ projectId: project.id, viewType, stage, ...(roomContext || {}) }),
-    });
+      body: JSON.stringify(generationPayload),
+    }, { scope: "interior-image", payload: generationPayload });
     const started = await readStudioAsyncPayload(response, "Interior image generation could not start.");
     if (!response.ok || started.success === false) throw new Error(started.error || "Interior image generation could not start.");
     if (started.status !== "succeeded") {
@@ -732,7 +736,7 @@ function InteriorExperience() {
               />
               <div className="mt-3 flex items-center justify-between gap-3 px-1">
                 <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple questions and a clear concept" : "Full fit-out, schedules and procurement package"}</span>
-                <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || 16 : config.creditCost} />
+                <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost} />
               </div>
             </div>
           </div>
@@ -1440,8 +1444,8 @@ function PlansSection({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <CreditPill credits={12} label="preview" />
-          <CreditPill credits={24} label="final" />
+          <CreditPill credits={CREDIT_COSTS.interiorPreview} label="preview" />
+          <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="final" />
         </div>
       </div>
 
@@ -1539,8 +1543,8 @@ function VisualsSection({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <CreditPill credits={12} label="preview" />
-          <CreditPill credits={24} label="final" />
+          <CreditPill credits={CREDIT_COSTS.interiorPreview} label="preview" />
+          <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="final" />
         </div>
       </div>
 
@@ -1769,7 +1773,7 @@ function ExistingDesignRoomVisualsSection({
               Each room is generated against one selected uploaded floor plan instead of the entire project at once. Approve the room's Main Concept before creating its alternate angle or feature detail.
             </p>
           </div>
-          <CreditPill credits={12} label="per concept view" />
+          <CreditPill credits={CREDIT_COSTS.interiorPreview} label="per concept view" />
         </div>
         <div className="mt-5 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">
           Plan-guided visuals use the mapped room and selected uploaded plan as the primary spatial reference. They are concept imagery, not guaranteed exact 3D reconstructions.

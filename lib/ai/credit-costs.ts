@@ -9,7 +9,7 @@ export const ARCHITECTURE_CREDIT_COSTS = {
   conceptPreview: CREDIT_COSTS.architectureDirection,
   visualPreview: CREDIT_COSTS.architectureVisual,
   renderedPlanPreview: CREDIT_COSTS.architectureVisual,
-  professionalFinal: 24,
+  professionalFinal: CREDIT_COSTS.architectureProfessionalFinal,
   technicalPlan: CREDIT_COSTS.architectureTechnicalPlan,
   textGeneration: CREDIT_COSTS.architectureText,
 } as const;

@@ -8,6 +8,7 @@ import {
 import { generateBrandApplicationVisual } from "./application-visual-generator";
 import type { BrandImageStorageContext } from "./brand-image-storage";
 import type { BrandImageJobTool } from "./brand-image-job-start";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 const BRAND_IMAGE_TOOLS: BrandImageJobTool[] = [
   "brand_logo",
@@ -95,21 +96,6 @@ export async function processBrandImageJob(jobId: string) {
       result,
     });
 
-    if (claimed.credit_reservation_id) {
-      const { error: commitError } = await admin.rpc("heyy_commit_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_metadata: {
-          studio: "brand_studio",
-          tool,
-          project_id: projectId,
-          asset_id: asset.id,
-          provider: claimed.provider || "openai",
-        },
-      });
-      if (commitError) throw new Error(commitError.message || "Credits could not be committed.");
-      creditsCommitted = true;
-    }
-
     const completedOutput = {
       result: {
         ...result,
@@ -120,41 +106,29 @@ export async function processBrandImageJob(jobId: string) {
       credits_used: Number(input.credits || 0),
     };
 
-    const completed = await updateJobWithRetry(admin, jobId, {
-      status: "succeeded",
-      error: null,
-      output: completedOutput,
-      completed_at: new Date().toISOString(),
+    await completeGenerationJob(admin, jobId, completedOutput, {
+      studio: "brand_studio",
+      tool,
+      project_id: projectId,
+      asset_id: asset.id,
+      provider: claimed.provider || "openai",
     });
-
-    if (!completed) {
-      console.error(
-        "Brand image background warning: generation succeeded and credits were committed, but the job status could not be finalized.",
-        { jobId, tool, assetId: asset.id },
-      );
-    }
+    creditsCommitted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Brand image generation failed.";
 
     if (!creditsCommitted) {
+      await failGenerationJob(admin, {
+        jobId,
+        expectedStatus: "processing",
+        reason: message,
+        publicError: publicGenerationError(message),
+      });
       if (asset?.id) {
         await admin.from("project_assets").delete().eq("id", asset.id);
       }
       await removeGeneratedFiles(admin, result);
 
-      if (claimed.credit_reservation_id) {
-        const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-          p_reservation_id: claimed.credit_reservation_id,
-          p_reason: message.slice(0, 500),
-        });
-        if (refundError) console.error("Brand image background refund failed:", refundError);
-      }
-
-      await updateJobWithRetry(admin, jobId, {
-        status: "failed",
-        error: publicGenerationError(message),
-        completed_at: new Date().toISOString(),
-      });
     }
 
     console.error("Brand image background error:", { jobId, tool, message });
@@ -392,33 +366,13 @@ async function persistProjectAsset(
 }
 
 async function failJob(admin: SupabaseClient, claimed: any, message: string) {
-  if (claimed.credit_reservation_id) {
-    const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-      p_reservation_id: claimed.credit_reservation_id,
-      p_reason: message.slice(0, 500),
-    });
-    if (refundError) console.error("Brand image background refund failed:", refundError);
-  }
-  await updateJobWithRetry(admin, String(claimed.id), {
-    status: "failed",
-    error: publicGenerationError(message),
-    completed_at: new Date().toISOString(),
+  await failGenerationJob(admin, {
+    jobId: String(claimed.id),
+    expectedStatus: "processing",
+    reason: message,
+    publicError: publicGenerationError(message),
   });
   console.error("Brand image background error:", message);
-}
-
-async function updateJobWithRetry(
-  admin: SupabaseClient,
-  jobId: string,
-  values: Record<string, unknown>,
-) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { error } = await admin.from("generation_jobs").update(values).eq("id", jobId);
-    if (!error) return true;
-    console.error("Brand generation job update failed:", error.message);
-    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
-  }
-  return false;
 }
 
 async function removeGeneratedFiles(admin: SupabaseClient, result: any) {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import OpenAI, { toFile } from "openai";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
 
 type StudioId = "interior" | "marketing";
 type InteriorImageType = "space_plan" | "furniture_plan" | "lighting_plan" | "main_space" | "alternate_angle" | "focal_point" | "material_detail" | "day_view" | "evening_view";
@@ -89,50 +90,33 @@ export async function processStudioImageJob(jobId: string) {
     assetId = String(generated.asset.id);
     assetUrl = String(generated.asset.file_url || "") || null;
 
-    if (claimed.credit_reservation_id) {
-      const { error: commitError } = await admin.rpc("heyy_commit_credits", {
-        p_reservation_id: claimed.credit_reservation_id,
-        p_metadata: { studio: project.studio, project_id: projectId, tool: "studio_image", asset_id: assetId, provider: "openai" },
-      });
-      if (commitError) throw new Error(commitError.message || "Credits could not be committed.");
-      creditsCommitted = true;
-    }
-
-    await finalizeSucceededImageJob(admin, jobId, {
+    await completeGenerationJob(admin, jobId, {
       asset_id: assetId,
       asset_url: assetUrl,
       credits_used: Number(input.credits || 0),
       stage: input.stage || null,
       view_type: input.viewType || null,
+    }, {
+      studio: project.studio,
+      project_id: projectId,
+      tool: "studio_image",
+      asset_id: assetId,
+      provider: "openai",
     });
+    creditsCommitted = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Studio image generation failed.";
     if (!creditsCommitted) {
+      await failGenerationJob(admin, {
+        jobId,
+        expectedStatus: "processing",
+        reason: message,
+        publicError: publicError(studio, message),
+      });
       if (assetId) await deleteAsset(admin, assetId);
-      if (claimed.credit_reservation_id) {
-        const { error: refundError } = await admin.rpc("heyy_refund_credits", { p_reservation_id: claimed.credit_reservation_id, p_reason: message.slice(0, 500) });
-        if (refundError) console.error("Studio image background refund failed:", refundError);
-      }
-      await admin.from("generation_jobs").update({ status: "failed", error: publicError(studio, message), completed_at: new Date().toISOString() }).eq("id", jobId);
     }
     console.error("Studio image background error:", { jobId, studio, message });
   }
-}
-
-async function finalizeSucceededImageJob(admin: SupabaseClient, jobId: string, output: Record<string, unknown>) {
-  let lastError: string | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const { error } = await admin.from("generation_jobs").update({
-      status: "succeeded",
-      error: null,
-      output,
-      completed_at: new Date().toISOString(),
-    }).eq("id", jobId);
-    if (!error) return;
-    lastError = error.message || "Studio image job could not be finalized.";
-    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
-  }
-  throw new Error(lastError || "Studio image job could not be finalized.");
 }
 
 async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, userId: string, project: any, input: StudioImageJobInput, reservationId: string | null) {

@@ -1,3 +1,5 @@
+import { CREDIT_COSTS } from "@/lib/credits/config";
+
 export type StudioAvailability = "live" | "coming_soon" | "hidden";
 export type ToolAvailability = "live" | "coming_soon" | "hidden";
 
@@ -187,7 +189,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#7c3aed",
     soft: "rgba(124,58,237,.12)",
-    creditLabel: "From 6 credits",
+    creditLabel: `From ${CREDIT_COSTS.textToImagePreview} credits`,
   },
   {
     id: "image_to_video",
@@ -198,7 +200,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#db2777",
     soft: "rgba(219,39,119,.12)",
-    creditLabel: "From 24 credits",
+    creditLabel: `From ${CREDIT_COSTS.imageToVideoPreview} credits`,
   },
   {
     id: "digital_adaptations",
@@ -209,7 +211,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#6f2dff",
     soft: "rgba(111,45,255,.12)",
-    creditLabel: "8 credits per aspect family",
+    creditLabel: `${CREDIT_COSTS.digitalAdaptationFamily} credits per aspect family`,
   },
   {
     id: "ai_upscaler",
@@ -220,7 +222,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#0284c7",
     soft: "rgba(2,132,199,.12)",
-    creditLabel: "From 4 credits",
+    creditLabel: `From ${CREDIT_COSTS.aiUpscale2x} credits`,
   },
   {
     id: "powerpoint_generator",
@@ -231,7 +233,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#ea580c",
     soft: "rgba(234,88,12,.12)",
-    creditLabel: "From 5 credits",
+    creditLabel: `From ${CREDIT_COSTS.powerpointDraft} credits`,
   }
 ];
 

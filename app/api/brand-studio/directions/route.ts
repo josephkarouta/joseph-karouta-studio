@@ -1,7 +1,8 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { requireBrandImageProject } from "@/lib/brand/generated-image-storage";
-import { CreditError, withCreditReservation } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
+import { runSynchronousGenerationJob } from "@/lib/generation-jobs/synchronous";
 
 export const runtime = "nodejs";
 
@@ -116,11 +117,20 @@ Rules:
 `;
 
     const context = await requireBrandImageProject(project.id);
-    const { result, reservation } = await withCreditReservation({
+    const metadata = { project_id: context.projectId, studio: "brand_studio", tool: "creative_directions" };
+    const { result, job } = await runSynchronousGenerationJob({
       admin: context.admin,
       userId: context.userId,
+      request,
+      scope: "brand-creative-directions",
+      dedupe: { projectId: context.projectId, project, brand },
+      projectId: context.projectId,
+      tool: "brand_creative_directions",
+      provider: "openai",
       action: "brandDirectionText",
-      metadata: { project_id: context.projectId, studio: "brand_studio", tool: "creative_directions" },
+      input: { project, brand },
+      metadata,
+      publicError: "Brand directions could not be completed. Your credits were returned.",
       work: async () => {
         const response = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
@@ -145,7 +155,7 @@ Rules:
         return { directions, usage: data?.usage || null, model: data?.model || null };
       },
     });
-    return NextResponse.json({ ...result, creditsUsed: reservation.amount });
+    return NextResponse.json({ ...result, creditsUsed: job.creditsReserved });
   } catch (error) {
     console.error("Brand direction generation error:", error);
     if (error instanceof CreditError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });

@@ -5,7 +5,13 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getAiMode, resolveAiPlan } from "@/lib/ai/config";
 import { assertRateLimit } from "@/lib/ai/rate-limit";
-import { CreditError, reserveCredits, refundCredits } from "@/lib/credits/server";
+import { CreditError } from "@/lib/credits/server";
+import {
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
 import {
   processArchitectureStageJob,
   type ArchitectureStage,
@@ -50,8 +56,8 @@ async function createAuthenticatedSupabaseClient() {
 }
 
 export async function POST(request: Request) {
-  let reservationId: string | null = null;
   let jobId: string | null = null;
+  let startedJob: GenerationJobStart | null = null;
   let accepted = false;
   let creditAdmin: SupabaseClient | null = null;
 
@@ -109,10 +115,17 @@ export async function POST(request: Request) {
       { auth: { persistSession: false, autoRefreshToken: false } },
     );
 
-    const reservation = await reserveCredits({
+    startedJob = await startGenerationJob({
       admin: creditAdmin,
       userId: user.id,
+      request,
+      scope: "architecture-stage",
+      dedupe: { projectId, stage },
       action: "architectureText",
+      projectId,
+      tool: "architecture_stage",
+      provider: "openai",
+      input: { projectId, stage, planName },
       metadata: {
         project_id: projectId,
         studio: "architecture_studio",
@@ -120,33 +133,16 @@ export async function POST(request: Request) {
         stage,
       },
     });
-    reservationId = reservation.id;
+    jobId = startedJob.jobId;
 
-    const { data: job, error: jobError } = await creditAdmin
-      .from("generation_jobs")
-      .insert({
-        user_id: user.id,
-        project_id: projectId,
-        tool: "architecture_stage",
-        provider: "openai",
-        provider_job_id: null,
-        credit_reservation_id: reservation.id,
-        status: "queued",
-        input: {
-          projectId,
-          stage,
-          planName,
-          credits: reservation.amount,
-        },
-        output: {},
-      })
-      .select()
-      .single();
-
-    if (jobError || !job) {
-      throw new Error(jobError?.message || "Architecture generation job could not be saved.");
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
     }
-    jobId = String(job.id);
 
     const origin = new URL(request.url).origin;
     const signature = createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || "")
@@ -176,45 +172,26 @@ export async function POST(request: Request) {
       success: true,
       status: "processing",
       jobId,
-      creditsReserved: reservation.amount,
+      creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Architecture content generation could not start.";
 
-    if (!accepted && creditAdmin && jobId) {
-      const { data: failedQueuedJob, error: cleanupError } = await creditAdmin
-        .from("generation_jobs")
-        .update({
-          status: "failed",
-          error: "Architecture content generation could not start. Your credits were returned.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", jobId)
-        .eq("status", "queued")
-        .select("id")
-        .maybeSingle();
-
-      if (cleanupError) {
-        console.error("Architecture stage start cleanup failed:", cleanupError.message);
-      } else if (failedQueuedJob && reservationId) {
-        await refundCredits(creditAdmin, reservationId, message);
-      } else if (!failedQueuedJob) {
-        const { data: activeJob } = await creditAdmin
-          .from("generation_jobs")
-          .select("status")
-          .eq("id", jobId)
-          .maybeSingle();
-
-        if (activeJob && ["processing", "succeeded"].includes(String(activeJob.status))) {
-          return NextResponse.json({
-            success: true,
-            jobId,
-            status: activeJob.status === "succeeded" ? "succeeded" : "processing",
-          });
-        }
+    if (!accepted && creditAdmin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin: creditAdmin,
+        job: startedJob,
+        reason: message,
+        publicError: "Architecture content generation could not start. Your credits were returned.",
+      });
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
       }
-    } else if (!accepted && creditAdmin && reservationId) {
-      await refundCredits(creditAdmin, reservationId, message);
     }
 
     console.error("Architecture stage start error:", error);

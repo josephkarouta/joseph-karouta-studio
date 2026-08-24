@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
+import { generationFetch } from "@/lib/client/generation-request";
 
 type Slide = {
   title: string;
@@ -83,13 +84,17 @@ export default function PowerPointWorkbench() {
       const token = data.session?.access_token;
       if (!token) throw new Error("Your session expired. Sign in again.");
 
-      const response = await fetch("/api/tools/powerpoint-generator/generate", {
+      const requestPayload = { title, audience, objective, source, slideCount: slides, tone, mode };
+      const response = await generationFetch("/api/tools/powerpoint-generator/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ title, audience, objective, source, slideCount: slides, tone, mode }),
+        body: JSON.stringify(requestPayload),
+      }, {
+        scope: "powerpoint-generator",
+        payload: requestPayload,
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Presentation generation failed.");
