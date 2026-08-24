@@ -148,16 +148,44 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Image generation could not start.";
 
-    if (!accepted && admin && reservationId) {
-      await refundCredits(admin, reservationId, message);
-    }
+    // A reference file is safe to remove when no durable job exists, or when
+    // this request successfully changed its still-queued job to failed below.
+    // If the worker already claimed the job, it may still need the reference.
+    let failedBeforeStart = !jobId;
     if (!accepted && admin && jobId) {
-      await admin
+      const { data: failedQueuedJob, error: cleanupError } = await admin
         .from("generation_jobs")
         .update({ status: "failed", error: "Image generation could not start. Your credits were returned.", completed_at: new Date().toISOString() })
-        .eq("id", jobId);
+        .eq("id", jobId)
+        .eq("status", "queued")
+        .select("id")
+        .maybeSingle();
+
+      if (cleanupError) {
+        console.error("Text-to-image start cleanup failed:", cleanupError.message);
+      } else if (failedQueuedJob) {
+        failedBeforeStart = true;
+        if (reservationId) await refundCredits(admin, reservationId, message);
+      } else {
+        const { data: activeJob } = await admin
+          .from("generation_jobs")
+          .select("status")
+          .eq("id", jobId)
+          .maybeSingle();
+
+        if (activeJob && ["processing", "succeeded"].includes(String(activeJob.status))) {
+          return NextResponse.json({
+            success: true,
+            jobId,
+            status: activeJob.status === "succeeded" ? "succeeded" : "processing",
+          });
+        }
+      }
+    } else if (!accepted && admin && reservationId) {
+      failedBeforeStart = true;
+      await refundCredits(admin, reservationId, message);
     }
-    if (!accepted && admin && referencePath) {
+    if (!accepted && admin && referencePath && failedBeforeStart) {
       await admin.storage.from("project-assets").remove([referencePath]);
     }
 

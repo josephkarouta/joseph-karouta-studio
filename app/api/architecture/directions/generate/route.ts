@@ -253,18 +253,40 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Architecture Direction generation could not start.";
 
-    if (!accepted && creditAdmin && reservationId) {
-      await refundCredits(creditAdmin, reservationId, message);
-    }
     if (!accepted && creditAdmin && jobId) {
-      await creditAdmin
+      const { data: failedQueuedJob, error: cleanupError } = await creditAdmin
         .from("generation_jobs")
         .update({
           status: "failed",
           error: "Architecture Direction generation could not start. Your credits were returned.",
           completed_at: new Date().toISOString(),
         })
-        .eq("id", jobId);
+        .eq("id", jobId)
+        .eq("status", "queued")
+        .select("id")
+        .maybeSingle();
+
+      if (cleanupError) {
+        console.error("Architecture direction start cleanup failed:", cleanupError.message);
+      } else if (failedQueuedJob && reservationId) {
+        await refundCredits(creditAdmin, reservationId, message);
+      } else if (!failedQueuedJob) {
+        const { data: activeJob } = await creditAdmin
+          .from("generation_jobs")
+          .select("status")
+          .eq("id", jobId)
+          .maybeSingle();
+
+        if (activeJob && ["processing", "succeeded"].includes(String(activeJob.status))) {
+          return NextResponse.json({
+            success: true,
+            jobId,
+            status: activeJob.status === "succeeded" ? "succeeded" : "processing",
+          });
+        }
+      }
+    } else if (!accepted && creditAdmin && reservationId) {
+      await refundCredits(creditAdmin, reservationId, message);
     }
 
     console.error("Architecture direction start error:", error);

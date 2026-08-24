@@ -74,29 +74,6 @@ function creditSystemError(error: unknown, fallback: string) {
   return new CreditError(message, "CREDIT_OPERATION_FAILED", 500);
 }
 
-async function releaseStaleReservations(admin: SupabaseClient, userId: string) {
-  const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-  const { data, error } = await admin
-    .from("credit_reservations")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("status", "reserved")
-    .lt("created_at", cutoff)
-    .limit(25);
-
-  if (error) throw creditSystemError(error, "Stale credit reservations could not be checked.");
-
-  for (const reservation of data || []) {
-    const { error: refundError } = await admin.rpc("heyy_refund_credits", {
-      p_reservation_id: reservation.id,
-      p_reason: "Automatically released after an incomplete generation.",
-    });
-    if (refundError) {
-      console.error("Unable to release stale credit reservation:", refundError);
-    }
-  }
-}
-
 export async function ensureCreditWallet({
   admin,
   userId,
@@ -106,8 +83,6 @@ export async function ensureCreditWallet({
   userId: string;
   user?: User | null;
 }): Promise<EnsuredCreditWallet> {
-  await releaseStaleReservations(admin, userId);
-
   const [subscriptionResult, walletResult, authUserResult] = await Promise.all([
     admin.from("user_subscriptions").select("*").eq("user_id", userId),
     admin

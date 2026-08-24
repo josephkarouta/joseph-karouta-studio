@@ -144,16 +144,8 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error ? error.message : "Brand workspace generation could not start.";
 
-    if (!accepted && admin && reservationId) {
-      try {
-        await refundCredits(admin, reservationId, message);
-      } catch (refundError) {
-        console.error("Brand generation start refund failed:", refundError);
-      }
-    }
-
     if (!accepted && admin && jobId) {
-      await admin
+      const { data: failedQueuedJob, error: cleanupError } = await admin
         .from("generation_jobs")
         .update({
           status: "failed",
@@ -161,7 +153,31 @@ export async function POST(request: Request) {
           completed_at: new Date().toISOString(),
         })
         .eq("id", jobId)
-        .eq("status", "queued");
+        .eq("status", "queued")
+        .select("id")
+        .maybeSingle();
+
+      if (cleanupError) {
+        console.error("Brand generation start cleanup failed:", cleanupError.message);
+      } else if (failedQueuedJob && reservationId) {
+        await refundCredits(admin, reservationId, message);
+      } else if (!failedQueuedJob) {
+        const { data: activeJob } = await admin
+          .from("generation_jobs")
+          .select("status")
+          .eq("id", jobId)
+          .maybeSingle();
+
+        if (activeJob && ["processing", "succeeded"].includes(String(activeJob.status))) {
+          return NextResponse.json({
+            success: true,
+            jobId,
+            status: activeJob.status === "succeeded" ? "succeeded" : "processing",
+          });
+        }
+      }
+    } else if (!accepted && admin && reservationId) {
+      await refundCredits(admin, reservationId, message);
     }
 
     console.error("Brand Studio generation start error:", error);
