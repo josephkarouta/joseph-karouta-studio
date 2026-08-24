@@ -189,15 +189,46 @@ export default function DigitalAdaptationsWorkbench() {
           formats: selectedFormats.map(({ id, width, height, family }) => ({ id, width, height, family })),
         },
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Digital adaptations failed.");
-      setResult(payload);
+      const payload = await readJsonResponse(response);
+      if (!response.ok) throw new Error(payload.error || "Digital adaptations could not start.");
+      if (payload.status === "succeeded" && Array.isArray(payload.outputs)) {
+        setResult(payload);
+      } else {
+        await poll(String(payload.jobId || ""), token);
+      }
       await refreshAccount();
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Digital adaptations failed.");
+      await refreshAccount();
     } finally {
       setLoading(false);
     }
+  }
+
+  async function poll(jobId: string, token: string) {
+    if (!jobId) throw new Error("Digital adaptations job could not be started.");
+
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      await delay(attempt === 0 ? 1200 : 3000);
+      const response = await fetch(`/api/tools/digital-adaptations/status?job=${encodeURIComponent(jobId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const payload = await readJsonResponse(response);
+      if (!response.ok) throw new Error(payload.error || "Could not check digital adaptations status.");
+      if (payload.status === "failed") {
+        throw new Error(payload.error || "Digital adaptations failed. Your credits were returned.");
+      }
+      if (payload.status === "succeeded") {
+        if (!Array.isArray(payload.outputs) || !payload.outputs.length) {
+          throw new Error("The generated adaptations could not be loaded.");
+        }
+        setResult(payload);
+        return;
+      }
+    }
+
+    throw new Error("Your adaptations are still processing. They will remain available in Assets when completed.");
   }
 
   async function downloadOutput(output: AdaptationOutput) {
@@ -360,4 +391,25 @@ export default function DigitalAdaptationsWorkbench() {
       </GlassCard>
     </div>
   );
+}
+
+async function readJsonResponse(response: Response): Promise<any> {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (/inactivity timeout|gateway timeout|function.*timeout/i.test(text)) {
+      return { error: "The generation service timed out before the background job could start. Please try again." };
+    }
+    return {
+      error: response.ok
+        ? "The server returned an invalid response."
+        : `Digital adaptations request failed (${response.status}).`,
+    };
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

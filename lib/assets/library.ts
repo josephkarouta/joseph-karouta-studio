@@ -131,11 +131,31 @@ function inferPreviewFromPayload(row: any) {
   return stringValue(...candidates) || null;
 }
 
-async function signedUrl(admin: SupabaseClient, bucket: string, path: unknown, seconds = 60 * 20) {
-  if (typeof path !== "string" || !path.trim()) return null;
-  const { data, error } = await admin.storage.from(bucket).createSignedUrl(path, seconds);
-  if (error || !data?.signedUrl) return null;
-  return data.signedUrl;
+async function signedUrlMap(
+  admin: SupabaseClient,
+  bucket: string,
+  paths: unknown[],
+  seconds = 60 * 20,
+) {
+  const uniquePaths = Array.from(new Set(paths.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))));
+  const result = new Map<string, string>();
+
+  // Supabase can sign a batch in one request. The previous implementation
+  // signed every file serially, which made larger libraries exceed Netlify's
+  // request window before the page received any data.
+  for (let index = 0; index < uniquePaths.length; index += 100) {
+    const batch = uniquePaths.slice(index, index + 100);
+    const { data, error } = await admin.storage.from(bucket).createSignedUrls(batch, seconds);
+    if (error) {
+      console.error(`Assets Library could not sign a ${bucket} batch:`, error.message);
+      continue;
+    }
+    for (const item of data || []) {
+      if (item.path && item.signedUrl) result.set(String(item.path), String(item.signedUrl));
+    }
+  }
+
+  return result;
 }
 
 function mimeFromUrl(url: string | null, fallback?: unknown) {
@@ -158,28 +178,33 @@ function applyOverride(item: AssetLibraryItem, override?: OverrideRow) {
 
 export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
   const [brandsRes, architectureProjectsRes, studioProjectsRes, assetsRes, architectureVisualsRes, architectureDirectionsRes, architectureConceptsRes, architectureDocumentsRes, jobsRes, overridesRes] = await Promise.all([
-    admin.from("brand_projects").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
-    admin.from("architecture_projects").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
-    admin.from("studio_projects").select("*").eq("user_id", userId).order("updated_at", { ascending: false }),
-    admin.from("project_assets").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(1000),
-    admin.from("architecture_visuals").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(500),
-    admin.from("architecture_directions").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(250),
-    admin.from("architecture_concepts").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(250),
-    admin.from("architecture_documents").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(500),
-    admin.from("production_jobs").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(500),
+    admin.from("brand_projects").select("id,project_name,updated_at").eq("user_id", userId).order("updated_at", { ascending: false }),
+    admin.from("architecture_projects").select("id,project_name,updated_at").eq("user_id", userId).order("updated_at", { ascending: false }),
+    admin.from("studio_projects").select("id,studio,project_name,updated_at").eq("user_id", userId).order("updated_at", { ascending: false }),
+    admin.from("project_assets").select("id,project_id,studio,asset_type,title,payload,file_url,thumbnail_url,metadata,created_at,updated_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(1000),
+    admin.from("architecture_visuals").select("id,project_id,visual_type,title,image_url,storage_path,is_approved,metadata,created_at,updated_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(500),
+    admin.from("architecture_directions").select("id,project_id,direction_number,title,image_url,image_storage_path,is_selected,generation_json,created_at,updated_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(250),
+    admin.from("architecture_concepts").select("id,project_id,title,image_url,generation_json,created_at,updated_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(250),
+    admin.from("architecture_documents").select("id,project_id,category,filename,storage_path,mime_type,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(500),
+    admin.from("production_jobs").select("id,project_id,project_name,studio,service,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(500),
     admin.from("asset_library_overrides").select("source_key,display_title,archived_at,hidden_at").eq("user_id", userId).limit(2000),
   ]);
 
   const brands = brandsRes.data || [];
   const architectureProjects = architectureProjectsRes.data || [];
   const studioProjects = studioProjectsRes.data || [];
+  const architectureSignedUrls = await signedUrlMap(admin, "architecture-files", [
+    ...(architectureVisualsRes.data || []).map((row: any) => row.storage_path),
+    ...(architectureDirectionsRes.data || []).map((row: any) => row.image_storage_path),
+    ...(architectureDocumentsRes.data || []).map((row: any) => row.storage_path),
+  ]);
 
   const maps: ProjectMaps = {
-    brand: new Map(brands.map((row: any) => [String(row.id), stringValue(row.business_name, row.project_name, row.name) || "Brand project"])),
-    architecture: new Map(architectureProjects.map((row: any) => [String(row.id), stringValue(row.project_name, row.name) || "Architecture project"])),
+    brand: new Map(brands.map((row: any) => [String(row.id), stringValue(row.project_name) || "Brand project"])),
+    architecture: new Map(architectureProjects.map((row: any) => [String(row.id), stringValue(row.project_name) || "Architecture project"])),
     generic: new Map(studioProjects.map((row: any) => {
       const studio = normalizeStudio(row.studio) === "marketing" ? "marketing" : "interior";
-      return [String(row.id), { name: stringValue(row.project_name, row.name) || `${humanize(studio)} project`, studio }];
+      return [String(row.id), { name: stringValue(row.project_name) || `${humanize(studio)} project`, studio }];
     })),
   };
 
@@ -196,7 +221,7 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
   const items: AssetLibraryItem[] = [];
 
   for (const row of assetsRes.data || []) {
-    const studio = normalizeStudio(row.studio || row.project_type || row.metadata?.studio);
+    const studio = normalizeStudio(row.studio || row.metadata?.studio);
     const projectId = row.project_id ? String(row.project_id) : null;
     const genericProject = projectId ? maps.generic.get(projectId) : undefined;
     const resolvedStudio = studio === "other" && genericProject ? genericProject.studio : studio;
@@ -223,7 +248,7 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
       assetType,
       assetTypeLabel: humanize(assetType),
       status,
-      version: numberValue(row.version || metadata.version),
+      version: numberValue(metadata.version),
       productionReady: status === "Approved" || status === "Final" || metadata.production_ready === true,
       archived: false,
       createdAt: row.created_at || null,
@@ -240,7 +265,7 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
   for (const row of architectureVisualsRes.data || []) {
     const projectId = String(row.project_id || "");
     const storagePath = stringValue(row.storage_path);
-    const previewUrl = storagePath ? await signedUrl(admin, "architecture-files", storagePath) : stringValue(row.image_url) || null;
+    const previewUrl = storagePath ? architectureSignedUrls.get(storagePath) || stringValue(row.image_url) || null : stringValue(row.image_url) || null;
     const metadata = asObject(row.metadata);
     const assetType = `architecture_${String(row.visual_type || "visual")}`;
     const sourceKey = `architecture_visual:${row.id}`;
@@ -260,7 +285,7 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
   for (const row of architectureDirectionsRes.data || []) {
     const projectId = String(row.project_id || "");
     const storagePath = stringValue(row.image_storage_path);
-    const previewUrl = storagePath ? await signedUrl(admin, "architecture-files", storagePath) : stringValue(row.image_url) || null;
+    const previewUrl = storagePath ? architectureSignedUrls.get(storagePath) || stringValue(row.image_url) || null : stringValue(row.image_url) || null;
     if (!previewUrl) continue;
     const sourceKey = `architecture_direction:${row.id}`;
     const status = row.is_selected ? "Approved" : "Draft";
@@ -296,7 +321,7 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
     const projectId = String(row.project_id || "");
     const path = stringValue(row.storage_path);
     if (!path) continue;
-    const previewUrl = await signedUrl(admin, "architecture-files", path);
+    const previewUrl = architectureSignedUrls.get(path) || null;
     const sourceKey = `architecture_document:${row.id}`;
     const item = applyOverride({
       sourceKey, sourceKind: "architecture_document", sourceId: String(row.id), studio: "architecture", projectId,
@@ -312,15 +337,16 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
   const jobs = jobsRes.data || [];
   const jobIds = jobs.map((job: any) => String(job.id));
   if (jobIds.length) {
-    const { data: deliverables } = await admin.from("production_deliverables").select("*").in("production_job_id", jobIds).eq("client_visible", true).order("uploaded_at", { ascending: false }).limit(1000);
+    const { data: deliverables } = await admin.from("production_deliverables").select("id,production_job_id,storage_path,original_filename,filename,mime_type,version,published_at,uploaded_at,created_at").in("production_job_id", jobIds).eq("client_visible", true).order("uploaded_at", { ascending: false }).limit(1000);
     const jobMap = new Map(jobs.map((job: any) => [String(job.id), job]));
+    const productionSignedUrls = await signedUrlMap(admin, "production-files", (deliverables || []).map((row: any) => row.storage_path));
     for (const row of deliverables || []) {
       const job: any = jobMap.get(String(row.production_job_id));
       if (!job) continue;
       const projectId = job.project_id ? String(job.project_id) : null;
       const studio = normalizeStudio(job.studio);
       const path = stringValue(row.storage_path);
-      const previewUrl = path ? await signedUrl(admin, "production-files", path) : null;
+      const previewUrl = path ? productionSignedUrls.get(path) || null : null;
       const sourceKey = `production_deliverable:${row.id}`;
       const projectName = stringValue(job.project_name)
         || (projectId ? (studio === "brand" ? maps.brand.get(projectId) : studio === "architecture" ? maps.architecture.get(projectId) : maps.generic.get(projectId)?.name) : "")
@@ -330,10 +356,10 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
         projectName, projectHref: projectHref(studio, projectId, true),
         title: stringValue(row.original_filename, row.filename) || "Production Deliverable", originalTitle: stringValue(row.original_filename, row.filename) || "Production Deliverable",
         assetType: "production_deliverable", assetTypeLabel: "Production Final", status: "Final",
-        version: numberValue(row.version || row.version_number), productionReady: true, archived: false,
+        version: numberValue(row.version), productionReady: true, archived: false,
         createdAt: row.published_at || row.uploaded_at || row.created_at || null, updatedAt: row.published_at || row.uploaded_at || row.created_at || null,
         previewUrl, mimeType: stringValue(row.mime_type) || mimeFromUrl(previewUrl), locked: true, reusable: false,
-        metadata: { productionJobId: row.production_job_id, storagePath: path, service: job.service || job.service_id || null },
+        metadata: { productionJobId: row.production_job_id, storagePath: path, service: job.service || null },
       }, overrideMap.get(sourceKey));
       if (!item.metadata.libraryHidden) items.push(item);
     }

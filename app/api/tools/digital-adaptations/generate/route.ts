@@ -1,109 +1,40 @@
 import "server-only";
-import { createHash } from "node:crypto";
+
+import { createHash, createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
-import { toFile } from "openai";
-import sharp from "sharp";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
 import { CreditError } from "@/lib/credits/server";
 import { CREDIT_COSTS } from "@/lib/credits/config";
-import { runSynchronousGenerationJob } from "@/lib/generation-jobs/synchronous";
-import { getOpenAI } from "@/lib/ai/openai-server";
-import { storeGeneratedAsset } from "@/lib/assets-server";
 import {
-  ADAPTATION_FAMILY_LABELS,
-  type AdaptationFamily,
+  cleanupGenerationStart,
+  isActiveGenerationStatus,
+  startGenerationJob,
+  type GenerationJobStart,
+} from "@/lib/generation-jobs/server";
+import { normalizeDigitalAdaptationSource, processDigitalAdaptationsJob } from "@/lib/tools/digital-adaptations-job";
+import {
   type DigitalAdaptationFormat,
   uniqueFamilies,
   validateAdaptationFormat,
 } from "@/lib/tools/digital-adaptations";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
+const SOURCE_BUCKET = "project-assets";
 const MAX_SOURCE_BYTES = 4 * 1024 * 1024;
 const MAX_FORMATS = 24;
 const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
-function openAIOutputSize(family: AdaptationFamily): "1024x1024" | "1024x1536" | "1536x1024" {
-  if (family === "square") return "1024x1024";
-  if (family === "portrait" || family === "story") return "1024x1536";
-  return "1536x1024";
-}
-
-function cleanFileName(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 70) || "digital-adaptation";
-}
-
-async function mapWithConcurrency<T, R>(items: T[], concurrency: number, task: (item: T) => Promise<R>) {
-  const results = new Array<R>(items.length);
-  let cursor = 0;
-
-  async function worker() {
-    while (true) {
-      const index = cursor++;
-      if (index >= items.length) return;
-      results[index] = await task(items[index]);
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
-  return results;
-}
-
-async function normalizeSource(buffer: Buffer) {
-  const image = sharp(buffer, { failOn: "error" }).rotate();
-  const metadata = await image.metadata();
-  if (!metadata.width || !metadata.height) throw new Error("The uploaded file is not a valid image.");
-  if (metadata.width < 400 || metadata.height < 400) {
-    throw new Error("Upload a key visual that is at least 400 × 400 pixels.");
-  }
-  return image.png().toBuffer();
-}
-
-async function createAiFamilyMaster(source: Buffer, family: AdaptationFamily, notes: string) {
-  const prompt = `
-Adapt the supplied finished key visual into a ${ADAPTATION_FAMILY_LABELS[family]} for a professional digital campaign.
-
-Non-negotiable rules:
-- Preserve the existing brand identity, logo, colours, typography, product/person likeness and visual style.
-- Preserve all existing wording exactly. Do not rewrite, paraphrase, invent or add text.
-- Recompose and extend the environment/background where needed instead of simply stretching the design.
-- Keep the logo, headline, call-to-action and mandatory elements inside generous safe areas.
-- Maintain clear hierarchy and production-quality spacing.
-- Do not add mockup devices, watermarks, borders, extra logos or decorative copy.
-- Return a clean flat artwork adaptation, not a presentation mockup.
-
-Additional art-direction notes: ${notes || "Keep the original campaign intent and make the adaptation feel designed for the new aspect ratio."}
-`.trim();
-
-  const response = await getOpenAI().images.edit({
-    model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
-    image: await toFile(source, "main-key-visual.png", { type: "image/png" }),
-    prompt,
-    size: openAIOutputSize(family),
-    quality: "medium",
-    output_format: "png",
-  });
-
-  const base64 = response.data?.[0]?.b64_json;
-  if (!base64) throw new Error(`The image provider returned no ${family} adaptation.`);
-  return Buffer.from(base64, "base64");
-}
-
-async function resizeAiMaster(master: Buffer, format: DigitalAdaptationFormat) {
-  return sharp(master)
-    .resize(format.width, format.height, { fit: "cover", position: "attention" })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-}
-
 export async function POST(request: Request) {
+  let startedJob: GenerationJobStart | null = null;
+  let sourcePath: string | null = null;
+  let accepted = false;
+  let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
+
   try {
     const auth = await requireApiUser(request);
+    admin = auth.admin;
     const form = await request.formData();
     const sourceFile = form.get("source");
     const notes = String(form.get("notes") || "").trim().slice(0, 1200);
@@ -120,37 +51,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "The key visual must be 4 MB or smaller." }, { status: 400 });
     }
 
-    let rawFormats: unknown[] = [];
-    try {
-      const parsedFormats = JSON.parse(String(form.get("formats") || "[]"));
-      rawFormats = Array.isArray(parsedFormats) ? parsedFormats : [];
-    } catch {
-      return NextResponse.json({ error: "The selected format list is invalid." }, { status: 400 });
-    }
-
-    const formats = rawFormats
-      .map(validateAdaptationFormat)
-      .filter((item): item is DigitalAdaptationFormat => Boolean(item))
-      .slice(0, MAX_FORMATS);
-
+    const formats = readFormats(form.get("formats"));
     if (!formats.length) {
       return NextResponse.json({ error: "Select at least one digital size." }, { status: 400 });
     }
 
-    const source = await normalizeSource(Buffer.from(await sourceFile.arrayBuffer()));
+    const source = await normalizeDigitalAdaptationSource(Buffer.from(await sourceFile.arrayBuffer()));
     const sourceHash = createHash("sha256").update(source).digest("hex");
     const families = uniqueFamilies(formats);
     const creditAmount = families.length * CREDIT_COSTS.digitalAdaptationFamily;
+    const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+    sourcePath = `${auth.user.id}/tools/digital-adaptation-sources/${sourceHash}.png`;
 
-    const metadata = {
-      tool: "digital_adaptations",
-      adaptation_method: "ai_recompose",
-      project_id: projectId,
-      format_count: formats.length,
-      aspect_families: families,
-    };
-
-    const { result, job } = await runSynchronousGenerationJob({
+    startedJob = await startGenerationJob({
       admin: auth.admin,
       userId: auth.user.id,
       request,
@@ -161,81 +74,116 @@ export async function POST(request: Request) {
       provider: "openai",
       action: "digitalAdaptationFamily",
       amountOverride: creditAmount,
-      metadata,
+      metadata: {
+        tool: "digital_adaptations",
+        adaptation_method: "ai_recompose",
+        project_id: projectId,
+        format_count: formats.length,
+        aspect_families: families,
+        model,
+      },
       input: {
         sourceHash,
+        sourcePath,
+        sourceName: sourceFile.name,
         notes,
         projectId,
         projectName,
         formats,
         families,
-      },
-      publicError: "Digital adaptations could not be completed. Your credits were returned.",
-      work: async (generationJob) => {
-        const masters = new Map<AdaptationFamily, Buffer>();
-        const generatedMasters = await mapWithConcurrency(families, 2, async (family) => ({
-          family,
-          buffer: await createAiFamilyMaster(source, family, notes),
-        }));
-        generatedMasters.forEach(({ family, buffer }) => masters.set(family, buffer));
-
-        const outputs = await mapWithConcurrency(formats, 3, async (format) => {
-          const outputBuffer = await resizeAiMaster(masters.get(format.family)!, format);
-
-          const title = `${projectName} · ${format.label}`;
-          const asset = await storeGeneratedAsset({
-            admin: auth.admin,
-            userId: auth.user.id,
-            projectId,
-            studio: "ai_tools",
-            assetType: "digital_adaptation",
-            title,
-            buffer: outputBuffer,
-            extension: "png",
-            contentType: "image/png",
-            payload: {
-              adaptation_method: "ai_recompose",
-              format,
-              notes,
-              source_name: sourceFile.name,
-            },
-            metadata: {
-              tool: "digital_adaptations",
-              family: format.family,
-              width: format.width,
-              height: format.height,
-              credit_reservation_id: generationJob.reservationId,
-              model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
-            },
-          });
-
-          return {
-            id: format.id,
-            label: format.label,
-            platform: format.platform,
-            width: format.width,
-            height: format.height,
-            family: format.family,
-            fileName: `${cleanFileName(projectName)}-${cleanFileName(format.label)}-${format.width}x${format.height}.png`,
-            imageUrl: asset.file_url,
-            asset,
-          };
-        });
-
-        return { outputs, families };
+        model,
+        credits: creditAmount,
       },
     });
+
+    if (!startedJob.created && startedJob.status !== "queued") {
+      return NextResponse.json({
+        success: true,
+        jobId: startedJob.jobId,
+        status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        creditsReserved: startedJob.creditsReserved,
+      });
+    }
+
+    const { error: uploadError } = await auth.admin.storage
+      .from(SOURCE_BUCKET)
+      .upload(sourcePath, source, {
+        contentType: "image/png",
+        cacheControl: "3600",
+        upsert: true,
+      });
+    if (uploadError) throw new Error(`Source artwork upload failed: ${uploadError.message}`);
+
+    const origin = new URL(request.url).origin;
+    const signature = createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || "")
+      .update(`digital-adaptations:${startedJob.jobId}`)
+      .digest("hex");
+    const backgroundResponse = await fetch(`${origin}/.netlify/functions/digital-adaptations-background`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Heyy-Job-Signature": signature,
+      },
+      body: JSON.stringify({ jobId: startedJob.jobId }),
+      cache: "no-store",
+    }).catch(() => null);
+
+    if (backgroundResponse?.status === 202 || backgroundResponse?.ok) {
+      accepted = true;
+    } else if (["localhost", "127.0.0.1"].includes(new URL(request.url).hostname)) {
+      accepted = true;
+      await processDigitalAdaptationsJob(startedJob.jobId);
+    } else {
+      throw new Error(`Digital adaptations background generation could not start (${backgroundResponse?.status || "unavailable"}).`);
+    }
 
     return NextResponse.json({
       success: true,
-      ...result,
-      creditsUsed: job.creditsReserved,
-      reviewNote: "AI recomposition can affect small typography, logos or mandatory elements. Review every output before publishing.",
+      jobId: startedJob.jobId,
+      status: "processing",
+      creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {
-    console.error("Digital adaptations error:", error);
+    const message = error instanceof Error ? error.message : "Digital adaptations could not start.";
+
+    if (!accepted && admin && startedJob) {
+      const status = await cleanupGenerationStart({
+        admin,
+        job: startedJob,
+        reason: message,
+        publicError: "Digital adaptations could not start. Your credits were returned.",
+      });
+      if (startedJob.created && status === "failed" && sourcePath) {
+        await admin.storage.from(SOURCE_BUCKET).remove([sourcePath]);
+      }
+      if (!startedJob.created || isActiveGenerationStatus(status) || status === "succeeded") {
+        return NextResponse.json({
+          success: true,
+          jobId: startedJob.jobId,
+          status: status === "finalizing" || status === "queued" ? "processing" : status,
+          creditsReserved: startedJob.creditsReserved,
+        });
+      }
+    }
+
+    console.error("Digital adaptations start error:", error);
     if (error instanceof ApiAuthError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof CreditError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Digital adaptations failed." }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function readFormats(value: FormDataEntryValue | null) {
+  let rawFormats: unknown[] = [];
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    rawFormats = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+
+  return rawFormats
+    .map(validateAdaptationFormat)
+    .filter((item): item is DigitalAdaptationFormat => Boolean(item))
+    .slice(0, MAX_FORMATS);
 }
