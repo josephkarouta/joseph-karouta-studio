@@ -51,6 +51,20 @@ function normalizedPriceId(value: unknown) {
   return null;
 }
 
+type SchedulePriceItem = { price?: string | Stripe.Price };
+
+type SchedulePhaseLike = {
+  start_date?: number;
+  items?: SchedulePriceItem[] | { data?: SchedulePriceItem[] };
+};
+
+function schedulePhaseItems(phase: SchedulePhaseLike) {
+  const items = phase.items;
+  if (Array.isArray(items)) return items;
+  if (items && typeof items === "object" && Array.isArray(items.data)) return items.data;
+  return [] as SchedulePriceItem[];
+}
+
 function pendingPlanFromSchedule(
   schedule: Stripe.SubscriptionSchedule | null,
   currentPriceId: string | null | undefined,
@@ -60,13 +74,10 @@ function pendingPlanFromSchedule(
   }
 
   const current = String(currentPriceId || "");
-  const phases = (schedule.phases || []) as unknown as Array<{
-    start_date?: number;
-    items?: { data?: Array<{ price?: string | Stripe.Price }> };
-  }>;
+  const phases = (schedule.phases || []) as unknown as SchedulePhaseLike[];
 
   for (const phase of phases) {
-    const nextPrice = priceId(phase.items?.data?.[0]?.price);
+    const nextPrice = priceId(schedulePhaseItems(phase)[0]?.price);
     if (!nextPrice || nextPrice === current) continue;
     if (nextPrice === process.env.STRIPE_STARTER_PRICE_ID_USD) {
       return {

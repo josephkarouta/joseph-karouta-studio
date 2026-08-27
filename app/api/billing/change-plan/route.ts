@@ -16,12 +16,24 @@ export const runtime = "nodejs";
 
 type ChangeablePlan = Extract<PlanId, "starter" | "pro">;
 
+type ScheduleItem = {
+  price?: string | Stripe.Price;
+  quantity?: number | null;
+};
+
 type SchedulePhase = {
   start_date?: number;
   end_date?: number;
-  items?: { data?: Array<{ price?: string | Stripe.Price; quantity?: number | null }> };
+  items?: ScheduleItem[] | { data?: ScheduleItem[] };
   metadata?: Record<string, string>;
 };
+
+function phaseItems(phase: SchedulePhase) {
+  const items = phase.items;
+  if (Array.isArray(items)) return items;
+  if (items && typeof items === "object" && Array.isArray(items.data)) return items.data;
+  return [] as ScheduleItem[];
+}
 
 function priceId(value: string | Stripe.Price | undefined) {
   if (!value) return "";
@@ -58,7 +70,7 @@ function currentPhaseFor(schedule: Stripe.SubscriptionSchedule) {
 }
 
 function currentPhaseInput(phase: SchedulePhase, fallbackPriceId: string) {
-  const items = (phase.items?.data || [])
+  const items = phaseItems(phase)
     .map((item) => ({
       price: priceId(item.price) || fallbackPriceId,
       quantity: Math.max(1, Number(item.quantity || 1)),
