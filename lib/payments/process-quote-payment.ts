@@ -35,12 +35,15 @@ export async function processQuotePayment(
 ): Promise<QuotePaymentResult> {
   const quoteId = session.metadata?.quote_id;
 
-  console.log("[QUOTE PAYMENT] Session:", session.id);
-  console.log("[QUOTE PAYMENT] Metadata:", session.metadata);
-
+  // This helper is called for checkout.session.completed events in general.
+  // Only label/log the event as a quote payment once it actually contains a
+  // quote_id; subscription and credit-pack sessions are handled elsewhere.
   if (!quoteId) {
     return { handled: false };
   }
+
+  console.log("[QUOTE PAYMENT] Session:", session.id);
+  console.log("[QUOTE PAYMENT] Metadata:", session.metadata);
 
   const { data: quote, error: quoteError } = await supabase
     .from("workspace_quotes")

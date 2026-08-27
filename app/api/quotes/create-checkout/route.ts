@@ -73,8 +73,7 @@ export async function POST(request: NextRequest) {
       service: quote.service,
       studio: quote.studio,
     });
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    const baseUrl = new URL(request.url).origin;
     const successPath = getReturnPath(quote, "success");
     const cancelPath = getReturnPath(quote, "cancelled");
 

@@ -27,11 +27,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const requestOrigin = new URL(request.url).origin;
-    const configuredSiteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "");
-    const siteUrl = requestOrigin.includes("localhost")
-      ? requestOrigin
-      : configuredSiteUrl || requestOrigin;
+    // Billing should always return to the exact site that opened the portal.
+    // Do not let a stale NEXT_PUBLIC_SITE_URL (for example localhost in a
+    // deployed environment) redirect customers away from the active site.
+    const siteUrl = new URL(request.url).origin;
     const session = await stripe.billingPortal.sessions.create({
       customer: customer.id,
       return_url: `${siteUrl}/billing?portal=returned`,

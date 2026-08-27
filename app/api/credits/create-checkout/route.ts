@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unable to create the Stripe customer." }, { status: 500 });
     }
 
-    const site = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+    const site = new URL(request.url).origin;
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
