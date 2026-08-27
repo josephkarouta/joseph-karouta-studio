@@ -588,7 +588,7 @@ function InteriorExperience() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Your session expired. Sign in again.");
-      await Promise.all(unique.map((context) => runInteriorImageGeneration(token, "main_space", "preview", context)));
+      await Promise.all(unique.map((context) => runInteriorImageGeneration(token, "main_space", "final", context)));
       await Promise.all([loadAssets(project.id), refreshAccount()]);
       selectWorkspaceTab("visuals");
     } catch (batchError) {
@@ -796,7 +796,7 @@ function InteriorExperience() {
                 approvingAssetId={approvingAssetId}
                 spacePlanReady={spacePlanReady}
                 onGenerate={(viewType, stage) => void generateImage(viewType, stage)}
-                onGenerateRoom={(viewType, context) => void generateImage(viewType, "preview", context)}
+                onGenerateRoom={(viewType, context) => void generateImage(viewType, "final", context)}
                 onGenerateRoomBatch={(contexts) => void generateRoomBatch(contexts)}
                 onApprove={(asset) => void approveAsset(asset)}
                 onEnlarge={(image) => setLightbox(image)}
@@ -1443,10 +1443,7 @@ function PlansSection({
             Generate the Furniture & Space Plan, approve it as the project source, then continue to the connected furniture plan, lighting plan and visuals. If you need dimensioned drawings, CAD or editable technical files, send the approved concept to Production.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <CreditPill credits={CREDIT_COSTS.interiorPreview} label="preview" />
-          <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="final" />
-        </div>
+        <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per plan" />
       </div>
 
       {spacePlanApproved && (
@@ -1539,13 +1536,10 @@ function VisualsSection({
           <Eyebrow>Interior visuals</Eyebrow>
           <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Create visuals from the approved space plan</h2>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Professional Final remains an optional higher-quality output rather than a required step.
+            As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Each Generate button creates the best-quality visual available.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <CreditPill credits={CREDIT_COSTS.interiorPreview} label="preview" />
-          <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="final" />
-        </div>
+        <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per visual" />
       </div>
 
       {!spacePlanReady && (
@@ -1773,7 +1767,7 @@ function ExistingDesignRoomVisualsSection({
               Each room is generated against one selected uploaded floor plan instead of the entire project at once. Approve the room's Main Concept before creating its alternate angle or feature detail.
             </p>
           </div>
-          <CreditPill credits={CREDIT_COSTS.interiorPreview} label="per concept view" />
+          <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per concept view" />
         </div>
         <div className="mt-5 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">
           Plan-guided visuals use the mapped room and selected uploaded plan as the primary spatial reference. They are concept imagery, not guaranteed exact 3D reconstructions.
@@ -1786,7 +1780,7 @@ function ExistingDesignRoomVisualsSection({
               <Button type="button" variant="secondary" onClick={() => setSelectedRooms(mappedRooms.map((item) => item.roomKey))} disabled={anyGenerating || selectedRooms.length === mappedRooms.length}>Select all rooms</Button>
               {selectedRooms.length > 0 && <Button type="button" variant="secondary" onClick={() => setSelectedRooms([])} disabled={anyGenerating}>Clear selection</Button>}
               <Button type="button" onClick={() => onGenerateRoomBatch(selectedContexts)} disabled={!selectedContexts.length || anyGenerating}>
-                <Sparkles size={15} /> Generate selected main concepts · {selectedContexts.length * 12} credits
+                <Sparkles size={15} /> Generate selected main concepts · {selectedContexts.length * CREDIT_COSTS.interiorProfessionalFinal} credits
               </Button>
             </>
           )}
@@ -1803,9 +1797,9 @@ function ExistingDesignRoomVisualsSection({
       ) : (
         <div className="space-y-5">
           {mappedRooms.map((context) => {
-            const mainAsset = getRoomVisualAsset(assets, context.roomKey, "main_space", "preview");
-            const alternateAsset = getRoomVisualAsset(assets, context.roomKey, "alternate_angle", "preview");
-            const detailAsset = getRoomVisualAsset(assets, context.roomKey, "focal_point", "preview");
+            const mainAsset = getRoomVisualAsset(assets, context.roomKey, "main_space", "final") || getRoomVisualAsset(assets, context.roomKey, "main_space", "preview");
+            const alternateAsset = getRoomVisualAsset(assets, context.roomKey, "alternate_angle", "final") || getRoomVisualAsset(assets, context.roomKey, "alternate_angle", "preview");
+            const detailAsset = getRoomVisualAsset(assets, context.roomKey, "focal_point", "final") || getRoomVisualAsset(assets, context.roomKey, "focal_point", "preview");
             const mainApproved = Boolean(mainAsset && isApprovedAsset(mainAsset));
             const batchGeneratingMain = generatingRoomKeys.includes(context.roomKey);
             const selected = selectedRooms.includes(context.roomKey);
@@ -1923,7 +1917,7 @@ function RoomVisualOutputCard({
         {locked && <p className="mt-3 rounded-xl bg-amber-500/10 p-2.5 text-[.65rem] font-bold text-amber-700 dark:text-amber-300">{lockedMessage}</p>}
         <div className="mt-4 grid gap-2">
           <Button type="button" className="w-full" onClick={onGenerate} disabled={locked || generating}>
-            <Sparkles size={14} /> {imageUrl ? "Regenerate concept" : "Generate concept"} · 12 credits
+            <Sparkles size={14} /> {imageUrl ? "Regenerate concept" : "Generate concept"} · {CREDIT_COSTS.interiorProfessionalFinal} credits
           </Button>
           {asset && (
             <Button type="button" className="w-full" variant={approved ? "secondary" : "primary"} onClick={() => onApprove(asset)} disabled={approved || approvingAssetId === asset.id || generating}>
@@ -1962,59 +1956,40 @@ function InteriorWorkflowCard({
   onApprove: (asset: ProjectAsset) => void;
   onEnlarge: (image: { url: string; title: string }) => void;
 }) {
-  const stages: GenerationStage[] = ["preview", "final"];
-  const initialStage = [...stages].reverse().find((stage) => Boolean(getInteriorAsset(assets, viewType, stage))) || stages[0];
-  const [selectedStage, setSelectedStage] = useState<GenerationStage>(initialStage);
-  useEffect(() => {
-    const best = [...stages].reverse().find((stage) => Boolean(getInteriorAsset(assets, viewType, stage)));
-    if (best && !getInteriorAsset(assets, viewType, selectedStage)) setSelectedStage(best);
-  }, [assets, viewType]);
-
-  const asset = getInteriorAsset(assets, viewType, selectedStage);
+  const asset = getInteriorAsset(assets, viewType, "final") || getInteriorAsset(assets, viewType, "preview") || getInteriorAsset(assets, viewType, "technical");
   const imageUrl = asset?.file_url || asset?.thumbnail_url || "";
-  const approvedAsset = stages
+  const approvedAsset = (["final", "preview", "technical"] as GenerationStage[])
     .map((stage) => getInteriorAsset(assets, viewType, stage))
     .find((candidate): candidate is ProjectAsset => Boolean(candidate && isApprovedAsset(candidate)));
-  const selectedStageApproved = Boolean(asset && isApprovedAsset(asset));
+  const assetApproved = Boolean(asset && isApprovedAsset(asset));
   const stageDependency = dependencyMessage;
-  const isGenerating = generating?.viewType === viewType && generating.stage === selectedStage;
+  const isGenerating = generating?.viewType === viewType && generating.stage === "final";
   const disabled = Boolean(generating) || Boolean(stageDependency);
-  const cost = selectedStage === "preview" ? 12 : 24;
+  const cost = CREDIT_COSTS.interiorProfessionalFinal;
 
   return (
     <article className={cx("overflow-hidden rounded-3xl border bg-[var(--surface)]", approvedAsset ? "border-emerald-400 shadow-[0_0_0_1px_rgba(16,185,129,.4)]" : "border-[var(--border)]")}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] p-3">
-        <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-1">
-          {stages.map((stage) => (
-            <button
-              key={stage}
-              type="button"
-              onClick={() => setSelectedStage(stage)}
-              className={cx("rounded-lg px-3 py-2 text-[.62rem] font-black transition", selectedStage === stage ? "bg-[var(--accent)] text-white" : "text-[var(--text-secondary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]")}
-            >
-              {stage === "preview" ? "Preview" : "Final"}
-            </button>
-          ))}
-        </div>
-        {approvedAsset && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[.62rem] font-black text-emerald-600"><CheckCircle2 size={13} /> Approved source: {stageName(assetStage(approvedAsset, viewType))}</span>}
+        <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1.5 text-[.62rem] font-black text-[var(--accent-strong)]">Best quality</span>
+        {approvedAsset && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[.62rem] font-black text-emerald-600"><CheckCircle2 size={13} /> Approved source</span>}
       </div>
 
       <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
         {imageUrl ? (
           <>
-            <img src={imageUrl} alt={`${title} ${selectedStage}`} className={cx("h-full w-full", kind === "plan" ? "object-contain p-3" : "object-cover")} />
-            <button type="button" onClick={() => onEnlarge({ url: imageUrl, title: `${title} — ${stageName(selectedStage)}` })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl border border-white/45 bg-black/55 px-3 py-2 text-[.65rem] font-black text-white backdrop-blur-md transition hover:bg-black/75">
+            <img src={imageUrl} alt={title} className={cx("h-full w-full", kind === "plan" ? "object-contain p-3" : "object-cover")} />
+            <button type="button" onClick={() => onEnlarge({ url: imageUrl, title })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl border border-white/45 bg-black/55 px-3 py-2 text-[.65rem] font-black text-white backdrop-blur-md transition hover:bg-black/75">
               <Maximize2 size={13} /> Enlarge
             </button>
           </>
         ) : (
           <div className="px-6 text-center">
             <ImageIcon size={30} className="mx-auto text-[var(--accent-strong)]" />
-            <p className="mt-4 text-sm font-black">{stageName(selectedStage)} not generated</p>
-            <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">This stage will use the previous approved project information.</p>
+            <p className="mt-4 text-sm font-black">{kind === "plan" ? "Plan" : "Visual"} not generated</p>
+            <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">Generation will use the approved project information.</p>
           </div>
         )}
-        {isGenerating && <ImageCardLoading title={`${title} — ${stageName(selectedStage)}`} />}
+        {isGenerating && <ImageCardLoading title={title} />}
       </div>
 
       <div className="p-5">
@@ -2022,14 +1997,12 @@ function InteriorWorkflowCard({
         <p className="mt-2 min-h-10 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{description}</p>
         {stageDependency && <p className="mt-3 rounded-xl bg-amber-500/10 p-3 text-[.68rem] font-bold leading-5 text-amber-700 dark:text-amber-300">{stageDependency}</p>}
         <div className="mt-5 grid gap-2 2xl:grid-cols-2">
-          <Button className="w-full" onClick={() => onGenerate(selectedStage)} disabled={disabled}>
-            {imageUrl ? <RefreshCcw size={15} /> : <Sparkles size={15} />} {kind === "plan"
-              ? `${imageUrl ? "Regenerate" : "Generate"} ${selectedStage === "preview" ? "Plan Preview" : "Professional Final"} · ${cost} credits`
-              : `${imageUrl ? "Regenerate" : "Generate"} ${stageName(selectedStage)} · ${cost} credits`}
+          <Button className="w-full" onClick={() => onGenerate("final")} disabled={disabled}>
+            {imageUrl ? <RefreshCcw size={15} /> : <Sparkles size={15} />} {`${imageUrl ? "Regenerate" : "Generate"} ${kind === "plan" ? "Plan" : "Visual"} · ${cost} credits`}
           </Button>
           {asset && (
-            <Button className="w-full" variant={selectedStageApproved ? "secondary" : "primary"} onClick={() => onApprove(asset)} disabled={selectedStageApproved || approvingAssetId === asset.id || Boolean(generating)}>
-              {approvingAssetId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {selectedStageApproved ? "Approved source" : kind === "plan" ? "Approve plan" : `Approve ${stageName(selectedStage)}`}
+            <Button className="w-full" variant={assetApproved ? "secondary" : "primary"} onClick={() => onApprove(asset)} disabled={assetApproved || approvingAssetId === asset.id || Boolean(generating)}>
+              {approvingAssetId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {assetApproved ? "Approved source" : kind === "plan" ? "Approve plan" : "Approve visual"}
             </Button>
           )}
         </div>
@@ -2124,7 +2097,10 @@ function DesignPackSection({ result, assets, workMode, existingDesign, onDownloa
   const approvedPlans = PLAN_VIEWS.filter((plan) => isAnyStageApproved(assets, plan.id)).length;
   const mappedRooms = existingDesign ? getMappedRoomContexts(assets) : [];
   const approvedRoomConcepts = existingDesign
-    ? mappedRooms.filter((room) => { const asset = getRoomVisualAsset(assets, room.roomKey, "main_space", "preview"); return Boolean(asset && isApprovedAsset(asset)); }).length
+    ? mappedRooms.filter((room) => {
+        const asset = getRoomVisualAsset(assets, room.roomKey, "main_space", "final") || getRoomVisualAsset(assets, room.roomKey, "main_space", "preview");
+        return Boolean(asset && isApprovedAsset(asset));
+      }).length
     : 0;
   const approvedVisuals = existingDesign ? approvedRoomConcepts : VISUALS.filter((visual) => isAnyStageApproved(assets, visual.id)).length;
   const visualTarget = existingDesign ? mappedRooms.length : VISUALS.length;
@@ -2648,10 +2624,6 @@ function isAssetApproved(assets: ProjectAsset[], viewType: InteriorImageType, st
 
 function isAnyStageApproved(assets: ProjectAsset[], viewType: InteriorImageType) {
   return (["technical", "preview", "final"] as GenerationStage[]).some((stage) => isAssetApproved(assets, viewType, stage));
-}
-
-function stageName(stage: GenerationStage) {
-  return stage === "technical" ? "Technical" : stage === "preview" ? "Preview" : "Professional Final";
 }
 
 type ProductReference = {

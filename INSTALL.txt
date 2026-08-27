@@ -1,8 +1,0 @@
-Heyy Studio Fix 44
-
-Install from the project root:
-  unzip -o Heyy_V13_Fix_44_Dark_Mode_And_Application_Approval.zip -d .
-  npx tsc --noEmit --pretty false
-  npm run build
-
-No SQL is required.

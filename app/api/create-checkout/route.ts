@@ -7,6 +7,7 @@ import {
   getStripe,
   hasManagedSubscription,
   resolveStripeCustomer,
+  validateStripeSubscriptionCatalog,
 } from "@/lib/billing/stripe";
 
 type SubscriptionPlan = "starter" | "pro";
@@ -36,6 +37,12 @@ export async function POST(request: Request) {
     }
 
     const stripe = getStripe();
+
+    // Fail closed if a stale sandbox/live Price ID still points at the old
+    // commercial amount, interval or a separate Stripe product. This keeps the
+    // customer-facing plan catalog and Stripe Checkout in lockstep.
+    await validateStripeSubscriptionCatalog(stripe);
+
     const { customer } = await resolveStripeCustomer({
       stripe,
       admin,

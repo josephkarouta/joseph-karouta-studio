@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { CreditError } from "@/lib/credits/server";
 import { startBrandImageJob } from "@/lib/brand/brand-image-job-start";
+import { getBrandApplicationCreditCost } from "@/lib/brand/application-visual-pricing";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
     }
 
     const provider = applicationProvider();
+    const creditCost = getBrandApplicationCreditCost(applicationId, body?.brief || {});
     const result = await startBrandImageJob({
       request,
       projectId: String(project.id),
@@ -46,9 +48,11 @@ export async function POST(request: Request) {
       action: "brandApplicationVisual",
       provider,
       input: body,
+      amountOverride: creditCost,
       metadata: {
         application_id: applicationId,
         image_provider: provider,
+        credit_cost: creditCost,
       },
     });
     return NextResponse.json(result);

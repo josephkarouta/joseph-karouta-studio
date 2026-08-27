@@ -21,7 +21,7 @@ import {
   getApplicationDeliverables,
   normaliseBrandJourney,
 } from "@/lib/brand/project-templates";
-import { CREDIT_COSTS } from "@/lib/credits/config";
+import { getBrandApplicationCreditCost } from "@/lib/brand/application-visual-pricing";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { runBrandImageJob } from "@/services/workspace/brand-image-job.service";
 
@@ -280,6 +280,7 @@ export default function BrandApplicationsWorkspace({
     ? brand.applicationPlan.find((item: any) => item.id === active?.id)
     : null;
   const brief = active ? journey.applicationBriefs[active.id] || {} : {};
+  const activeCreditCost = getBrandApplicationCreditCost(active?.id, brief);
   const briefEntries = active
     ? Object.entries(brief).filter(([, value]) =>
         typeof value === "string" ? value.trim() : Boolean(value),
@@ -379,7 +380,7 @@ export default function BrandApplicationsWorkspace({
         ),
         selectedDirectionTitle:
           selectedDirection?.title || selectedDirection?.conceptName || null,
-        creditsUsed: data.creditsUsed || CREDIT_COSTS.brandApplicationVisual,
+        creditsUsed: data.creditsUsed || activeCreditCost,
         generatedAt: new Date().toISOString(),
         approved: false,
         approval: null,
@@ -419,7 +420,7 @@ export default function BrandApplicationsWorkspace({
         id: saved.id,
         title: `${active.label} visual generated`,
         description:
-          "An AI concept preview was saved. Expert production remains available for polished final files.",
+          "An AI visual concept was saved. Expert production remains available for polished final files.",
         createdAt: "Now",
       });
       await refreshAccount();
@@ -786,7 +787,7 @@ export default function BrandApplicationsWorkspace({
                         </h4>
                         <p className="mt-2 max-w-md text-sm font-semibold leading-6 text-slate-500">
                           Heyy Studio will use the saved brand system, logo or creative
-                          direction, and this application brief to create a visual preview.
+                          direction, and this application brief to create the visual.
                         </p>
                       </div>
                     )}
@@ -798,7 +799,7 @@ export default function BrandApplicationsWorkspace({
                         <WandSparkles size={21} />
                       </span>
                       <p className="mt-5 text-[9px] font-black uppercase tracking-[0.16em] text-violet-600">
-                        AI concept preview
+                        AI visual concept
                       </p>
                       <h4 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">
                         See the application before production
@@ -863,17 +864,17 @@ export default function BrandApplicationsWorkspace({
                         )}
                         {active.id === "business-card"
                           ? activeOutputs.length
-                            ? "Regenerate Preview"
-                            : "Generate Preview"
+                            ? "Regenerate Visual"
+                            : "Generate Visual"
                           : active.id === "social-system"
                             ? activeOutputs.length
-                              ? "Regenerate Previews"
-                              : "Generate Previews"
+                              ? "Regenerate Visuals"
+                              : "Generate Visuals"
                             : activeOutputs.length
                               ? "Regenerate Assets"
                               : "Generate Assets"}
                         <span className="rounded-full bg-white/15 px-2 py-1 text-[9px]">
-                          {CREDIT_COSTS.brandApplicationVisual} credits
+                          {activeCreditCost} credits
                         </span>
                       </button>
 
@@ -889,7 +890,7 @@ export default function BrandApplicationsWorkspace({
                             }
                             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-violet-300 bg-white px-4 text-[10px] font-black text-violet-700 transition hover:bg-violet-50"
                           >
-                            <Maximize2 size={14} /> Preview
+                            <Maximize2 size={14} /> Enlarge
                           </button>
                           <button
                             type="button"

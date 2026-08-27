@@ -1,5 +1,5 @@
 import ToolFrame from "@/components/tools/ToolFrame";
 import PowerPointWorkbench from "@/components/tools/PowerPointWorkbench";
-import { CREDIT_COSTS } from "@/lib/credits/config";
+import { CREDIT_COSTS, POWERPOINT_INCLUDED_SLIDES } from "@/lib/credits/config";
 export const metadata={title:"PowerPoint Generator"};
-export default function PowerPointPage(){return <ToolFrame path="/tools/powerpoint-generator" title="PowerPoint Generator" eyebrow="Structured AI + native PPTX" description="Turn a brief or source document into a clear slide story and download a native, editable PowerPoint file." iconName="presentation" accent="#ea580c" soft="rgba(234,88,12,.12)" creditLabel={`${CREDIT_COSTS.powerpointDraft}–${CREDIT_COSTS.powerpointFull} credits`}><PowerPointWorkbench/></ToolFrame>;}
+export default function PowerPointPage(){return <ToolFrame path="/tools/powerpoint-generator" title="PowerPoint Generator" eyebrow="Research + native PPTX" description="Turn source material or a research brief into a professionally structured, visually directed and editable PowerPoint deck." iconName="presentation" accent="#ea580c" soft="rgba(234,88,12,.12)" creditLabel={`${CREDIT_COSTS.powerpointFull} credits up to ${POWERPOINT_INCLUDED_SLIDES} slides`}><PowerPointWorkbench/></ToolFrame>;}

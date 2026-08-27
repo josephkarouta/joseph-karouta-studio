@@ -65,6 +65,53 @@ async function applyMonthlyPlanCredits({
   });
 }
 
+async function expireSubscriptionPlanCredits({
+  userId,
+  subscription,
+}: {
+  userId: string;
+  subscription: Stripe.Subscription;
+}) {
+  const period = subscriptionPeriod(subscription);
+  const endedAtSeconds =
+    subscription.canceled_at ||
+    period.end ||
+    Math.floor(Date.now() / 1000);
+  const periodStart = new Date(endedAtSeconds * 1000);
+  const periodEnd = new Date(periodStart);
+  periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+
+  const applied = await applyMonthlyCredits(supabase, {
+    userId,
+    plan: "free",
+    amount: 0,
+    periodStart: periodStart.toISOString(),
+    periodEnd: periodEnd.toISOString(),
+    grantKey: `stripe-ended:${subscription.id}:${periodStart.toISOString()}`,
+    source: "subscription_ended",
+    metadata: {
+      stripe_subscription_id: subscription.id,
+      previous_plan: planFromSubscription(subscription),
+      subscription_status: subscription.status,
+    },
+  });
+
+  if (applied) return;
+
+  const { data, error } = await supabase
+    .from("credit_wallets")
+    .select("monthly_balance,reserved_balance")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) throw error;
+  if (Number(data?.monthly_balance || 0) === 0) return;
+
+  throw new Error(
+    `Subscription credits are waiting for ${Number(data?.reserved_balance || 0)} reserved credits to settle.`,
+  );
+}
+
 function currentCalendarPeriod() {
   const start = new Date();
   start.setUTCDate(1);
@@ -199,7 +246,14 @@ export async function POST(req: Request) {
       event.type === "customer.subscription.updated"
     ) {
       const subscription = event.data.object as Stripe.Subscription;
-      await syncStripeSubscription(subscription);
+      const { userId } = await syncStripeSubscription(subscription);
+      if (
+        userId &&
+        (subscription.status === "unpaid" ||
+          subscription.status === "incomplete_expired")
+      ) {
+        await expireSubscriptionPlanCredits({ userId, subscription });
+      }
     }
 
     if (event.type === "customer.subscription.deleted") {
@@ -218,7 +272,7 @@ export async function POST(req: Request) {
           })
           .eq("user_id", userId);
         if (error) throw error;
-        await applyMonthlyPlanCredits({ userId, planValue: "free", subscription: null });
+        await expireSubscriptionPlanCredits({ userId, subscription });
       }
     }
 

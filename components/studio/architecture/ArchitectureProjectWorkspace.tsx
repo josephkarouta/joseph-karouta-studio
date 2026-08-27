@@ -1948,16 +1948,14 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     } = {},
   ) {
     if (!user) return;
-    const quality = options.quality || "preview";
+    const quality = options.quality || "final";
     const planMode = options.planMode || "technical";
     const stateKey = `${targetType}-${targetId}`;
     setRegeneratingImage(stateKey);
     setGenerationStatus(
       planMode === "technical"
         ? "Generating the detailed connected concept plan"
-        : quality === "final"
-          ? "Generating the professional final image"
-          : "Generating a lightweight preview",
+        : "Generating the visual",
     );
     setError("");
     setMessage("");
@@ -2063,10 +2061,8 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
       }
       showMessage(
         planMode === "technical"
-          ? "Detailed concept plan generated and saved. Review and approve it before generating previews or project visuals."
-          : quality === "final"
-            ? "Professional final generated and saved with Visual Continuity."
-            : "Preview generated, optimised and saved with Visual Continuity.",
+          ? "Detailed concept plan generated and saved. Review and approve it before generating rendered plans or project visuals."
+          : "Visual generated and saved with Visual Continuity.",
       );
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : "Architecture image could not be generated.");
@@ -4216,20 +4212,11 @@ function DirectionsTab({
                       type="button"
                       className="direction-secondary-action"
                       disabled={generatingDirection !== null || regeneratingImage !== null || !direction.is_selected}
-                      onClick={() => onRegenerateImage(direction.id, "preview")}
-                    >
-                      {regeneratingImage === `direction-${direction.id}`
-                        ? "Generating Preview..."
-                        : direction.is_selected ? `${direction.image_url ? "Regenerate" : "Generate"} Selected Visual · ${ARCHITECTURE_CREDIT_COSTS.directionPreview} credits` : "Select Direction First"}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="direction-secondary-action professional-final-action"
-                      disabled={generatingDirection !== null || regeneratingImage !== null || !direction.is_selected}
                       onClick={() => onRegenerateImage(direction.id, "final")}
                     >
-                      High Quality Direction Concept · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
+                      {regeneratingImage === `direction-${direction.id}`
+                        ? "Generating Visual..."
+                        : direction.is_selected ? `${direction.image_url ? "Regenerate" : "Generate"} Visual · ${ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits` : "Select Direction First"}
                     </button>
 
                     <button
@@ -4437,19 +4424,11 @@ function ConceptTab({
             type="button"
             className="image-regenerate-button"
             disabled={regeneratingImage !== null}
-            onClick={() => onRegenerateImage(concept.id, "preview")}
-          >
-            {regeneratingImage === `concept-${concept.id}`
-              ? "Generating Preview..."
-              : `${concept.image_url ? "Regenerate" : "Generate"} Preview · ${ARCHITECTURE_CREDIT_COSTS.conceptPreview} credits`}
-          </button>
-          <button
-            type="button"
-            className="image-regenerate-button professional-final-action"
-            disabled={regeneratingImage !== null}
             onClick={() => onRegenerateImage(concept.id, "final")}
           >
-            Professional Final · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
+            {regeneratingImage === `concept-${concept.id}`
+              ? "Generating Visual..."
+              : `${concept.image_url ? "Regenerate" : "Generate"} Visual · ${ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits`}
           </button>
         </div>
       </div>
@@ -5070,7 +5049,7 @@ function PlanVisualCard({
       <div className="plan-card-toolbar">
         <div className="plan-view-tabs">
           {!renderedOnly && <button type="button" data-active={viewMode === "technical"} disabled={!technicalUrl} onClick={() => setViewMode("technical")}>{foundationSheet ? "Coordinated sheet" : canonicalFloor ? "Canonical plan" : sourceLocked ? "Faithful redraw" : "Detailed plan"}</button>}
-          {!lockedCanonicalPlanView && <button type="button" data-active={viewMode === "rendered"} disabled={!renderedUrl} onClick={() => setViewMode("rendered")}>Preview</button>}
+          {!lockedCanonicalPlanView && <button type="button" data-active={viewMode === "rendered"} disabled={!renderedUrl} onClick={() => setViewMode("rendered")}>Rendered plan</button>}
         </div>
         <button type="button" className="plan-select-toggle" data-selected={selected} disabled={lockedCanonicalPlanView || Boolean(generationLockReason)} onClick={onToggleSelected}>{lockedCanonicalPlanView ? "Foundation locked" : generationLockReason ? "Locked" : selected ? "Selected for batch ✓" : "Select for batch"}</button>
       </div>
@@ -5081,7 +5060,7 @@ function PlanVisualCard({
       )}
       {loading && <ImageGenerationOverlay title={viewMode === "rendered" ? "Generating rendered plan" : "Generating detailed concept plan"} detail={generationStatus} />}
       <div className="plan-card-copy">
-        <span>{foundationSheet ? "One coordinated multi-floor Plan Foundation" : canonicalFloor ? "Internal canonical floor" : viewMode === "rendered" ? "Rendered Preview" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
+        <span>{foundationSheet ? "One coordinated multi-floor Plan Foundation" : canonicalFloor ? "Internal canonical floor" : viewMode === "rendered" ? "Rendered Plan" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
         <h3>{visual.title || visual.visual_type}</h3>
       </div>
       <div className="plan-card-actions">
@@ -5113,17 +5092,12 @@ function PlanVisualCard({
         </button>}
         {renderedOnly && !plansReady && (
           <button type="button" className="image-regenerate-button plan-generation-locked" disabled>
-            Approve Required Floor Plans to Unlock Preview
+            Approve Required Floor Plans to Unlock Rendered Plan
           </button>
         )}
         {!lockedCanonicalPlanView && (renderedOnly ? plansReady : Boolean(technicalUrl && visual.is_approved)) && (
-          <button type="button" className="image-regenerate-button" disabled={anyGenerating} onClick={() => { setViewMode("rendered"); void onGenerate("rendered", "preview"); }}>
-            {renderedPreviewUrl ? "Regenerate Preview" : "Generate Preview"} · {ARCHITECTURE_CREDIT_COSTS.renderedPlanPreview} credits
-          </button>
-        )}
-        {renderedUrl && (
-          <button type="button" className="image-regenerate-button professional-final-action" disabled={anyGenerating} onClick={() => { setViewMode("rendered"); void onGenerate("rendered", "final"); }}>
-            Professional Final · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
+          <button type="button" className="image-regenerate-button" disabled={anyGenerating} onClick={() => { setViewMode("rendered"); void onGenerate("rendered", "final"); }}>
+            {renderedUrl ? "Regenerate Rendered Plan" : "Generate Rendered Plan"} · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
           </button>
         )}
       </div>
@@ -5313,19 +5287,11 @@ function VisualsTab({
                     type="button"
                     className="image-regenerate-button"
                     disabled={regeneratingImage !== null}
-                    onClick={() => onRegenerateImage(visual.id, "preview")}
-                  >
-                    {regeneratingImage === `visual-${visual.id}`
-                      ? "Generating Preview..."
-                      : `${existingDesignSource ? (sourceStale ? "Generate from Source Plans" : "Regenerate from Source Plans") : (visual.image_url ? "Regenerate" : "Generate") + " Concept Preview"} · ${ARCHITECTURE_CREDIT_COSTS.visualPreview} credits`}
-                  </button>
-                  <button
-                    type="button"
-                    className="image-regenerate-button professional-final-action"
-                    disabled={regeneratingImage !== null}
                     onClick={() => onRegenerateImage(visual.id, "final")}
                   >
-                    High Quality Concept · {ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits
+                    {regeneratingImage === `visual-${visual.id}`
+                      ? "Generating Visual..."
+                      : `${existingDesignSource ? (sourceStale ? "Generate from Source Plans" : "Regenerate from Source Plans") : (visual.image_url ? "Regenerate" : "Generate") + " Concept Visual"} · ${ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits`}
                   </button>
                   <button
                     type="button"
@@ -5709,8 +5675,8 @@ function EstimateTab({
       ) : (
         <>
           <div className="estimate-summary-grid">
-            <MetricCard label="Indicative low range" value={`US$${Math.round(estimate.lowTotalUsd).toLocaleString("en-US")}`} />
-            <MetricCard label="Indicative high range" value={`US$${Math.round(estimate.highTotalUsd).toLocaleString("en-US")}`} />
+            <MetricCard label="Indicative low range" value={`$${Math.round(estimate.lowTotalUsd).toLocaleString("en-US")}`} />
+            <MetricCard label="Indicative high range" value={`$${Math.round(estimate.highTotalUsd).toLocaleString("en-US")}`} />
             <MetricCard label="Material lines" value={String(estimate.items.length)} />
             <MetricCard label="Last prepared" value={new Date(estimate.generatedAt).toLocaleDateString("en-US")} />
           </div>
@@ -5728,9 +5694,9 @@ function EstimateTab({
                   <strong>{item.purchaseQuantity.toLocaleString("en-US")} {item.unit} purchase</strong>
                 </span>
                 <span>
-                  US${item.unitPriceLowUsd}–{item.unitPriceHighUsd} / {item.unit}<br />
+                  ${item.unitPriceLowUsd}–{item.unitPriceHighUsd} / {item.unit}<br />
                   <strong>
-                    US${Math.round(item.purchaseQuantity * item.unitPriceLowUsd).toLocaleString("en-US")}–
+                    ${Math.round(item.purchaseQuantity * item.unitPriceLowUsd).toLocaleString("en-US")}–
                     {Math.round(item.purchaseQuantity * item.unitPriceHighUsd).toLocaleString("en-US")}
                   </strong>
                 </span>
@@ -5761,7 +5727,7 @@ function EstimateTab({
 
           <div className="direction-disclaimer">
             <strong>Concept estimate only.</strong>
-            <span>{estimate.assumptions.join(" ")}</span>
+            <span>All figures are in US dollars. {estimate.assumptions.join(" ")}</span>
           </div>
         </>
       )}

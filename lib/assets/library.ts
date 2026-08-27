@@ -62,6 +62,28 @@ function asObject(value: unknown): Record<string, any> {
   return typeof value === "object" ? value as Record<string, any> : {};
 }
 
+function customerSafeMetadata(value: unknown): Record<string, unknown> {
+  const source = asObject(value);
+  const clean = (entry: unknown): unknown => {
+    if (Array.isArray(entry)) return entry.map(clean);
+    if (!entry || typeof entry !== "object") return entry;
+
+    const result: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(entry as Record<string, unknown>)) {
+      const normalized = key.toLowerCase().replaceAll("-", "_");
+      const internalAiField = normalized.includes("provider")
+        || normalized === "model"
+        || normalized.endsWith("_model")
+        || normalized.endsWith("_model_id");
+      if (internalAiField) continue;
+      result[key] = clean(nested);
+    }
+    return result;
+  };
+
+  return clean(source) as Record<string, unknown>;
+}
+
 function stringValue(...values: unknown[]) {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -394,8 +416,13 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
 
   visibleItems.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
 
+  const customerItems = visibleItems.map((item) => ({
+    ...item,
+    metadata: customerSafeMetadata(item.metadata),
+  }));
+
   return {
-    items: visibleItems,
+    items: customerItems,
     projects,
     setupRequired: Boolean(overridesRes.error && String(overridesRes.error.message || "").includes("asset_library_overrides")),
     versionHistoryReady: !versionError,

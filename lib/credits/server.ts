@@ -99,8 +99,8 @@ function monthlyPeriodForPlan(
   const period = currentMonthlyPeriod();
   return {
     ...period,
-    grantKey: `${plan}:calendar:${period.start}`,
-    source: plan === "free" ? "free_monthly_renewal" : "account_reconciliation",
+    grantKey: `${plan}:${plan === "free" ? "payg" : "calendar"}:${period.start}`,
+    source: plan === "free" ? "free_payg_reconciliation" : "account_reconciliation",
   };
 }
 
@@ -250,7 +250,10 @@ export async function ensureCreditWallet({
   const walletExpired =
     !wallet?.period_end || new Date(wallet.period_end).getTime() <= Date.now();
   const periodAdvanced = Number.isFinite(periodStartTime) && periodStartTime > walletStartTime;
-  const needsMonthlyGrant = !wallet || walletExpired || periodAdvanced;
+  const needsFreePaygReset =
+    resolved.plan === "free" && Number(wallet?.monthly_balance || 0) > 0;
+  const needsMonthlyGrant =
+    !wallet || walletExpired || periodAdvanced || needsFreePaygReset;
 
   if (needsMonthlyGrant) {
     await applyMonthlyCredits(admin, {

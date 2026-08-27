@@ -196,22 +196,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    const refresh = () => {
+    let lastBackgroundRefresh = Date.now();
+
+    const refreshCredits = () => {
+      lastBackgroundRefresh = Date.now();
       void loadAccount();
     };
 
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastBackgroundRefresh < 60_000) return;
+      refreshCredits();
     };
 
-    window.addEventListener("focus", refresh);
-    window.addEventListener("heyy:credits-changed", refresh as EventListener);
+    window.addEventListener("heyy:credits-changed", refreshCredits as EventListener);
     document.addEventListener("visibilitychange", handleVisibility);
-    const interval = window.setInterval(refresh, 30000);
+    const interval = window.setInterval(refreshCredits, 5 * 60_000);
 
     return () => {
-      window.removeEventListener("focus", refresh);
-      window.removeEventListener("heyy:credits-changed", refresh as EventListener);
+      window.removeEventListener("heyy:credits-changed", refreshCredits as EventListener);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.clearInterval(interval);
     };

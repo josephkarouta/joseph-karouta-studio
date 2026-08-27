@@ -9,23 +9,6 @@ import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import { generationFetch } from "@/lib/client/generation-request";
 
-type VideoMode = "preview" | "high";
-
-const MODE_DETAILS: Record<VideoMode, { title: string; provider: string; detail: string; credits: number }> = {
-  preview: {
-    title: "Quick preview",
-    provider: "Gemini Omni · 720p",
-    detail: "Fast concept motion for testing camera and subject movement.",
-    credits: CREDIT_COSTS.imageToVideoPreview,
-  },
-  high: {
-    title: "Cinematic",
-    provider: "Veo 3.1 · 1080p · 8s",
-    detail: "Higher-fidelity render with native audio and stronger cinematic consistency.",
-    credits: CREDIT_COSTS.imageToVideoHigh,
-  },
-};
-
 export default function ImageToVideoWorkbench() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { refreshAccount } = useAuth();
@@ -33,12 +16,11 @@ export default function ImageToVideoWorkbench() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [mode, setMode] = useState<VideoMode>("preview");
   const [aspect, setAspect] = useState("16:9");
   const [status, setStatus] = useState<"idle" | "uploading" | "processing" | "ready">("idle");
   const [videoUrl, setVideoUrl] = useState("");
   const [error, setError] = useState("");
-  const cost = MODE_DETAILS[mode].credits;
+  const cost = CREDIT_COSTS.imageToVideoHigh;
 
   function chooseFile(selected?: File) {
     if (!selected) return;
@@ -80,10 +62,10 @@ export default function ImageToVideoWorkbench() {
       const response = await generationFetch("/api/tools/image-to-video/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ imageBase64, mimeType: file.type, prompt, mode, aspect }),
+        body: JSON.stringify({ imageBase64, mimeType: file.type, prompt, aspect }),
       }, {
         scope: "image-to-video",
-        payload: { file: { name: file.name, size: file.size, modified: file.lastModified }, prompt, mode, aspect },
+        payload: { file: { name: file.name, size: file.size, modified: file.lastModified }, prompt, aspect },
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Video generation could not start.");
@@ -123,7 +105,6 @@ export default function ImageToVideoWorkbench() {
     throw new Error("The video is still processing. Open the tool again later to check its generation history.");
   }
 
-  const activeMode = MODE_DETAILS[mode];
 
   return (
     <div className="grid gap-5 xl:grid-cols-[.82fr_1.18fr]">
@@ -184,38 +165,21 @@ export default function ImageToVideoWorkbench() {
           </div>
         </div>
 
-        <div className="mt-5">
-          <label className="text-[.64rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Generation mode</label>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {(Object.keys(MODE_DETAILS) as VideoMode[]).map((item) => {
-              const detail = MODE_DETAILS[item];
-              return (
-                <button
-                  type="button"
-                  key={item}
-                  onClick={() => setMode(item)}
-                  className={cx(
-                    "rounded-2xl border p-3 text-left transition",
-                    mode === item
-                      ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                      : "border-[var(--border-strong)] bg-[var(--surface)] hover:border-[var(--accent)]",
-                  )}
-                >
-                  <span className="block text-xs font-black">{detail.title}</span>
-                  <span className="mt-1 block text-[.62rem] font-bold opacity-75">{detail.provider}</span>
-                  <span className="mt-2 block text-[.62rem] font-semibold leading-4 opacity-70">{detail.detail}</span>
-                  <span className="mt-2 block text-[.62rem] font-black">{detail.credits} credits</span>
-                </button>
-              );
-            })}
+        <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black text-[var(--text-primary)]">1080p video · 8 seconds · native audio</p>
+              <p className="mt-1 text-[.68rem] font-semibold leading-5 text-[var(--text-secondary)]">
+                One quality-first generation. Rendering can take several minutes.
+              </p>
+            </div>
+            <CreditPill credits={cost} />
           </div>
         </div>
 
         <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] px-4 py-3 text-[.68rem] font-semibold leading-5 text-[var(--text-secondary)]">
-          <span className="font-black text-[var(--text-primary)]">{activeMode.provider}.</span>{" "}
-          {mode === "high"
-            ? "Cinematic mode can take several minutes because Veo renders a full 8-second 1080p clip with native audio."
-            : "Preview mode is the faster option for checking motion direction before spending more credits on a cinematic render."}
+          <span className="font-black text-[var(--text-primary)]">Every generation is a new variation.</span>{" "}
+          Generating again may produce different motion, timing and visual details even when you use the same image and prompt.
         </div>
 
         {error && (
@@ -240,7 +204,7 @@ export default function ImageToVideoWorkbench() {
             ? "Starting generation…"
             : status === "processing"
               ? "Video is processing…"
-              : `${mode === "high" ? "Generate cinematic" : "Generate preview"} · ${cost} credits`}
+              : `Generate video · ${cost} credits`}
         </Button>
         <p className="mt-3 text-center text-[.65rem] font-semibold text-[var(--text-muted)]">
           Credits are reserved while rendering and refunded automatically if the provider reports failure.
@@ -255,22 +219,25 @@ export default function ImageToVideoWorkbench() {
           </div>
           <CreditPill credits={cost} />
         </div>
-        <div className="grid flex-1 place-items-center overflow-hidden rounded-[1.4rem] border border-dashed border-[var(--border-strong)] bg-black/90">
+        <div className={cx(
+          "grid flex-1 place-items-center overflow-hidden rounded-[1.4rem] border border-dashed border-[var(--border-strong)]",
+          videoUrl ? "bg-black" : "bg-[radial-gradient(circle_at_50%_20%,var(--accent-soft),transparent_42%),linear-gradient(145deg,var(--surface-strong),var(--surface-hover))]",
+        )}>
           {status === "processing" || status === "uploading" ? (
-            <div className="p-8 text-center text-white">
-              <Loader2 size={32} className="mx-auto animate-spin text-fuchsia-300" />
+            <div className="p-8 text-center text-[var(--text-primary)]">
+              <Loader2 size={32} className="mx-auto animate-spin text-[var(--accent-strong)]" />
               <h3 className="mt-4 text-xl font-black">Creating motion</h3>
-              <p className="mt-2 text-sm font-semibold text-white/60">
-                {mode === "high" ? "Veo is rendering the cinematic clip. This can take several minutes." : "Gemini Omni is rendering the motion preview."}
+              <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">
+                Your 1080p clip is rendering. This can take several minutes.
               </p>
             </div>
           ) : videoUrl ? (
             <video src={videoUrl} controls autoPlay loop className="h-full max-h-[720px] w-full object-contain" />
           ) : (
-            <div className="max-w-sm p-8 text-center text-white">
-              <Video size={36} className="mx-auto text-fuchsia-300" />
+            <div className="max-w-sm p-8 text-center text-[var(--text-primary)]">
+              <Video size={36} className="mx-auto text-[var(--accent-strong)]" />
               <h3 className="mt-4 text-xl font-black">Your clip will appear here</h3>
-              <p className="mt-2 text-sm font-semibold leading-6 text-white/55">
+              <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-muted)]">
                 Use motion language: camera, subject movement, environmental movement and what must remain fixed.
               </p>
             </div>

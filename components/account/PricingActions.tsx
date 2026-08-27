@@ -4,16 +4,28 @@ import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/heyy";
-import type { PlanId } from "@/lib/platform/plans";
+import { normalizePlan, PLANS, type PlanId } from "@/lib/platform/plans";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
-export default function PricingAction({ planId, current }: { planId: PlanId; current?: boolean }) {
-  const { user } = useAuth();
+const PLAN_ORDER: Record<PlanId, number> = { free: 0, starter: 1, pro: 2 };
+
+export default function PricingAction({ planId, current, featured }: { planId: PlanId; current?: boolean; featured?: boolean }) {
+  const { plan, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const currentPlan = normalizePlan(plan);
+  const definition = PLANS.find((item) => item.id === planId) || PLANS[0];
+  const isUpgrade = PLAN_ORDER[planId] > PLAN_ORDER[currentPlan];
 
   async function checkout() {
-    if (planId === "free" || current) return;
+    if (current) {
+      window.location.href = planId === "free" ? "/credits" : "/billing";
+      return;
+    }
+    if (planId === "free") {
+      window.location.href = user ? "/credits" : "/signup";
+      return;
+    }
     if (!user) {
       window.location.href = `/login?next=${encodeURIComponent("/pricing")}`;
       return;
@@ -47,20 +59,28 @@ export default function PricingAction({ planId, current }: { planId: PlanId; cur
   }
 
   return (
-    <div className="mt-7">
+    <div>
       <Button
         type="button"
         onClick={checkout}
-        disabled={current || loading}
-        variant={current ? "secondary" : "primary"}
+        disabled={loading}
+        variant={current || (Boolean(user) && !isUpgrade) ? "secondary" : featured || isUpgrade ? "primary" : "secondary"}
         className="w-full"
       >
         {loading && <LoaderCircle size={16} className="animate-spin" />}
-        {current
-          ? "Current plan"
-          : planId === "free"
-            ? "Included when you sign up"
-            : `Choose ${planId}`}
+        {!user
+          ? planId === "free"
+            ? "Create free account"
+            : `Choose ${definition.name}`
+          : current
+            ? planId === "free"
+              ? "Buy credits"
+              : "Manage current plan"
+            : planId === "free"
+              ? "Buy credits"
+              : isUpgrade
+                ? `Upgrade to ${definition.name}`
+                : "Manage plan"}
       </Button>
       {error && <p className="mt-3 text-xs font-bold text-red-500">{error}</p>}
     </div>

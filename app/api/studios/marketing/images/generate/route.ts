@@ -26,11 +26,6 @@ function sign(jobId: string) {
   return createHmac("sha256", secret).update(`studio-image:${jobId}`).digest("hex");
 }
 
-async function latestPreview(admin: any, projectId: string, viewType: string) {
-  const { data } = await admin.from("project_assets").select("id,file_url").eq("project_id", projectId).eq("studio", "marketing_studio").eq("asset_type", `marketing_visual_${viewType}_preview`).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  return data || null;
-}
-
 export async function POST(request: Request) {
   let jobId: string | null = null;
   let startedJob: GenerationJobStart | null = null;
@@ -43,19 +38,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const projectId = String(body?.projectId || "").trim();
     const viewType = String(body?.viewType || "") as MarketingVisualType;
-    const stage = String(body?.stage || "preview") as GenerationStage;
+    const stage: GenerationStage = "final";
     const tweak = String(body?.tweak || "").trim().slice(0, 1000);
     if (!projectId) return NextResponse.json({ error: "Project is required." }, { status: 400 });
     if (!VISUALS.has(viewType)) return NextResponse.json({ error: "Choose a valid campaign visual." }, { status: 400 });
-    if (!(stage === "preview" || stage === "final")) return NextResponse.json({ error: "Choose Preview or Professional Final." }, { status: 400 });
 
     const { data: project, error: projectError } = await admin.from("studio_projects").select("id").eq("id", projectId).eq("user_id", auth.user.id).eq("studio", "marketing_studio").single();
     if (projectError || !project) return NextResponse.json({ error: projectError?.message || "Marketing project not found." }, { status: 404 });
-    if (stage === "final" && !(await latestPreview(admin, projectId, viewType))?.file_url) {
-      return NextResponse.json({ error: "Generate the Preview for this campaign visual before creating its Professional Final." }, { status: 409 });
-    }
-
-    const action: CreditAction = stage === "final" ? "marketingProfessionalFinal" : "marketingVisualPreview";
+    const action: CreditAction = "marketingProfessionalFinal";
     startedJob = await startGenerationJob({
       admin,
       userId: auth.user.id,

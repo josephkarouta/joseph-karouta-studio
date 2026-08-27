@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import AccountLayout from "@/components/account/AccountLayout";
 import { useAuth } from "@/components/auth-provider";
-import { CreditPill, Eyebrow, GlassCard, StatusPill } from "@/components/ui/heyy";
+import { ButtonLink, CreditPill, Eyebrow, GlassCard, StatusPill } from "@/components/ui/heyy";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import CreditTopUps from "@/components/account/CreditTopUps";
 
@@ -117,7 +117,10 @@ export default function CreditsPage() {
             Review your balance, purchase top-ups and track every credit movement.
           </p>
         </div>
-        <CreditPill credits={credits.available} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ButtonLink href="/credit-guide" variant="secondary" size="sm">Credit guide</ButtonLink>
+          <CreditPill credits={credits.available} />
+        </div>
       </div>
 
       {topUpMessage && (
@@ -134,8 +137,8 @@ export default function CreditsPage() {
 
       <GlassCard className="mt-7 grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
         <CreditMetric label="Available now" value={credits.available} accent />
-        <CreditMetric label="Monthly balance" value={credits.monthly} />
-        <CreditMetric label="Purchased" value={credits.purchased} />
+        <CreditMetric label="Subscription credits" value={credits.monthly} />
+        <CreditMetric label="Purchased — no expiry" value={credits.purchased} />
         <CreditMetric label="Reserved now" value={credits.reserved} />
       </GlassCard>
 

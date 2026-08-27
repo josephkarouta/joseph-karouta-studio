@@ -4,7 +4,7 @@ const DEFAULT_STEPS = [
   "Reading the selected direction",
   "Preparing the visual prompt",
   "Generating the image",
-  "Optimising the preview",
+  "Refining the visual",
   "Saving to the workspace",
 ];
 

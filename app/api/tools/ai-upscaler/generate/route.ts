@@ -105,7 +105,6 @@ export async function POST(request: Request) {
         success: true,
         jobId: startedJob.jobId,
         status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
-        model: choice.model,
         creditsReserved: startedJob.creditsReserved,
       });
     }
@@ -125,7 +124,6 @@ export async function POST(request: Request) {
         success: true,
         jobId: startedJob.jobId,
         status: "processing",
-        model: choice.model,
         creditsReserved: startedJob.creditsReserved,
       });
     }
@@ -178,7 +176,6 @@ export async function POST(request: Request) {
       success: true,
       jobId: job.id,
       status: "processing",
-      model: choice.model,
       creditsReserved: startedJob.creditsReserved,
     });
   } catch (error) {

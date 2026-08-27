@@ -18,20 +18,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid credit pack." }, { status: 400 });
     }
 
-    const account = await ensureCreditWallet({
+    await ensureCreditWallet({
       admin,
       userId: user.id,
       user,
     });
-    if (account.plan === "free") {
-      return NextResponse.json(
-        {
-          error: "Credit top-ups are available with an active Starter or Pro plan.",
-          code: "SUBSCRIPTION_REQUIRED",
-        },
-        { status: 403 },
-      );
-    }
 
     const stripe = getStripe();
     const { customer } = await resolveStripeCustomer({

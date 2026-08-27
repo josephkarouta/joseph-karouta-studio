@@ -152,7 +152,7 @@ Rules:
         const parsed = JSON.parse(output);
         const directions = (Array.isArray(parsed?.directions) ? parsed.directions : []).slice(0, 3).map(normaliseDirection);
         if (directions.length !== 3) throw new Error("OpenAI did not return three creative directions.");
-        return { directions, usage: data?.usage || null, model: data?.model || null };
+        return { directions, usage: data?.usage || null };
       },
     });
     return NextResponse.json({ ...result, creditsUsed: job.creditsReserved });

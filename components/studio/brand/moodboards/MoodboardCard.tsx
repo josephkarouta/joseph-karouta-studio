@@ -54,7 +54,7 @@ export default function MoodboardCard({
         ) : moodboard.imageUrl ? (
           <button type="button" onClick={() => onOpenImage(moodboard.imageUrl, moodboard.title)} className="block h-full w-full overflow-hidden rounded-[18px] border border-slate-200 bg-white">
             <img src={moodboard.imageUrl} alt={moodboard.title} className="aspect-square h-full w-full object-cover transition duration-300 hover:scale-[1.02]" />
-            <span className="absolute bottom-5 right-5 rounded-full bg-slate-950/80 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.12em] text-white backdrop-blur">Open large preview</span>
+            <span className="absolute bottom-5 right-5 rounded-full bg-slate-950/80 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.12em] text-white backdrop-blur">Open large visual</span>
           </button>
         ) : (
           <div className="flex aspect-square min-h-[210px] flex-col items-center justify-center rounded-[18px] border border-dashed border-violet-300 bg-white/75 p-6 text-center">
@@ -118,10 +118,9 @@ export default function MoodboardCard({
           <button type="button" onClick={onSelect} disabled={selecting} className={`min-h-10 rounded-full px-4 text-[10px] font-black text-white transition ${isSelected ? "bg-emerald-500" : "bg-slate-950 hover:bg-violet-700"}`}>
             {selecting ? "Selecting…" : isSelected ? "Selected Direction" : "Select Direction"}
           </button>
-          <button type="button" onClick={() => onGenerateVisual("preview")} disabled={!isSelected || loadingImage} className="min-h-10 rounded-full border border-violet-600 bg-violet-600 px-4 text-[10px] font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-35">
-            {moodboard.imageUrl ? `Regenerate Preview · ${CREDIT_COSTS.brandMoodboard} credits` : `Generate Visual Preview · ${CREDIT_COSTS.brandMoodboard} credits`}
+          <button type="button" onClick={() => onGenerateVisual("final")} disabled={!isSelected || loadingImage} className="min-h-10 rounded-full border border-violet-600 bg-violet-600 px-4 text-[10px] font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-35">
+            {moodboard.imageUrl ? `Regenerate Visual · ${CREDIT_COSTS.brandProfessionalFinal} credits` : `Generate Visual · ${CREDIT_COSTS.brandProfessionalFinal} credits`}
           </button>
-          <button type="button" onClick={() => onGenerateVisual("final")} disabled={!isSelected || loadingImage} className="min-h-10 rounded-full border border-violet-300 bg-white px-4 text-[10px] font-black text-violet-700 transition hover:border-violet-700 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-35">{`High-Quality AI Visual · ${CREDIT_COSTS.brandProfessionalFinal} credits`}</button>
           <button type="button" onClick={onGenerateVariation} disabled={!isSelected || !moodboard.imageUrl || variationLoading} className="min-h-10 rounded-full border border-slate-300 bg-white px-4 text-[10px] font-black text-slate-700 transition hover:border-fuchsia-500 hover:text-fuchsia-700 disabled:cursor-not-allowed disabled:opacity-35">{`Generate Variation · ${CREDIT_COSTS.brandVariation} credits`}</button>
         </div>
       </div>

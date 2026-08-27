@@ -149,18 +149,17 @@ export default function BrandLogos({ project, brand }: { project: any; brand: an
 
                     <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                       <button type="button" onClick={() => state.selectLogoDirection(index)} className={`min-h-10 rounded-full px-4 text-[10px] font-black text-white ${selected ? "bg-emerald-500" : "bg-slate-950 hover:bg-violet-700"}`}>{selected ? "Selected Direction" : "Select Direction"}</button>
-                      <button type="button" onClick={() => state.generateLogos(direction, index, "preview")} disabled={!selected || loading} className="min-h-10 rounded-full bg-violet-700 px-4 text-[10px] font-black text-white disabled:opacity-35">{concept?.imageUrl ? `Regenerate Preview · ${CREDIT_COSTS.brandLogoConcept} credits` : `Generate Logo Preview · ${CREDIT_COSTS.brandLogoConcept} credits`}</button>
-                      <button type="button" onClick={() => state.generateLogos(direction, index, "final")} disabled={!selected || loading} className="min-h-10 rounded-full border border-violet-300 bg-white px-4 text-[10px] font-black text-violet-700 disabled:opacity-35">{`High-detail AI concept · ${CREDIT_COSTS.brandProfessionalFinal} credits`}</button>
+                      <button type="button" onClick={() => state.generateLogos(direction, index, "final")} disabled={!selected || loading} className="min-h-10 rounded-full bg-violet-700 px-4 text-[10px] font-black text-white disabled:opacity-35">{concept?.imageUrl ? `Regenerate Logo · ${CREDIT_COSTS.brandProfessionalFinal} credits` : `Generate Logo · ${CREDIT_COSTS.brandProfessionalFinal} credits`}</button>
                       <button type="button" onClick={() => state.generateLogoVariations(index, direction)} disabled={!selected || !concept?.imageUrl || variationLoading} className="min-h-10 rounded-full border border-slate-300 bg-white px-4 text-[10px] font-black text-slate-700 disabled:opacity-35">{`Generate Variation · ${CREDIT_COSTS.brandVariation} credits`}</button>
                     </div>
-                    <p className="mt-2 text-[10px] font-semibold leading-4 text-slate-500">Both AI options use the same 1024 × 1024 canvas. High detail uses OpenAI&apos;s higher-quality processing, which costs more; neither option replaces final vector production.</p>
+                    <p className="mt-2 text-[10px] font-semibold leading-4 text-slate-500">One best-quality concept is generated on a 1024 × 1024 canvas. It does not replace final vector production.</p>
                     {selected && concept?.imageUrl && (
                       <div className="mt-4 rounded-[16px] border border-violet-200 bg-violet-50 p-4">
                         <div className="grid min-w-0 gap-4">
                           <div className="flex min-w-0 items-start gap-3">
                             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-violet-700 text-white"><FileOutput size={16} /></span>
                             <div className="min-w-0">
-                              <p className="text-xs font-black text-slate-950">AI preview selected. Prepare the real logo package.</p>
+                              <p className="text-xs font-black text-slate-950">AI concept selected. Prepare the real logo package.</p>
                               <p className="mt-1 break-words text-[11px] font-semibold leading-5 text-slate-600">Vector redraw, optical refinement, RGB/CMYK variants and AI, EPS, SVG, PDF, PNG and JPG master files.</p>
                             </div>
                           </div>
@@ -175,7 +174,7 @@ export default function BrandLogos({ project, brand }: { project: any; brand: an
           </div>
         )}
       </div>
-      <BrandImageModal imageUrl={preview?.url || null} title={preview?.title || "Logo preview"} onClose={() => setPreview(null)} contain />
+      <BrandImageModal imageUrl={preview?.url || null} title={preview?.title || "Logo visual"} onClose={() => setPreview(null)} contain />
     </section>
   );
 }

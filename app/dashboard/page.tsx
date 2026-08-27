@@ -24,6 +24,7 @@ import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { ButtonLink, CreditPill, Eyebrow, GlassCard, PageContainer, StatusPill } from "@/components/ui/heyy";
 import { PLATFORM_TOOLS, VISIBLE_STUDIOS } from "@/lib/platform/platform-registry";
+import GenerationActivity from "@/components/dashboard/GenerationActivity";
 
 type ProjectItem = {
   id: string;
@@ -66,6 +67,45 @@ type NotificationItem = {
   href?: string;
 };
 
+type DashboardCache = {
+  projects: ProjectItem[];
+  jobs: ProductionJob[];
+  assets: AssetItem[];
+  notifications: NotificationItem[];
+  updatedAt: number;
+};
+
+const DASHBOARD_CACHE_PREFIX = "heyy-dashboard:";
+const dashboardMemoryCache = new Map<string, DashboardCache>();
+
+function readDashboardCache(userId: string): DashboardCache | null {
+  const memory = dashboardMemoryCache.get(userId);
+  if (memory) return memory;
+  try {
+    const raw = window.sessionStorage.getItem(`${DASHBOARD_CACHE_PREFIX}${userId}`);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as DashboardCache;
+    if (!cached || !Array.isArray(cached.projects) || !Array.isArray(cached.jobs) || !Array.isArray(cached.assets) || !Array.isArray(cached.notifications)) return null;
+    dashboardMemoryCache.set(userId, cached);
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function patchDashboardCache(userId: string, patch: Partial<DashboardCache>) {
+  const current = dashboardMemoryCache.get(userId) || {
+    projects: [], jobs: [], assets: [], notifications: [], updatedAt: 0,
+  };
+  const next = { ...current, ...patch, updatedAt: Date.now() };
+  dashboardMemoryCache.set(userId, next);
+  try {
+    window.sessionStorage.setItem(`${DASHBOARD_CACHE_PREFIX}${userId}`, JSON.stringify(next));
+  } catch {
+    // The in-memory cache still prevents a visible reload during this session.
+  }
+}
+
 const studioIcons: Record<ProjectItem["studio"], LucideIcon> = {
   brand: WandSparkles,
   architecture: Building2,
@@ -83,6 +123,7 @@ const studioAccent: Record<ProjectItem["studio"], string> = {
 export default function DashboardPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { user, loading: authLoading, plan, credits } = useAuth();
+  const userId = user?.id || null;
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [jobs, setJobs] = useState<ProductionJob[]>([]);
   const [assets, setAssets] = useState<AssetItem[]>([]);
@@ -103,20 +144,29 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
+    if (!userId) {
       window.location.href = `/login?next=${encodeURIComponent("/dashboard")}`;
       return;
     }
 
+    const accountId = userId;
     let active = true;
-    const userId = user.id;
+    const cached = readDashboardCache(accountId);
+    if (cached) {
+      setProjects(cached.projects);
+      setJobs(cached.jobs);
+      setAssets(cached.assets);
+      setNotifications(cached.notifications);
+      setProjectsLoading(false);
+      setActivityLoading(false);
+    }
 
     async function loadProjects() {
-      setProjectsLoading(true);
+      if (!cached) setProjectsLoading(true);
       const [brands, architecture, generic] = await Promise.allSettled([
-        supabase.from("brand_projects").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(20),
-        supabase.from("architecture_projects").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(20),
-        supabase.from("studio_projects").select("*").eq("user_id", userId).order("updated_at", { ascending: false }).limit(30),
+        supabase.from("brand_projects").select("*").eq("user_id", accountId).order("updated_at", { ascending: false }).limit(20),
+        supabase.from("architecture_projects").select("*").eq("user_id", accountId).order("updated_at", { ascending: false }).limit(20),
+        supabase.from("studio_projects").select("*").eq("user_id", accountId).order("updated_at", { ascending: false }).limit(30),
       ]);
 
       if (!active) return;
@@ -161,21 +211,26 @@ export default function DashboardPage() {
 
       setProjects(mapped);
       setProjectsLoading(false);
+      patchDashboardCache(accountId, { projects: mapped });
     }
 
     async function loadActivity() {
-      setActivityLoading(true);
+      if (!cached) setActivityLoading(true);
       const [production, assetRows, notificationRows] = await Promise.allSettled([
-        supabase.from("production_jobs").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(10),
-        supabase.from("project_assets").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(8),
-        supabase.from("notifications").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(8),
+        supabase.from("production_jobs").select("*").eq("user_id", accountId).order("created_at", { ascending: false }).limit(10),
+        supabase.from("project_assets").select("*").eq("user_id", accountId).order("created_at", { ascending: false }).limit(8),
+        supabase.from("notifications").select("*").eq("user_id", accountId).order("created_at", { ascending: false }).limit(8),
       ]);
 
       if (!active) return;
-      setJobs(settledRows<ProductionJob>(production));
-      setAssets(settledRows<AssetItem>(assetRows));
-      setNotifications(settledRows<NotificationItem>(notificationRows));
+      const nextJobs = settledRows<ProductionJob>(production);
+      const nextAssets = settledRows<AssetItem>(assetRows);
+      const nextNotifications = settledRows<NotificationItem>(notificationRows);
+      setJobs(nextJobs);
+      setAssets(nextAssets);
+      setNotifications(nextNotifications);
       setActivityLoading(false);
+      patchDashboardCache(accountId, { jobs: nextJobs, assets: nextAssets, notifications: nextNotifications });
     }
 
     void loadProjects();
@@ -184,7 +239,7 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [authLoading, supabase, user]);
+  }, [authLoading, supabase, userId]);
 
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Creator";
   const activeJobs = jobs.filter((job) => !["delivered", "completed", "cancelled"].includes(String(job.status || "").toLowerCase()));
@@ -239,7 +294,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <Metric label="Projects" value={projectsLoading ? "—" : projects.length} />
-                <Metric label="Active jobs" value={activityLoading ? "—" : activeJobs.length} />
+                <Metric label="Production jobs" value={activityLoading ? "—" : activeJobs.length} />
                 <Metric label="Assets" value={activityLoading ? "—" : assets.length} />
                 <Metric label="Credits" value={credits.available} accent />
               </div>
@@ -251,7 +306,7 @@ export default function DashboardPage() {
           <GlassCard className="p-5 sm:p-6">
             <div className="flex items-center justify-between gap-4">
               <div><Eyebrow>Continue working</Eyebrow><h2 className="mt-2 text-2xl font-black tracking-[-.045em]">Pick up where you left off</h2></div>
-              <Link href="#projects" className="text-xs font-black text-[var(--accent-strong)] hover:underline">All projects</Link>
+              <Link href="/dashboard/projects" className="text-xs font-black text-[var(--accent-strong)] hover:underline">All projects</Link>
             </div>
             {projectsLoading ? <DashboardCardSkeleton className="mt-5 h-48" /> : projects[0] ? <ContinueProject project={projects[0]} /> : <EmptyState title="Your first project starts here" description="Choose a specialist Studio and create a structured project that stays in your workspace." href="/#studios" action="Explore Studios" />}
           </GlassCard>
@@ -271,6 +326,8 @@ export default function DashboardPage() {
           </GlassCard>
         </section>
 
+        <GenerationActivity />
+
         <section id="projects" className="mt-5 scroll-mt-28">
           <GlassCard className="p-5 sm:p-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
@@ -282,9 +339,16 @@ export default function DashboardPage() {
                 {[1, 2, 3, 4, 5, 6].map((item) => <DashboardCardSkeleton key={item} className="h-40" />)}
               </div>
             ) : projects.length ? (
-              <div className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {projects.slice(0, 9).map((project) => <ProjectCard key={`${project.studio}-${project.id}`} project={project} />)}
-              </div>
+              <>
+                <div className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {projects.slice(0, 9).map((project) => <ProjectCard key={`${project.studio}-${project.id}`} project={project} />)}
+                </div>
+                {projects.length > 9 && (
+                  <div className="mt-5 flex justify-center">
+                    <ButtonLink href="/dashboard/projects" variant="secondary" size="sm">View all projects <ArrowRight size={13}/></ButtonLink>
+                  </div>
+                )}
+              </>
             ) : <div className="mt-7"><EmptyState title="No projects yet" description="Start with a Studio and your project will appear here automatically." href="/#studios" action="Choose a Studio" /></div>}
           </GlassCard>
         </section>

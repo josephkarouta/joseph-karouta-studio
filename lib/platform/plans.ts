@@ -10,45 +10,40 @@ export type PlanDefinition = {
   highlighted?: boolean;
 };
 
-function envNumber(name: string, fallback: number) {
-  const rawValue = process.env[name]?.trim();
-
-  if (!rawValue) {
-    return fallback;
-  }
-
-  const parsed = Number(rawValue);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
 /**
- * Testing defaults only. The product owner will finalize pricing and credit
- * allocations after real generation-cost testing. Every number is centralized
- * here so launch pricing can be changed without editing UI components.
+ * Phase 7 approved launch commercial catalog.
+ *
+ * These values are intentionally NOT environment-overridable. Stripe Price IDs
+ * belong in environment variables, but the customer price/credit entitlement
+ * used by checkout validation, webhooks, billing UI and credit grants must have
+ * one deterministic source of truth so a stale local/Netlify env value cannot
+ * grant the wrong allowance.
  */
 export const PLANS: PlanDefinition[] = [
   {
     id: "free",
     name: "Free",
     monthlyPriceUsd: 0,
-    monthlyCredits: envNumber("HEYY_FREE_MONTHLY_CREDITS", 40),
-    description: "Explore the platform and build your first creative direction.",
+    monthlyCredits: 0,
+    description: "Create a free account and buy credits whenever you need them.",
     features: [
       "All four specialist Studios",
       "Project workspace and saved outputs",
-      "Testing credit allowance",
+      "Pay-as-you-go credit packs",
+      "Purchased credits never expire",
       "Expert production requests",
     ],
   },
   {
     id: "starter",
     name: "Starter",
-    monthlyPriceUsd: envNumber("HEYY_STARTER_PRICE_USD", 29),
-    monthlyCredits: envNumber("HEYY_STARTER_MONTHLY_CREDITS", 300),
+    monthlyPriceUsd: 35,
+    monthlyCredits: 150,
     description: "For founders and small teams creating every month.",
     features: [
       "Everything in Free",
-      "Higher monthly credit allowance",
+      "150 subscription credits each month",
+      "Buy non-expiring top-ups at any time",
       "Premium exports and generation history",
       "Priority standard generation queue",
     ],
@@ -57,12 +52,13 @@ export const PLANS: PlanDefinition[] = [
   {
     id: "pro",
     name: "Pro",
-    monthlyPriceUsd: envNumber("HEYY_PRO_PRICE_USD", 79),
-    monthlyCredits: envNumber("HEYY_PRO_MONTHLY_CREDITS", 1200),
+    monthlyPriceUsd: 99,
+    monthlyCredits: 500,
     description: "For active creative teams and higher-volume production.",
     features: [
       "Everything in Starter",
-      "Largest monthly credit allowance",
+      "500 subscription credits each month",
+      "Buy non-expiring top-ups at any time",
       "High-quality image and video modes",
       "Priority support and production intake",
     ],
@@ -81,16 +77,41 @@ export function getPlan(value: unknown) {
   return PLANS.find((plan) => plan.id === id) || PLANS[0];
 }
 
-
 export type CreditPackId = "small" | "medium" | "large";
-export type CreditPack = { id: CreditPackId; name: string; credits: number; priceUsd: number; description: string };
+export type CreditPack = {
+  id: CreditPackId;
+  name: string;
+  credits: number;
+  priceUsd: number;
+  description: string;
+};
 
 export const CREDIT_PACKS: CreditPack[] = [
-  { id: "small", name: "100-credit top-up", credits: envNumber("HEYY_CREDIT_PACK_SMALL_CREDITS", 100), priceUsd: envNumber("HEYY_CREDIT_PACK_SMALL_PRICE_USD", 10), description: "For a few additional images, exports or upscale jobs." },
-  { id: "medium", name: "300-credit top-up", credits: envNumber("HEYY_CREDIT_PACK_MEDIUM_CREDITS", 300), priceUsd: envNumber("HEYY_CREDIT_PACK_MEDIUM_PRICE_USD", 25), description: "For a focused campaign, concept set or presentation sprint." },
-  { id: "large", name: "800-credit top-up", credits: envNumber("HEYY_CREDIT_PACK_LARGE_CREDITS", 800), priceUsd: envNumber("HEYY_CREDIT_PACK_LARGE_PRICE_USD", 60), description: "For higher-volume generation without changing plan." },
+  {
+    id: "small",
+    name: "100-credit pack",
+    credits: 100,
+    priceUsd: 25,
+    description: "For a small project or trying a few tools.",
+  },
+  {
+    id: "medium",
+    name: "300-credit pack",
+    credits: 300,
+    priceUsd: 69,
+    description: "For a focused campaign, concept set or presentation sprint.",
+  },
+  {
+    id: "large",
+    name: "750-credit pack",
+    credits: 750,
+    priceUsd: 159,
+    description: "For larger projects and higher-volume production.",
+  },
 ];
 
 export function getCreditPack(value: unknown) {
-  return CREDIT_PACKS.find((pack) => pack.id === String(value).toLowerCase() as CreditPackId);
+  return CREDIT_PACKS.find(
+    (pack) => pack.id === String(value).toLowerCase() as CreditPackId,
+  );
 }

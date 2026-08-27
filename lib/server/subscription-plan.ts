@@ -9,6 +9,7 @@ const TERMINAL_STATUSES = new Set([
   "inactive",
   "expired",
   "unpaid",
+  "incomplete_expired",
   "deleted",
 ]);
 

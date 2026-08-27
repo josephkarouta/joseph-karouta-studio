@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     const headers: Record<string, string> = {};
     if (!assetUrl) {
       if (!process.env.GEMINI_API_KEY) {
-        return NextResponse.json({ error: "GEMINI_API_KEY is missing." }, { status: 503 });
+        return NextResponse.json({ error: "Video generation is not configured." }, { status: 503 });
       }
       headers["x-goog-api-key"] = process.env.GEMINI_API_KEY;
     }

@@ -1277,41 +1277,33 @@ function VisualsSection({
   onApprove: (asset: ProjectAsset) => void;
   onEnlarge: (image: { url: string; title: string }) => void;
 }) {
-  const [stages, setStages] = useState<Record<MarketingVisualType, GenerationStage>>(() => Object.fromEntries(VISUALS.map((item) => [item.id, "preview"])) as Record<MarketingVisualType, GenerationStage>);
   const [tweaks, setTweaks] = useState<Partial<Record<MarketingVisualType, string>>>({});
   return (
     <GlassCard className="p-6 sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><Eyebrow>Creative visuals</Eyebrow><h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate the campaign creative without leaving Marketing Studio</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Start with the Campaign Key Visual. Other formats use it as a consistency reference when it is available.</p></div><div className="flex gap-2"><CreditPill credits={CREDIT_COSTS.marketingVisualPreview} label="preview" /><CreditPill credits={CREDIT_COSTS.marketingProfessionalFinal} label="final" /></div></div>
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><Eyebrow>Creative visuals</Eyebrow><h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate the campaign creative without leaving Marketing Studio</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Start with the Campaign Key Visual. Other formats use it as a consistency reference when it is available.</p></div><CreditPill credits={CREDIT_COSTS.marketingProfessionalFinal} label="per visual" /></div>
       <div className="mt-7 grid gap-5 lg:grid-cols-2">
         {VISUALS.map((definition) => {
-          const stage = stages[definition.id];
-          const previewAsset = getMarketingAsset(assets, definition.id, "preview");
-          const asset = getMarketingAsset(assets, definition.id, stage);
+          const stage: GenerationStage = "final";
+          const asset = getMarketingAsset(assets, definition.id, "final") || getMarketingAsset(assets, definition.id, "preview");
           const approved = asset ? isApproved(asset) : false;
           const recommended = !definition.channelMatches.length || definition.channelMatches.some((channel) => selectedChannels.includes(channel));
           const isGenerating = generating?.viewType === definition.id && generating.stage === stage;
-          const finalLocked = stage === "final" && !previewAsset?.file_url;
           return (
             <section key={definition.id} className={cx("overflow-hidden rounded-2xl border bg-[var(--surface)]", recommended ? "border-[var(--accent-border)]" : "border-[var(--border)]")}> 
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] p-3">
-                <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-1">{(["preview", "final"] as GenerationStage[]).map((item) => <button key={item} type="button" onClick={() => setStages((current) => ({ ...current, [definition.id]: item }))} className={cx("rounded-lg px-4 py-2 text-xs font-black capitalize transition", stage === item ? "bg-[var(--accent)] text-white" : "text-[var(--text-secondary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]")}>{item === "final" ? "Professional Final" : "Preview"}</button>)}</div>
+                <span className="rounded-xl bg-[var(--accent-soft)] px-4 py-2 text-xs font-black text-[var(--accent-strong)]">Best quality</span>
                 <div className="flex items-center gap-2">{recommended && <StatusPill tone="info">Recommended</StatusPill>}{approved && <StatusPill tone="success"><CheckCircle2 size={11} className="mr-1" /> Approved</StatusPill>}</div>
               </div>
               <div className="relative aspect-[16/10] overflow-hidden bg-[linear-gradient(135deg,var(--accent-soft),var(--surface-hover))]">
-                {asset?.file_url ? <img src={asset.file_url} alt={definition.title} className="h-full w-full object-contain" /> : <div className="grid h-full place-items-center p-7 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--surface)] text-[var(--accent-strong)]"><ImageIcon size={22} /></span><p className="mt-4 text-sm font-black">{stage === "final" ? "Professional Final not generated" : "Preview not generated"}</p><p className="mt-2 text-xs font-semibold text-[var(--text-muted)]">The generated visual will appear here.</p></div></div>}
+                {asset?.file_url ? <img src={asset.file_url} alt={definition.title} className="h-full w-full object-contain" /> : <div className="grid h-full place-items-center p-7 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--surface)] text-[var(--accent-strong)]"><ImageIcon size={22} /></span><p className="mt-4 text-sm font-black">Visual not generated</p><p className="mt-2 text-xs font-semibold text-[var(--text-muted)]">The generated visual will appear here.</p></div></div>}
                 {asset?.file_url && <button type="button" onClick={() => onEnlarge({ url: asset.file_url as string, title: definition.title })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full bg-black/75 px-3 py-2 text-xs font-black text-white backdrop-blur"><Maximize2 size={13} /> Enlarge</button>}
-                {isGenerating && <CardLoader title={`Generating ${stage === "final" ? "Professional Final" : "Preview"}`} />}
+                {isGenerating && <CardLoader title="Generating visual" />}
               </div>
               <div className="p-5">
                 <div className="max-w-xl">
                   <p className="text-[.62rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)]">{definition.formats.join(" · ")}</p>
                   <h3 className="mt-2 text-xl font-black">{definition.title}</h3>
                   <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">{definition.description}</p>
-                  {finalLocked && (
-                    <p className="mt-3 rounded-xl border border-amber-300/60 bg-amber-500/10 p-3 text-xs font-bold text-amber-800 dark:text-amber-200">
-                      Generate the Preview first. The Professional Final will preserve and refine that selected campaign direction.
-                    </p>
-                  )}
                 </div>
                 <div className="mt-4">
                   <label className="text-[.6rem] font-black uppercase tracking-[.14em] text-[var(--text-muted)]">
@@ -1328,15 +1320,15 @@ function VisualsSection({
                   <Button
                     type="button"
                     onClick={() => onGenerate(definition.id, stage, tweaks[definition.id] || "")}
-                    disabled={Boolean(generating) || finalLocked}
+                    disabled={Boolean(generating)}
                   >
                     {isGenerating ? <Loader2 size={15} className="animate-spin" /> : <WandSparkles size={15} />}
-                    {asset ? "Regenerate" : "Generate"} {stage === "final" ? `Professional Final · ${CREDIT_COSTS.marketingProfessionalFinal} credits` : `Preview · ${CREDIT_COSTS.marketingVisualPreview} credits`}
+                    {asset ? "Regenerate" : "Generate"} Visual · {CREDIT_COSTS.marketingProfessionalFinal} credits
                   </Button>
-                  {stage === "final" && asset && !approved && (
+                  {asset && !approved && (
                     <Button type="button" variant="secondary" disabled={approvingAssetId === asset.id} onClick={() => onApprove(asset)}>
                       {approvingAssetId === asset.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                      Approve final
+                      Approve visual
                     </Button>
                   )}
                 </div>

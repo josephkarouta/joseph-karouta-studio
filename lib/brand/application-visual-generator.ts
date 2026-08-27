@@ -5,6 +5,7 @@ import {
   storeGeneratedBrandImage,
   type BrandImageStorageContext,
 } from "./brand-image-storage";
+import { getBrandSocialFormatDefinitions } from "./application-visual-pricing";
 
 
 let openaiClient: OpenAI | null = null;
@@ -707,60 +708,6 @@ async function buildSocialAsset(args: {
     .toBuffer();
 }
 
-function socialOutputDefinitions(brief: any) {
-  const formats = safeText(brief?.formats).toLowerCase();
-  const outputs: Array<{
-    id: string;
-    label: string;
-    width: number;
-    height: number;
-    aiSize: OpenAiSize;
-  }> = [];
-  const add = (item: (typeof outputs)[number]) => {
-    if (!outputs.some((current) => current.id === item.id)) outputs.push(item);
-  };
-
-  if (!formats || /\bpost\b|\bposts\b|poster|square|feed/.test(formats)) {
-    add({
-      id: "social-post",
-      label: "Social Post — 1080 × 1080",
-      width: 1080,
-      height: 1080,
-      aiSize: "1024x1024",
-    });
-  }
-  if (/carousel|portrait/.test(formats)) {
-    add({
-      id: "social-carousel-cover",
-      label: "Carousel Cover — 1080 × 1350",
-      width: 1080,
-      height: 1350,
-      aiSize: "1024x1536",
-    });
-  }
-  if (/story|stories|reel|reels|tiktok|vertical/.test(formats)) {
-    add({
-      id: "social-story",
-      label: "Story / Reel Cover — 1080 × 1920",
-      width: 1080,
-      height: 1920,
-      aiSize: "1024x1536",
-    });
-  }
-
-  if (!outputs.length) {
-    add({
-      id: "social-post",
-      label: "Social Post — 1080 × 1080",
-      width: 1080,
-      height: 1080,
-      aiSize: "1024x1024",
-    });
-  }
-
-  return outputs.slice(0, 3);
-}
-
 async function buildLetterheadMockup(args: {
   artwork: Buffer;
   logoBuffer: Buffer;
@@ -1124,7 +1071,7 @@ Requirements:
     }),
   ];
 } else if (applicationId === "social-system") {
-  const definitions = socialOutputDefinitions(brief);
+  const definitions = getBrandSocialFormatDefinitions(brief);
   const projectOrBrandName = safeText(project?.project_name, "The brand");
   const platformSummary = safeText(brief?.platforms, "social media");
   const pillarSummary = safeText(brief?.contentPillars, "general brand content");

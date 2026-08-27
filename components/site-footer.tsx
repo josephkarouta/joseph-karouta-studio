@@ -19,6 +19,7 @@ const columns = [
     links: [
       ["How it works", "/#how-it-works"],
       ["Pricing", "/#pricing"],
+      ["Credit guide", "/credit-guide"],
       ["About", "/about"],
       ["Careers", "/careers"],
       ["Contact", "/contact"],

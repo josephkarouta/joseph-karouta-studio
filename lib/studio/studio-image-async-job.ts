@@ -144,7 +144,7 @@ async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, user
     projectId: String(project.id),
     studio: "interior_studio",
     assetType: `interior_${outputKind}_${imageType}_${stage}`,
-    title: `${project.project_name || "Interior project"} — ${roomTitle}${label} — ${stageLabel(stage)}`,
+    title: `${project.project_name || "Interior project"} — ${roomTitle}${label}`,
     buffer: Buffer.from(base64, "base64"),
     payload: { prompt, imageType, stage, projectName: project.project_name, roomKey: roomKey || null, roomName: roomName || null, floorLabel: floorLabel || null, sourcePlanAssetId: sourcePlanAssetId || null },
     metadata: {
@@ -186,7 +186,7 @@ async function generateMarketingImage(admin: SupabaseClient, openai: OpenAI, use
     projectId: String(project.id),
     studio: "marketing_studio",
     assetType: `marketing_visual_${viewType}_${stage}`,
-    title: `${project.project_name || "Marketing campaign"} — ${definition.label} — ${stage === "final" ? "Professional Final" : "Preview"}`,
+    title: `${project.project_name || "Marketing campaign"} — ${definition.label}`,
     buffer: Buffer.from(base64, "base64"),
     payload: { prompt, viewType, stage, tweak: tweak || null, projectName: project.project_name },
     metadata: { view_type: viewType, output_kind: "visual", stage, approved: false, source: "marketing_studio", format: definition.format, credit_reservation_id: reservationId, connected_brand_id: brandProjectIdFromInput(project.input || {}) || null },
@@ -451,7 +451,6 @@ async function deleteAsset(admin: SupabaseClient, assetId: string) {
 function safeSegment(value: string) { return value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70) || "asset"; }
 function architectureProjectIdFromInput(input: Record<string, unknown>) { const connected = input.connectedArchitecture && typeof input.connectedArchitecture === "object" ? input.connectedArchitecture as Record<string, unknown> : null; return String(connected?.id || input.architectureProjectId || "").trim(); }
 function brandProjectIdFromInput(input: Record<string, unknown>) { const connected = input.connectedBrand && typeof input.connectedBrand === "object" ? input.connectedBrand as Record<string, unknown> : null; return String(connected?.id || input.brandProjectId || "").trim(); }
-function stageLabel(stage: GenerationStage) { return stage === "technical" ? "Technical" : stage === "preview" ? "Preview" : "Professional Final"; }
 function promptJson(value: unknown, maxChars: number) { const text = JSON.stringify(value); return text.length <= maxChars ? text : `${text.slice(0, maxChars - 80)}… [context shortened]`; }
 function sanitizePromptValue(value: unknown, depth = 0): unknown {
   if (value == null || typeof value === "number" || typeof value === "boolean") return value;

@@ -325,7 +325,6 @@ Rules:
         return {
           guidelines: normaliseGuidelines(parsed, brandWithLogoPalette, project),
           usage: data?.usage || null,
-          model: data?.model || null,
         };
       },
     });

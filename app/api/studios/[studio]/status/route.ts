@@ -48,7 +48,6 @@ export async function GET(request: Request, context: { params: Promise<{ studio:
       project,
       output: project.output || {},
       workMode: job.output?.work_mode || job.input?.workMode || "guided",
-      model: job.output?.model || null,
       usage: job.output?.usage || null,
       creditsUsed: Number(job.output?.credits_used || job.input?.credits || 0),
     });

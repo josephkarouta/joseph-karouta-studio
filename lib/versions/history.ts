@@ -18,8 +18,6 @@ export type VersionHistoryItem = {
   assetType: string;
   assetTypeLabel: string;
   status: VersionStatus;
-  provider: string | null;
-  model: string | null;
   creditCost: number | null;
   changeSummary: string | null;
   userNote: string | null;
@@ -99,13 +97,12 @@ function projectHref(studio: string, projectId: string | null) {
   return null;
 }
 
-async function sign(admin: SupabaseClient, bucket: string, path: string | null) {
-  if (!path) return null;
-  const { data, error } = await admin.storage.from(bucket).createSignedUrl(path, 60 * 20);
-  return error ? null : data?.signedUrl || null;
-}
-
-async function previewForVersion(admin: SupabaseClient, sourceKind: string, snapshot: Record<string, any>) {
+function previewForVersion(
+  sourceKind: string,
+  snapshot: Record<string, any>,
+  architectureUrls: Map<string, string>,
+  productionUrls: Map<string, string>,
+) {
   const metadata = objectValue(snapshot.metadata);
   const payload = objectValue(snapshot.payload);
   if (sourceKind === "project_asset") {
@@ -114,47 +111,69 @@ async function previewForVersion(admin: SupabaseClient, sourceKind: string, snap
   }
   if (sourceKind === "architecture_visual") {
     const path = stringValue(snapshot.storage_path);
-    return { url: path ? await sign(admin, "architecture-files", path) : stringValue(snapshot.image_url) || null, mime: stringValue(metadata.mime_type) || "image/*" };
+    return { url: path ? architectureUrls.get(path) || null : stringValue(snapshot.image_url) || null, mime: stringValue(metadata.mime_type) || "image/*" };
   }
   if (sourceKind === "architecture_direction") {
     const path = stringValue(snapshot.image_storage_path);
-    return { url: path ? await sign(admin, "architecture-files", path) : stringValue(snapshot.image_url) || null, mime: "image/*" };
+    return { url: path ? architectureUrls.get(path) || null : stringValue(snapshot.image_url) || null, mime: "image/*" };
   }
   if (sourceKind === "architecture_concept") return { url: stringValue(snapshot.image_url) || null, mime: "image/*" };
   if (sourceKind === "architecture_document") {
     const path = stringValue(snapshot.storage_path);
-    return { url: path ? await sign(admin, "architecture-files", path) : null, mime: stringValue(snapshot.mime_type) || null };
+    return { url: path ? architectureUrls.get(path) || null : null, mime: stringValue(snapshot.mime_type) || null };
   }
   if (sourceKind === "production_deliverable") {
     const path = stringValue(snapshot.storage_path);
-    return { url: path ? await sign(admin, "production-files", path) : null, mime: stringValue(snapshot.mime_type) || null };
+    return { url: path ? productionUrls.get(path) || null : null, mime: stringValue(snapshot.mime_type) || null };
   }
   return { url: null, mime: null };
 }
 
 export async function loadVersionHistory(admin: SupabaseClient, userId: string) {
   const [historyRes, brandRes, architectureRes, studioRes] = await Promise.all([
-    admin.from("project_version_history").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(4000),
-    admin.from("brand_projects").select("*").eq("user_id", userId).limit(500),
-    admin.from("architecture_projects").select("*").eq("user_id", userId).limit(500),
-    admin.from("studio_projects").select("*").eq("user_id", userId).limit(1000),
+    admin.from("project_version_history").select("id,studio,project_id,family_key,source_kind,source_id,version_number,title,asset_type,status,credit_cost,change_summary,user_note,is_current,restored_from_version_id,created_at,snapshot").eq("user_id", userId).order("created_at", { ascending: false }).limit(4000),
+    admin.from("brand_projects").select("id,project_name").eq("user_id", userId).limit(500),
+    admin.from("architecture_projects").select("id,project_name").eq("user_id", userId).limit(500),
+    admin.from("studio_projects").select("id,studio,project_name").eq("user_id", userId).limit(1000),
   ]);
   if (historyRes.error) throw historyRes.error;
 
   const projectNames = new Map<string, string>();
-  for (const row of brandRes.data || []) projectNames.set(`brand:${row.id}`, stringValue(row.business_name, row.project_name, row.name) || "Brand project");
-  for (const row of architectureRes.data || []) projectNames.set(`architecture:${row.id}`, stringValue(row.project_name, row.name) || "Architecture project");
+  for (const row of brandRes.data || []) projectNames.set(`brand:${row.id}`, stringValue(row.project_name) || "Brand project");
+  for (const row of architectureRes.data || []) projectNames.set(`architecture:${row.id}`, stringValue(row.project_name) || "Architecture project");
   for (const row of studioRes.data || []) {
     const studio = normalizedStudio(row.studio);
-    projectNames.set(`${studio}:${row.id}`, stringValue(row.project_name, row.name) || `${humanize(studio)} project`);
+    projectNames.set(`${studio}:${row.id}`, stringValue(row.project_name) || `${humanize(studio)} project`);
   }
 
+  const historyRows = historyRes.data || [];
+  const architecturePaths: string[] = [];
+  const productionPaths: string[] = [];
+  for (const row of historyRows) {
+    const snapshot = objectValue(row.snapshot);
+    const sourceKind = String(row.source_kind || "");
+    if (sourceKind === "architecture_direction") {
+      const path = stringValue(snapshot.image_storage_path);
+      if (path) architecturePaths.push(path);
+    } else if (["architecture_visual", "architecture_document"].includes(sourceKind)) {
+      const path = stringValue(snapshot.storage_path);
+      if (path) architecturePaths.push(path);
+    } else if (sourceKind === "production_deliverable") {
+      const path = stringValue(snapshot.storage_path);
+      if (path) productionPaths.push(path);
+    }
+  }
+  const [architectureUrls, productionUrls] = await Promise.all([
+    signedUrlMap(admin, "architecture-files", architecturePaths),
+    signedUrlMap(admin, "production-files", productionPaths),
+  ]);
+
   const items: VersionHistoryItem[] = [];
-  for (const row of historyRes.data || []) {
+  for (const row of historyRows) {
     const studio = normalizedStudio(row.studio);
     const projectId = row.project_id ? String(row.project_id) : null;
     const snapshot = objectValue(row.snapshot);
-    const preview = await previewForVersion(admin, String(row.source_kind), snapshot);
+    const preview = previewForVersion(String(row.source_kind), snapshot, architectureUrls, productionUrls);
     items.push({
       id: String(row.id),
       studio,
@@ -170,8 +189,6 @@ export async function loadVersionHistory(admin: SupabaseClient, userId: string) 
       assetType: String(row.asset_type || "asset"),
       assetTypeLabel: humanize(row.asset_type),
       status: String(row.status || "draft") as VersionStatus,
-      provider: row.provider ? String(row.provider) : null,
-      model: row.model ? String(row.model) : null,
       creditCost: Number.isFinite(Number(row.credit_cost)) ? Number(row.credit_cost) : null,
       changeSummary: row.change_summary ? String(row.change_summary) : null,
       userNote: row.user_note ? String(row.user_note) : null,
@@ -208,4 +225,25 @@ export async function loadVersionHistory(admin: SupabaseClient, userId: string) 
   }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   return { families, totalVersions: items.length };
+}
+
+async function signedUrlMap(
+  admin: SupabaseClient,
+  bucket: string,
+  paths: string[],
+) {
+  const uniquePaths = Array.from(new Set(paths.filter(Boolean)));
+  const urls = new Map<string, string>();
+  for (let index = 0; index < uniquePaths.length; index += 100) {
+    const batch = uniquePaths.slice(index, index + 100);
+    const { data, error } = await admin.storage.from(bucket).createSignedUrls(batch, 60 * 20);
+    if (error) {
+      console.error(`Version history could not sign a ${bucket} batch:`, error.message);
+      continue;
+    }
+    for (const item of data || []) {
+      if (item.path && item.signedUrl) urls.set(String(item.path), String(item.signedUrl));
+    }
+  }
+  return urls;
 }

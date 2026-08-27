@@ -2,7 +2,7 @@ import "server-only";
 
 import Stripe from "stripe";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { normalizePlan, type PlanId } from "@/lib/platform/plans";
+import { getPlan, normalizePlan, type PlanId } from "@/lib/platform/plans";
 
 export type SubscriptionRow = Record<string, unknown>;
 
@@ -46,13 +46,109 @@ export function getStripe() {
 }
 
 export function planFromSubscription(subscription: Stripe.Subscription): PlanId {
-  const metadataPlan = subscription.metadata?.plan;
-  if (metadataPlan) return normalizePlan(metadataPlan);
-
+  // The Stripe price is authoritative after a Customer Portal plan change.
+  // Subscription metadata is written when Checkout first creates the
+  // subscription and Stripe does not automatically rewrite that metadata when
+  // the customer later switches prices. Keep metadata only as a compatibility
+  // fallback for older subscriptions that still use an archived price.
   const priceId = subscription.items?.data?.[0]?.price?.id;
   if (priceId && priceId === process.env.STRIPE_PRO_PRICE_ID_USD) return "pro";
   if (priceId && priceId === process.env.STRIPE_STARTER_PRICE_ID_USD) return "starter";
+
+  const metadataPlan = subscription.metadata?.plan;
+  if (metadataPlan) return normalizePlan(metadataPlan);
   return "free";
+}
+
+type ValidatedSubscriptionCatalog = {
+  starterProductId: string;
+  proProductId: string;
+  starterPriceId: string;
+  proPriceId: string;
+};
+
+let validatedSubscriptionCatalogPromise: Promise<ValidatedSubscriptionCatalog> | null = null;
+
+function configuredSubscriptionPriceId(plan: "starter" | "pro") {
+  return plan === "starter"
+    ? String(process.env.STRIPE_STARTER_PRICE_ID_USD || "").trim()
+    : String(process.env.STRIPE_PRO_PRICE_ID_USD || "").trim();
+}
+
+function priceProductId(price: Stripe.Price) {
+  if (typeof price.product === "string") return price.product;
+  return price.product?.id || "";
+}
+
+function assertPlanPrice(price: Stripe.Price, plan: "starter" | "pro") {
+  const expected = getPlan(plan);
+  const expectedAmount = Math.round(expected.monthlyPriceUsd * 100);
+  const amount = price.unit_amount;
+  const interval = price.recurring?.interval;
+  const intervalCount = price.recurring?.interval_count || 1;
+
+  if (
+    !price.active ||
+    price.currency.toLowerCase() !== "usd" ||
+    amount !== expectedAmount ||
+    interval !== "month" ||
+    intervalCount !== 1
+  ) {
+    throw new Error(
+      `Stripe ${expected.name} price ${price.id} must be an active USD monthly price for $${expected.monthlyPriceUsd}.`,
+    );
+  }
+}
+
+/**
+ * Validate the two configured subscription prices once per server process.
+ * Starter and Pro are separate subscription products/prices so Stripe's
+ * Customer Portal can present them as distinct monthly tiers. This validation
+ * prevents stale sandbox/live price IDs from silently charging old values.
+ */
+export async function validateStripeSubscriptionCatalog(
+  stripe: Stripe,
+): Promise<ValidatedSubscriptionCatalog> {
+  if (validatedSubscriptionCatalogPromise) return validatedSubscriptionCatalogPromise;
+
+  validatedSubscriptionCatalogPromise = (async () => {
+    const starterPriceId = configuredSubscriptionPriceId("starter");
+    const proPriceId = configuredSubscriptionPriceId("pro");
+    if (!starterPriceId || !proPriceId) {
+      throw new Error("Stripe Starter and Pro price IDs are not both configured.");
+    }
+
+    const [starterPrice, proPrice] = await Promise.all([
+      stripe.prices.retrieve(starterPriceId),
+      stripe.prices.retrieve(proPriceId),
+    ]);
+
+    assertPlanPrice(starterPrice, "starter");
+    assertPlanPrice(proPrice, "pro");
+
+    const starterProductId = priceProductId(starterPrice);
+    const proProductId = priceProductId(proPrice);
+    if (!starterProductId || !proProductId) {
+      throw new Error("Stripe Starter and Pro prices must each belong to a product.");
+    }
+    if (starterProductId === proProductId) {
+      throw new Error(
+        "Stripe Starter and Pro must use separate products so the Customer Portal can offer both monthly tiers.",
+      );
+    }
+
+    return {
+      starterProductId,
+      proProductId,
+      starterPriceId,
+      proPriceId,
+    };
+  })().catch((error) => {
+    validatedSubscriptionCatalogPromise = null;
+    throw error;
+  });
+
+  return validatedSubscriptionCatalogPromise;
 }
 
 export function subscriptionPayload(subscription: Stripe.Subscription, overridePlan?: unknown) {

@@ -200,7 +200,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#db2777",
     soft: "rgba(219,39,119,.12)",
-    creditLabel: `From ${CREDIT_COSTS.imageToVideoPreview} credits`,
+    creditLabel: `${CREDIT_COSTS.imageToVideoHigh} credits`,
   },
   {
     id: "digital_adaptations",
@@ -233,7 +233,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#ea580c",
     soft: "rgba(234,88,12,.12)",
-    creditLabel: `From ${CREDIT_COSTS.powerpointDraft} credits`,
+    creditLabel: `${CREDIT_COSTS.powerpointFull} credits`,
   }
 ];
 

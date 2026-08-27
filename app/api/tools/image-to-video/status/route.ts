@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, status: "processing", providerState: "finalizing" });
     }
     if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "GEMINI_API_KEY is missing." }, { status: 503 });
+      return NextResponse.json({ error: "Video generation is not configured." }, { status: 503 });
     }
     if (!job.provider_job_id) {
       return NextResponse.json({ success: true, status: "processing", providerState: "starting" });
@@ -69,10 +69,7 @@ export async function GET(request: Request) {
     if (error instanceof ApiAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not check video status." },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Could not check video status." }, { status: 500 });
   }
 }
 
@@ -86,7 +83,7 @@ async function checkOmni(auth: GenerationStatusAccess, job: any) {
 
   const state = String(data?.state || "PROCESSING").toUpperCase();
   if (state === "FAILED") {
-    return await failJob(auth, job, data?.error?.message || "Video generation failed.", data);
+    return await failJob(auth, job, "Video generation failed. Your credits were returned.", data);
   }
   if (state === "ACTIVE") {
     const videoUri = String(job.output?.video_uri || data?.uri || "");
@@ -113,7 +110,7 @@ async function checkVeo(auth: GenerationStatusAccess, job: any) {
   if (!response.ok) throw new Error(data?.error?.message || "Could not check Veo 3.1 status.");
 
   if (data?.error) {
-    return await failJob(auth, job, data.error?.message || "Veo 3.1 generation failed.", data);
+    return await failJob(auth, job, "Video generation failed. Your credits were returned.", data);
   }
   if (!data?.done) {
     await auth.admin
@@ -127,10 +124,10 @@ async function checkVeo(auth: GenerationStatusAccess, job: any) {
     data?.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri || findVideoUri(data) || "",
   );
   if (!videoUri) {
-    return await failJob(auth, job, "Veo 3.1 completed without a downloadable video.", data);
+    return await failJob(auth, job, "The video finished without a downloadable file. Your credits were returned.", data);
   }
 
-  return await claimAndPersistVideo(auth, job, videoUri, String(job.input?.model || "veo-3.1-generate-preview"));
+  return await claimAndPersistVideo(auth, job, videoUri, String(job.input?.model || "veo-3.1-fast-generate-preview"));
 }
 
 async function claimAndPersistVideo(
@@ -245,7 +242,7 @@ async function persistVideo(
     payload: {
       prompt: job.input?.prompt || "",
       aspect: job.input?.aspect || "16:9",
-      mode: job.input?.mode || "preview",
+      ...(job.input?.mode ? { mode: job.input.mode } : {}),
       resolution: job.input?.resolution || null,
     },
     metadata: {

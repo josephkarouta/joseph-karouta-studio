@@ -25,6 +25,7 @@ export async function startBrandImageJob(args: {
   provider: "openai" | "gemini";
   input: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  amountOverride?: number;
 }) {
   let jobId: string | null = null;
   let startedJob: GenerationJobStart | null = null;
@@ -53,6 +54,7 @@ export async function startBrandImageJob(args: {
         tool: args.tool,
         ...args.metadata,
       },
+      amountOverride: args.amountOverride,
     });
     jobId = startedJob.jobId;
 

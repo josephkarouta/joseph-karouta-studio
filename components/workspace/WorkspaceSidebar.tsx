@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import {
   BadgeHelp,
@@ -29,6 +30,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { PLATFORM_TOOLS, VISIBLE_STUDIOS } from "@/lib/platform/platform-registry";
 import { cx } from "@/components/ui/heyy";
+
+const SIDEBAR_SCROLL_KEY = "heyy:workspace-sidebar-scroll";
 
 type Props = {
   collapsed: boolean;
@@ -68,9 +71,10 @@ export default function WorkspaceSidebar({
   onCloseMobile,
 }: Props) {
   const pathname = usePathname();
+  const navigationScrollRef = useRef<HTMLDivElement>(null);
   const workspaceItems: NavigationItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: Gauge, activePrefixes: ["/dashboard"] },
-    { label: "Projects", href: "/dashboard#projects", icon: FolderKanban },
+    { label: "Projects", href: "/dashboard/projects", icon: FolderKanban, activePrefixes: ["/dashboard/projects"] },
     { label: "Assets", href: "/dashboard/assets", icon: FolderOpen, activePrefixes: ["/dashboard/assets"] },
     { label: "Versions", href: "/dashboard/versions", icon: FileClock, activePrefixes: ["/dashboard/versions"] },
     { label: "Production", href: "/dashboard#production", icon: Blocks },
@@ -96,6 +100,13 @@ export default function WorkspaceSidebar({
     if (item.href === "/dashboard") return pathname === "/dashboard";
     return Boolean(item.activePrefixes?.some((prefix) => pathname.startsWith(prefix)));
   }
+
+  useLayoutEffect(() => {
+    const savedPosition = Number(window.sessionStorage.getItem(SIDEBAR_SCROLL_KEY) || 0);
+    if (navigationScrollRef.current && Number.isFinite(savedPosition)) {
+      navigationScrollRef.current.scrollTop = savedPosition;
+    }
+  }, []);
 
   return (
     <aside
@@ -143,7 +154,11 @@ export default function WorkspaceSidebar({
         </button>
       </div>
 
-      <div className="heyy-scrollbar flex-1 overflow-y-auto px-3 py-4">
+      <div
+        ref={navigationScrollRef}
+        onScroll={(event) => window.sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(event.currentTarget.scrollTop))}
+        className="heyy-scrollbar flex-1 overflow-y-auto px-3 py-4"
+      >
         <NavigationGroup
           label="Workspace"
           items={workspaceItems}
