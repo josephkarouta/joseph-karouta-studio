@@ -6,7 +6,7 @@ export const CREDIT_COSTS = {
   imageToVideoPreview: 13,
   imageToVideoHigh: 13,
   aiUpscale2x: 3,
-  aiUpscale4x: 3,
+  aiUpscale4x: 6,
   powerpointDraft: 3,
   powerpointFull: 3,
   powerpoint11To15: 4,

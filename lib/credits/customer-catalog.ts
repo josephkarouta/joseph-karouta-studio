@@ -33,11 +33,18 @@ export const CUSTOMER_CREDIT_GUIDE: CreditGuideItem[] = [
     detail: "Compatible export sizes can share one generated composition.",
   },
   {
-    id: "upscale",
+    id: "upscale-2x",
     category: "AI Tools",
-    label: "AI Upscaler",
+    label: "AI Upscaler · 2×",
+    credits: CREDIT_COSTS.aiUpscale2x,
+    detail: "Enlarge the source to 2× its width and height using the selected enhancement approach.",
+  },
+  {
+    id: "upscale-4x",
+    category: "AI Tools",
+    label: "AI Upscaler · 4×",
     credits: CREDIT_COSTS.aiUpscale4x,
-    detail: "One supported upscale job.",
+    detail: "Enlarge the source to 4× its width and height. Large sources remain subject to output-size safety limits.",
   },
   {
     id: "video",

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/components/auth-provider";
-import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
+import { Button, CreditPill, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import { generationFetch } from "@/lib/client/generation-request";
@@ -35,7 +35,6 @@ export default function TextToImageWorkbench() {
   const referenceInputRef = useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = useState("");
   const [size, setSize] = useState("1024x1024");
-  const [quality, setQuality] = useState<"preview" | "high">("preview");
   const [styleNotes, setStyleNotes] = useState("");
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceUrl, setReferenceUrl] = useState("");
@@ -44,7 +43,7 @@ export default function TextToImageWorkbench() {
   const [downloading, setDownloading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [error, setError] = useState("");
-  const cost = quality === "high" ? CREDIT_COSTS.textToImageHigh : CREDIT_COSTS.textToImagePreview;
+  const cost = CREDIT_COSTS.textToImageHigh;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -106,7 +105,7 @@ export default function TextToImageWorkbench() {
       formData.append("prompt", prompt);
       formData.append("styleNotes", styleNotes);
       formData.append("size", size);
-      formData.append("quality", quality);
+      formData.append("quality", "high");
       formData.append("projectId", new URLSearchParams(window.location.search).get("project") || "");
       if (referenceImage) formData.append("referenceImage", referenceImage, referenceImage.name);
 
@@ -120,7 +119,7 @@ export default function TextToImageWorkbench() {
           prompt,
           styleNotes,
           size,
-          quality,
+          quality: "high",
           projectId: new URLSearchParams(window.location.search).get("project") || null,
           reference: referenceImage
             ? { name: referenceImage.name, size: referenceImage.size, modified: referenceImage.lastModified }
@@ -234,33 +233,21 @@ export default function TextToImageWorkbench() {
           <label className="mt-5 block text-[.64rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Style and restrictions</label>
           <textarea value={styleNotes} onChange={(event) => setStyleNotes(event.target.value)} rows={3} className="heyy-form-field mt-2 resize-y" placeholder="Lighting, lens, materials, colors, composition, and anything to avoid." />
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-[.64rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Aspect ratio</label>
-              <div className="mt-2">
-                <HeyySelect
-                  value={size}
-                  ariaLabel="Aspect ratio"
-                  options={[
-                    { value: "1024x1024", label: "Square · 1:1" },
-                    { value: "1536x1024", label: "Landscape · 3:2" },
-                    { value: "1024x1536", label: "Portrait · 2:3" },
-                    { value: "1536x864", label: "Widescreen · 16:9" },
-                    { value: "864x1536", label: "Vertical · 9:16" },
-                  ]}
-                  onChange={setSize}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[.64rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Quality</label>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {(["preview", "high"] as const).map((item) => (
-                  <button type="button" key={item} onClick={() => setQuality(item)} className={cx("min-h-12 rounded-2xl border text-xs font-black capitalize transition", quality === item ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--border-strong)] bg-[var(--surface)] hover:border-[var(--accent)]")}>
-                    {item}<span className="ml-1 opacity-70">· {item === "high" ? CREDIT_COSTS.textToImageHigh : CREDIT_COSTS.textToImagePreview}</span>
-                  </button>
-                ))}
-              </div>
+          <div className="mt-5">
+            <label className="text-[.64rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Aspect ratio</label>
+            <div className="mt-2">
+              <HeyySelect
+                value={size}
+                ariaLabel="Aspect ratio"
+                options={[
+                  { value: "1024x1024", label: "Square · 1:1" },
+                  { value: "1536x1024", label: "Landscape · 3:2" },
+                  { value: "1024x1536", label: "Portrait · 2:3" },
+                  { value: "1536x864", label: "Widescreen · 16:9" },
+                  { value: "864x1536", label: "Vertical · 9:16" },
+                ]}
+                onChange={setSize}
+              />
             </div>
           </div>
 
