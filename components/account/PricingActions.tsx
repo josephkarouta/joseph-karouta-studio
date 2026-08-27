@@ -30,6 +30,10 @@ export default function PricingAction({ planId, current, featured }: { planId: P
       window.location.href = `/login?next=${encodeURIComponent("/pricing")}`;
       return;
     }
+    if (currentPlan !== "free") {
+      window.location.href = "/billing";
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -79,8 +83,8 @@ export default function PricingAction({ planId, current, featured }: { planId: P
             : planId === "free"
               ? "Buy credits"
               : isUpgrade
-                ? `Upgrade to ${definition.name}`
-                : "Manage plan"}
+                ? `Change to ${definition.name}`
+                : `Change to ${definition.name}`}
       </Button>
       {error && <p className="mt-3 text-xs font-bold text-red-500">{error}</p>}
     </div>

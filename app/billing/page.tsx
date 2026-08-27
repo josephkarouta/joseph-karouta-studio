@@ -44,6 +44,9 @@ type BillingDetails = {
   currency: string | null;
   amount: number | null;
   canManage: boolean;
+  pendingPlan: "starter" | "pro" | null;
+  pendingPlanEffectiveAt: string | null;
+  canChangePlan: boolean;
 };
 
 function formatDate(value: string | null) {
@@ -99,6 +102,7 @@ export default function BillingPage() {
   const [billing, setBilling] = useState<BillingDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [changingPlan, setChangingPlan] = useState(false);
   const [error, setError] = useState("");
   const definition = getPlan(billing?.plan || plan);
 
@@ -151,6 +155,48 @@ export default function BillingPage() {
       setLoading(false);
     }
   }, [refreshAccount, user?.id]);
+
+  async function schedulePlanChange(targetPlan: "starter" | "pro") {
+    setChangingPlan(true);
+    setError("");
+    try {
+      const token = await accessToken();
+      const response = await fetch("/api/billing/change-plan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ plan: targetPlan }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Plan change could not be scheduled.");
+      await loadBilling();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Plan change could not be scheduled.");
+    } finally {
+      setChangingPlan(false);
+    }
+  }
+
+  async function cancelScheduledPlanChange() {
+    setChangingPlan(true);
+    setError("");
+    try {
+      const token = await accessToken();
+      const response = await fetch("/api/billing/cancel-plan-change", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Scheduled plan change could not be cancelled.");
+      await loadBilling();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : "Scheduled plan change could not be cancelled.");
+    } finally {
+      setChangingPlan(false);
+    }
+  }
 
   async function openPortal() {
     setOpeningPortal(true);
@@ -346,9 +392,31 @@ export default function BillingPage() {
                       Your paid access remains active until the end of the current billing period.
                     </p>
                   )}
+                  {billing?.pendingPlan && (
+                    <p className="mt-1 text-xs font-semibold text-[var(--accent-strong)]">
+                      Changes to {getPlan(billing.pendingPlan).name} on {formatDate(billing.pendingPlanEffectiveAt)}. Your current credits and price stay unchanged until then.
+                    </p>
+                  )}
                 </div>
               </div>
-              {billing?.canManage ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {billing?.pendingPlan ? (
+                  <Button type="button" variant="secondary" onClick={cancelScheduledPlanChange} disabled={changingPlan}>
+                    {changingPlan && <LoaderCircle size={16} className="animate-spin" />}
+                    Cancel plan change
+                  </Button>
+                ) : billing?.canChangePlan && definition.id === "starter" ? (
+                  <Button type="button" variant="secondary" onClick={() => schedulePlanChange("pro")} disabled={changingPlan}>
+                    {changingPlan && <LoaderCircle size={16} className="animate-spin" />}
+                    Change to Pro at renewal
+                  </Button>
+                ) : billing?.canChangePlan && definition.id === "pro" ? (
+                  <Button type="button" variant="secondary" onClick={() => schedulePlanChange("starter")} disabled={changingPlan}>
+                    {changingPlan && <LoaderCircle size={16} className="animate-spin" />}
+                    Change to Starter at renewal
+                  </Button>
+                ) : null}
+                {billing?.canManage ? (
                 <Button type="button" onClick={openPortal} disabled={openingPortal}>
                   {openingPortal ? <LoaderCircle size={16} className="animate-spin" /> : <Settings2 size={16} />}
                   Manage billing
@@ -358,6 +426,7 @@ export default function BillingPage() {
                   View subscription plans <ExternalLink size={15} />
                 </ButtonLink>
               )}
+              </div>
             </div>
           </div>
 
@@ -374,8 +443,8 @@ export default function BillingPage() {
             <ReceiptText size={22} className="text-[var(--accent-strong)]" />
             <h2 className="mt-5 text-xl font-black">Subscription management</h2>
             <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-              Use the secure Stripe billing portal to update payment details, view invoices, change an available plan or cancel a subscription.
-              It opens in a new tab, so this Billing page stays available and refreshes automatically when you return.
+              Use the secure Stripe billing portal to update payment details, view invoices or cancel a subscription.
+              Plan changes are scheduled from Heyy Studio for your next renewal so credits and billing stay aligned. The portal opens in a new tab and this page refreshes when you return.
             </p>
             {billing?.canManage ? (
               <Button type="button" variant="secondary" className="mt-6 w-full" onClick={openPortal} disabled={openingPortal}>
@@ -384,7 +453,7 @@ export default function BillingPage() {
               </Button>
             ) : (
               <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-                No Stripe billing account is connected yet. Complete a Starter or Pro subscription through the Pricing page to enable invoices, payment-method updates, plan switching and cancellation.
+                No Stripe billing account is connected yet. Complete a Starter or Pro subscription through the Pricing page to enable invoices, payment-method updates and cancellation.
               </div>
             )}
           </GlassCard>

@@ -22,6 +22,69 @@ function isoFromUnixSeconds(value: unknown) {
   return seconds > 0 ? new Date(seconds * 1000).toISOString() : null;
 }
 
+
+async function retrieveSubscriptionSchedule(
+  stripe: ReturnType<typeof getStripe>,
+  subscription: Stripe.Subscription,
+) {
+  const value = subscription.schedule;
+  if (!value) return null;
+  if (typeof value !== "string") return value as Stripe.SubscriptionSchedule;
+  try {
+    return await stripe.subscriptionSchedules.retrieve(value);
+  } catch {
+    return null;
+  }
+}
+
+function priceId(value: string | Stripe.Price | undefined) {
+  if (!value) return "";
+  return typeof value === "string" ? value : value.id;
+}
+
+function normalizedPriceId(value: unknown) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "id" in value) {
+    const id = (value as { id?: unknown }).id;
+    return typeof id === "string" ? id : null;
+  }
+  return null;
+}
+
+function pendingPlanFromSchedule(
+  schedule: Stripe.SubscriptionSchedule | null,
+  currentPriceId: string | null | undefined,
+) {
+  if (!schedule || !["active", "not_started"].includes(schedule.status)) {
+    return { plan: null as null | "starter" | "pro", effectiveAt: null as string | null };
+  }
+
+  const current = String(currentPriceId || "");
+  const phases = (schedule.phases || []) as unknown as Array<{
+    start_date?: number;
+    items?: { data?: Array<{ price?: string | Stripe.Price }> };
+  }>;
+
+  for (const phase of phases) {
+    const nextPrice = priceId(phase.items?.data?.[0]?.price);
+    if (!nextPrice || nextPrice === current) continue;
+    if (nextPrice === process.env.STRIPE_STARTER_PRICE_ID_USD) {
+      return {
+        plan: "starter" as const,
+        effectiveAt: isoFromUnixSeconds(phase.start_date),
+      };
+    }
+    if (nextPrice === process.env.STRIPE_PRO_PRICE_ID_USD) {
+      return {
+        plan: "pro" as const,
+        effectiveAt: isoFromUnixSeconds(phase.start_date),
+      };
+    }
+  }
+
+  return { plan: null as null | "starter" | "pro", effectiveAt: null as string | null };
+}
+
 function isTerminalSubscriptionStatus(value: unknown) {
   return ["cancelled", "canceled", "inactive", "incomplete_expired"].includes(
     String(value || "").toLowerCase(),
@@ -58,6 +121,10 @@ export async function GET(request: Request) {
     const subscriptionIsTerminal = Boolean(
       subscription && isTerminalSubscriptionStatus(subscription.status),
     );
+
+    const subscriptionSchedule = subscription
+      ? await retrieveSubscriptionSchedule(stripe, subscription)
+      : null;
 
     let row = existing;
     if (subscription) {
@@ -105,6 +172,10 @@ export async function GET(request: Request) {
     const subscriptionStartedAt = subscription
       ? isoFromUnixSeconds(subscription.created)
       : String(row?.created_at || "").trim() || null;
+    const pendingPlan = pendingPlanFromSchedule(
+      subscriptionSchedule,
+      normalizedPriceId(payload.stripe_price_id),
+    );
 
     return NextResponse.json({
       success: true,
@@ -130,6 +201,14 @@ export async function GET(request: Request) {
         currency: payload.currency,
         amount: payload.amount,
         canManage: Boolean(payload.stripe_customer_id),
+        pendingPlan: pendingPlan.plan,
+        pendingPlanEffectiveAt: pendingPlan.effectiveAt,
+        canChangePlan: Boolean(
+          payload.stripe_subscription_id &&
+            !terminalStatus &&
+            !cancelAtPeriodEnd &&
+            ["active", "trialing"].includes(String(payload.status || "").toLowerCase()),
+        ),
       },
     }, {
       headers: {

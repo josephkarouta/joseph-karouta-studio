@@ -68,12 +68,17 @@ async function applyMonthlyPlanCredits({
 async function expireSubscriptionPlanCredits({
   userId,
   subscription,
+  endedAtSecondsOverride,
+  source = "subscription_ended",
 }: {
   userId: string;
   subscription: Stripe.Subscription;
+  endedAtSecondsOverride?: number | null;
+  source?: "subscription_ended" | "renewal_failed";
 }) {
   const period = subscriptionPeriod(subscription);
   const endedAtSeconds =
+    endedAtSecondsOverride ||
     subscription.canceled_at ||
     period.end ||
     Math.floor(Date.now() / 1000);
@@ -87,12 +92,13 @@ async function expireSubscriptionPlanCredits({
     amount: 0,
     periodStart: periodStart.toISOString(),
     periodEnd: periodEnd.toISOString(),
-    grantKey: `stripe-ended:${subscription.id}:${periodStart.toISOString()}`,
-    source: "subscription_ended",
+    grantKey: `stripe-${source}:${subscription.id}:${periodStart.toISOString()}`,
+    source,
     metadata: {
       stripe_subscription_id: subscription.id,
       previous_plan: planFromSubscription(subscription),
       subscription_status: subscription.status,
+      expiry_reason: source,
     },
   });
 
@@ -238,7 +244,21 @@ export async function POST(req: Request) {
           invoiceRecord.parent?.subscription_details?.subscription ||
           null,
       );
-      if (subscription) await syncStripeSubscription(subscription);
+      if (subscription) {
+        const { userId } = await syncStripeSubscription(subscription);
+        if (userId) {
+          const invoiceRecordWithPeriod = invoice as unknown as { period_start?: number | null };
+          await expireSubscriptionPlanCredits({
+            userId,
+            subscription,
+            endedAtSecondsOverride:
+              Number(invoiceRecordWithPeriod.period_start || 0) ||
+              subscriptionPeriod(subscription).start ||
+              Math.floor(Date.now() / 1000),
+            source: "renewal_failed",
+          });
+        }
+      }
     }
 
     if (
