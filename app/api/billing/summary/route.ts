@@ -22,6 +22,12 @@ function isoFromUnixSeconds(value: unknown) {
   return seconds > 0 ? new Date(seconds * 1000).toISOString() : null;
 }
 
+function isTerminalSubscriptionStatus(value: unknown) {
+  return ["cancelled", "canceled", "inactive", "incomplete_expired"].includes(
+    String(value || "").toLowerCase(),
+  );
+}
+
 export async function GET(request: Request) {
   try {
     const { user, admin } = await requireApiUser(request);
@@ -49,18 +55,22 @@ export async function GET(request: Request) {
       subscription = await findBestSubscription(stripe, customer.id);
     }
 
+    const subscriptionIsTerminal = Boolean(
+      subscription && isTerminalSubscriptionStatus(subscription.status),
+    );
+
     let row = existing;
     if (subscription) {
       row = await syncSubscription(
         admin,
         user.id,
         subscription,
-        planFromSubscription(subscription),
+        subscriptionIsTerminal ? "free" : planFromSubscription(subscription),
       );
     }
 
     const payload = subscription
-      ? subscriptionPayload(subscription)
+      ? subscriptionPayload(subscription, subscriptionIsTerminal ? "free" : undefined)
       : {
           plan: normalizePlan(row?.plan),
           status: String(row?.status || "free"),
@@ -88,9 +98,7 @@ export async function GET(request: Request) {
     const scheduledCancelAt =
       liveScheduledCancelAt ||
       (cancelAtPeriodEnd ? payload.current_period_end : null);
-    const terminalStatus = ["cancelled", "canceled", "inactive", "incomplete_expired"].includes(
-      String(payload.status || "").toLowerCase(),
-    );
+    const terminalStatus = isTerminalSubscriptionStatus(payload.status);
     const autoRenewal = Boolean(
       payload.stripe_subscription_id && !cancelAtPeriodEnd && !terminalStatus,
     );

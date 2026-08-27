@@ -81,6 +81,12 @@ function formatPlanPrice(
   }
 }
 
+function isTerminalSubscriptionStatus(value: unknown) {
+  return ["cancelled", "canceled", "inactive", "incomplete_expired"].includes(
+    String(value || "").toLowerCase(),
+  );
+}
+
 function statusTone(status: string): "neutral" | "success" | "warning" | "info" {
   if (["active", "trialing"].includes(status)) return "success";
   if (["past_due", "unpaid", "incomplete"].includes(status)) return "warning";
@@ -97,12 +103,20 @@ export default function BillingPage() {
   const definition = getPlan(billing?.plan || plan);
 
   const hasPaidSubscription = Boolean(billing?.subscriptionId);
+  const subscriptionIsTerminal = Boolean(
+    hasPaidSubscription && isTerminalSubscriptionStatus(billing?.status),
+  );
 
   const billingLine = useMemo(() => {
     if (!billing?.subscriptionId) {
       return definition.id === "free"
         ? "Free plan — no paid subscription"
         : `${definition.name} access is enabled, but no Stripe subscription is connected`;
+    }
+    if (isTerminalSubscriptionStatus(billing.status)) {
+      return `Ended on ${formatDate(
+        billing.accessEndsAt || billing.canceledAt || billing.currentPeriodEnd,
+      )}`;
     }
     if (billing.cancelAtPeriodEnd) {
       return `Cancels on ${formatDate(billing.scheduledCancelAt || billing.currentPeriodEnd)}`;
@@ -265,11 +279,11 @@ export default function BillingPage() {
               value={hasPaidSubscription ? formatDate(billing?.subscriptionStartedAt || null) : "Not applicable"}
             />
             <BillingDetail
-              label="Current period starts"
+              label={subscriptionIsTerminal ? "Previous period started" : "Current period starts"}
               value={hasPaidSubscription ? formatDate(billing?.currentPeriodStart || null) : "Not applicable"}
             />
             <BillingDetail
-              label="Current period ends"
+              label={subscriptionIsTerminal ? "Previous period scheduled end" : "Current period ends"}
               value={hasPaidSubscription ? formatDate(billing?.currentPeriodEnd || null) : "Not applicable"}
             />
             <BillingDetail
@@ -288,7 +302,7 @@ export default function BillingPage() {
               tone={hasPaidSubscription ? (billing?.autoRenewal ? "success" : "warning") : "neutral"}
             />
             <BillingDetail
-              label="Plan price"
+              label={subscriptionIsTerminal ? "Previous plan price" : "Plan price"}
               value={formatPlanPrice(billing?.amount, billing?.currency, definition.monthlyPriceUsd)}
             />
             <BillingDetail
