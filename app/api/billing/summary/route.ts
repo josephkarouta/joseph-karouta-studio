@@ -22,6 +22,22 @@ function isoFromUnixSeconds(value: unknown) {
   return seconds > 0 ? new Date(seconds * 1000).toISOString() : null;
 }
 
+function unixSecondsFromDateLike(value: unknown) {
+  let milliseconds = Number.NaN;
+
+  if (typeof value === "string") {
+    milliseconds = Date.parse(value);
+  } else if (typeof value === "number") {
+    milliseconds = value > 1_000_000_000_000 ? value : value * 1000;
+  } else if (value instanceof Date) {
+    milliseconds = value.getTime();
+  }
+
+  return Number.isFinite(milliseconds) && milliseconds > 0
+    ? Math.floor(milliseconds / 1000)
+    : 0;
+}
+
 
 async function retrieveSubscriptionSchedule(
   stripe: ReturnType<typeof getStripe>,
@@ -68,6 +84,7 @@ function schedulePhaseItems(phase: SchedulePhaseLike) {
 function pendingPlanFromSchedule(
   schedule: Stripe.SubscriptionSchedule | null,
   currentPriceId: string | null | undefined,
+  notBeforeSeconds = 0,
 ) {
   if (!schedule || !["active", "not_started"].includes(schedule.status)) {
     return { plan: null as null | "starter" | "pro", effectiveAt: null as string | null };
@@ -77,18 +94,26 @@ function pendingPlanFromSchedule(
   const phases = (schedule.phases || []) as unknown as SchedulePhaseLike[];
 
   for (const phase of phases) {
+    const phaseStart = Number(phase.start_date || 0);
+    // Ignore historical schedule phases. Stripe keeps completed phases on the
+    // schedule after a renewal/plan switch, so reading every differing phase
+    // can make an old plan look like a new pending downgrade.
+    if (notBeforeSeconds > 0 && phaseStart > 0 && phaseStart < notBeforeSeconds) {
+      continue;
+    }
+
     const nextPrice = priceId(schedulePhaseItems(phase)[0]?.price);
     if (!nextPrice || nextPrice === current) continue;
     if (nextPrice === process.env.STRIPE_STARTER_PRICE_ID_USD) {
       return {
         plan: "starter" as const,
-        effectiveAt: isoFromUnixSeconds(phase.start_date),
+        effectiveAt: isoFromUnixSeconds(phaseStart),
       };
     }
     if (nextPrice === process.env.STRIPE_PRO_PRICE_ID_USD) {
       return {
         plan: "pro" as const,
-        effectiveAt: isoFromUnixSeconds(phase.start_date),
+        effectiveAt: isoFromUnixSeconds(phaseStart),
       };
     }
   }
@@ -183,9 +208,13 @@ export async function GET(request: Request) {
     const subscriptionStartedAt = subscription
       ? isoFromUnixSeconds(subscription.created)
       : String(row?.created_at || "").trim() || null;
+    const pendingPlanNotBeforeSeconds = unixSecondsFromDateLike(
+      payload.current_period_end,
+    );
     const pendingPlan = pendingPlanFromSchedule(
       subscriptionSchedule,
       normalizedPriceId(payload.stripe_price_id),
+      Number.isFinite(pendingPlanNotBeforeSeconds) ? pendingPlanNotBeforeSeconds : 0,
     );
 
     return NextResponse.json({
