@@ -13,7 +13,7 @@ export default function PdfToolsPage() {
       iconName="pdf"
       accent="#0f766e"
       soft="rgba(15,118,110,.12)"
-      creditLabel="5 free/day"
+      creditLabel="5/day free · Plans unlimited"
     >
       <PdfToolsWorkbench />
     </ToolFrame>

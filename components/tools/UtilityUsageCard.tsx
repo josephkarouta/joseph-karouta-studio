@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/ui/heyy";
 
 export default function UtilityUsageCard({
   unlimited,
+  plan,
   freeRemaining,
   dailyLimit,
   creditCost,
@@ -13,12 +14,15 @@ export default function UtilityUsageCard({
   error,
 }: {
   unlimited: boolean;
+  plan: string;
   freeRemaining: number;
   dailyLimit: number;
   creditCost: number;
   loading?: boolean;
   error?: string;
 }) {
+  const paidPlanPaused = !unlimited && ["starter", "pro"].includes(String(plan || "").toLowerCase());
+
   return (
     <GlassCard className="p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -28,18 +32,26 @@ export default function UtilityUsageCard({
           </span>
           <div>
             <p className="text-sm font-black">
-              {loading ? "Checking today’s allowance…" : unlimited ? "Unlimited with your plan" : `${freeRemaining} of ${dailyLimit} free uses left today`}
+              {loading
+                ? "Checking today’s allowance…"
+                : unlimited
+                  ? "Unlimited with your plan"
+                  : paidPlanPaused
+                    ? "Plan utilities paused"
+                    : `${freeRemaining} of ${dailyLimit} free uses left today`}
             </p>
             <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
               {unlimited
                 ? "PDF and conversion utilities do not use your subscription credits."
-                : `After the free daily allowance, each successful operation uses ${creditCost} credit.`}
+                : paidPlanPaused
+                  ? `Your subscription needs attention. The free daily allowance still applies, then each successful operation uses ${creditCost} credit.`
+                  : `After the free daily allowance, each successful operation uses ${creditCost} credit.`}
             </p>
           </div>
         </div>
         {!unlimited && !loading && (
           <Link href="/billing" className="text-xs font-black text-[var(--accent-strong)] hover:underline">
-            Upgrade for unlimited
+            {paidPlanPaused ? "Fix billing" : "Upgrade for unlimited"}
           </Link>
         )}
       </div>

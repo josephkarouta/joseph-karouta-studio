@@ -5,13 +5,11 @@ export type UtilityTool = "pdf_tools" | "file_converter";
 
 export const UTILITY_OPERATIONS: Record<UtilityTool, readonly string[]> = {
   pdf_tools: [
-    "edit",
     "compress",
     "split",
     "merge",
     "unlock",
     "protect",
-    "sign",
   ],
   file_converter: ["convert"],
 };
@@ -26,4 +24,24 @@ export function isUtilityOperation(tool: UtilityTool, value: unknown) {
 
 export function utilityCreditAction(tool: UtilityTool) {
   return tool === "pdf_tools" ? "pdfUtility" : "fileConversion";
+}
+
+
+export function utilitySubscriptionIncluded(plan: unknown, status: unknown) {
+  const normalizedPlan = String(plan || "").trim().toLowerCase();
+  if (normalizedPlan !== "starter" && normalizedPlan !== "pro") return false;
+
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  return normalizedStatus === "active" || normalizedStatus === "trialing";
+}
+
+export function utilitySubscriptionStatus(subscription: Record<string, unknown> | null | undefined) {
+  return String(
+    subscription?.status ||
+      subscription?.subscription_status ||
+      subscription?.state ||
+      "",
+  )
+    .trim()
+    .toLowerCase();
 }

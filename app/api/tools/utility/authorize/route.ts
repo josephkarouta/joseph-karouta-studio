@@ -14,6 +14,8 @@ import {
   utilityCreditAction,
   UTILITY_CREDIT_COST,
   UTILITY_DAILY_FREE_LIMIT,
+  utilitySubscriptionIncluded,
+  utilitySubscriptionStatus,
 } from "@/lib/tools/utility-policy";
 
 export const runtime = "nodejs";
@@ -40,7 +42,8 @@ export async function POST(request: Request) {
     }
 
     const ensured = await ensureCreditWallet({ admin, userId: auth.user.id });
-    const unlimited = ensured.plan === "starter" || ensured.plan === "pro";
+    const subscriptionStatus = utilitySubscriptionStatus(ensured.subscription);
+    const unlimited = utilitySubscriptionIncluded(ensured.plan, subscriptionStatus);
 
     if (unlimited) {
       // Subscriber utilities are included with the plan and the file itself is
@@ -79,6 +82,30 @@ export async function POST(request: Request) {
         unlimited: false,
         freeRemaining: Math.max(0, UTILITY_DAILY_FREE_LIMIT - used),
       });
+    }
+
+    // The allowance is based on successful operations, but an in-progress free
+    // operation temporarily occupies its slot so parallel tabs cannot exceed
+    // the daily limit. Do not charge a sixth operation while one of those free
+    // slots is still unresolved: it may fail and become free again.
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const { count: pendingFreeCount, error: pendingFreeError } = await admin
+      .from("utility_operations")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", auth.user.id)
+      .eq("tool", tool)
+      .eq("usage_date", todayUtc)
+      .eq("charge_type", "free")
+      .eq("status", "reserved");
+    if (pendingFreeError) throw new Error(pendingFreeError.message || "Free daily usage could not be checked.");
+    if (Number(pendingFreeCount || 0) > 0) {
+      return NextResponse.json(
+        {
+          error: "A free operation is still processing. Wait for it to finish before starting the next operation.",
+          code: "UTILITY_FREE_OPERATION_PENDING",
+        },
+        { status: 409 },
+      );
     }
 
     const reservation = await reserveCredits({

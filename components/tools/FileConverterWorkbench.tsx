@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Archive, ArrowRightLeft, Download, FileText, Loader2, Paperclip, Trash2 } from "lucide-react";
-import { useAuth } from "@/components/auth-provider";
 import { Button, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import UtilityUsageCard from "@/components/tools/UtilityUsageCard";
@@ -37,7 +36,6 @@ function formatLabel(value: ConverterFormat) {
 }
 
 export default function FileConverterWorkbench() {
-  const { plan } = useAuth();
   const { usage, loadingUsage, usageError, authorize, complete, fail } = useUtilityUsage("file_converter");
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -50,7 +48,7 @@ export default function FileConverterWorkbench() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const subscribed = String(plan || "free").toLowerCase() !== "free";
+  const subscribed = usage.unlimited;
   const maxFileBytes = (subscribed ? 100 : 25) * 1024 * 1024;
   const targetOptions = CONVERTER_TARGETS[from].map((value) => ({ value, label: formatLabel(value) }));
 
@@ -157,6 +155,7 @@ export default function FileConverterWorkbench() {
       <div className="space-y-5">
         <UtilityUsageCard
           unlimited={usage.unlimited}
+          plan={usage.plan}
           freeRemaining={usage.freeRemaining}
           dailyLimit={usage.dailyLimit}
           creditCost={usage.creditCostAfterFree}

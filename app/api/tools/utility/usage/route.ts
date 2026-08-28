@@ -6,6 +6,8 @@ import {
   isUtilityTool,
   UTILITY_DAILY_FREE_LIMIT,
   UTILITY_CREDIT_COST,
+  utilitySubscriptionIncluded,
+  utilitySubscriptionStatus,
 } from "@/lib/tools/utility-policy";
 
 export const runtime = "nodejs";
@@ -20,7 +22,8 @@ export async function GET(request: Request) {
     }
 
     const ensured = await ensureCreditWallet({ admin: auth.admin, userId: auth.user.id });
-    const unlimited = ensured.plan === "starter" || ensured.plan === "pro";
+    const subscriptionStatus = utilitySubscriptionStatus(ensured.subscription);
+    const unlimited = utilitySubscriptionIncluded(ensured.plan, subscriptionStatus);
 
     // Subscribers do not consume a daily allowance or utility credits. Return
     // immediately so their tools keep working even if the free-user usage
@@ -28,6 +31,7 @@ export async function GET(request: Request) {
     if (unlimited) {
       return NextResponse.json({
         plan: ensured.plan,
+        subscriptionStatus,
         unlimited: true,
         dailyLimit: UTILITY_DAILY_FREE_LIMIT,
         freeUsed: 0,
@@ -65,6 +69,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       tool,
       plan: ensured.plan,
+      subscriptionStatus,
       unlimited,
       dailyLimit: UTILITY_DAILY_FREE_LIMIT,
       freeUsed: used,

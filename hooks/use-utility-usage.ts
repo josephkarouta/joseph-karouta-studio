@@ -12,6 +12,7 @@ type UsageState = {
   freeUsed: number;
   freeRemaining: number;
   creditCostAfterFree: number;
+  subscriptionStatus: string;
 };
 
 type Authorization = {
@@ -29,6 +30,7 @@ const DEFAULT_USAGE: UsageState = {
   freeUsed: 0,
   freeRemaining: 5,
   creditCostAfterFree: 1,
+  subscriptionStatus: "",
 };
 
 async function readPayload(response: Response) {
@@ -42,7 +44,7 @@ async function readPayload(response: Response) {
 
 export function useUtilityUsage(tool: UtilityTool) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const { user, plan, refreshAccount } = useAuth();
+  const { user, refreshAccount } = useAuth();
   const [usage, setUsage] = useState<UsageState>(DEFAULT_USAGE);
   const [loadingUsage, setLoadingUsage] = useState(true);
   const [usageError, setUsageError] = useState("");
@@ -126,15 +128,5 @@ export function useUtilityUsage(tool: UtilityTool) {
     }
   }, [refreshAccount, refreshUsage, token]);
 
-  const accountUnlimited = ["starter", "pro"].includes(String(plan || "").toLowerCase());
-  const effectiveUsage = useMemo(
-    () => ({
-      ...usage,
-      plan: accountUnlimited ? String(plan).toLowerCase() : usage.plan,
-      unlimited: usage.unlimited || accountUnlimited,
-    }),
-    [accountUnlimited, plan, usage],
-  );
-
-  return { usage: effectiveUsage, loadingUsage, usageError, refreshUsage, authorize, complete, fail };
+  return { usage, loadingUsage, usageError, refreshUsage, authorize, complete, fail };
 }

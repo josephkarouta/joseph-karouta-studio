@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
 import { ensureCreditWallet, CreditError } from "@/lib/credits/server";
+import { utilitySubscriptionIncluded, utilitySubscriptionStatus } from "@/lib/tools/utility-policy";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,8 @@ export async function POST(request: Request) {
 
     if (operationId.startsWith("subscriber:")) {
       const ensured = await ensureCreditWallet({ admin: auth.admin, userId: auth.user.id });
-      if (ensured.plan !== "starter" && ensured.plan !== "pro") {
+      const subscriptionStatus = utilitySubscriptionStatus(ensured.subscription);
+      if (!utilitySubscriptionIncluded(ensured.plan, subscriptionStatus)) {
         return NextResponse.json({ error: "This unlimited utility operation requires an active subscription." }, { status: 403 });
       }
       return NextResponse.json({ success: true, chargeType: "subscriber", alreadyCompleted: false });

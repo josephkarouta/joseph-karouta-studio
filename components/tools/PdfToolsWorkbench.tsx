@@ -13,7 +13,6 @@ import {
   Scissors,
   Trash2,
 } from "lucide-react";
-import { useAuth } from "@/components/auth-provider";
 import { Button, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import UtilityUsageCard from "@/components/tools/UtilityUsageCard";
 import { useUtilityUsage } from "@/hooks/use-utility-usage";
@@ -40,7 +39,6 @@ const OPERATIONS: Array<{
 ];
 
 export default function PdfToolsWorkbench() {
-  const { plan } = useAuth();
   const { usage, loadingUsage, usageError, authorize, complete, fail } = useUtilityUsage("pdf_tools");
   const inputRef = useRef<HTMLInputElement>(null);
   const [operation, setOperation] = useState<PdfOperation>("compress");
@@ -54,7 +52,7 @@ export default function PdfToolsWorkbench() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const subscribed = String(plan || "free").toLowerCase() !== "free";
+  const subscribed = usage.unlimited;
   const maxFileBytes = (subscribed ? 100 : 25) * 1024 * 1024;
   const maxMergeFiles = subscribed ? 20 : 10;
 
@@ -156,6 +154,7 @@ export default function PdfToolsWorkbench() {
       <div className="space-y-5">
         <UtilityUsageCard
           unlimited={usage.unlimited}
+          plan={usage.plan}
           freeRemaining={usage.freeRemaining}
           dailyLimit={usage.dailyLimit}
           creditCost={usage.creditCostAfterFree}

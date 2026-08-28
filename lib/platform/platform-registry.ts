@@ -252,7 +252,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#0f766e",
     soft: "rgba(15,118,110,.12)",
-    creditLabel: "5 free/day",
+    creditLabel: "5/day free · Plans unlimited",
     group: "utility",
   },
   {
@@ -264,7 +264,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     visible: true,
     accent: "#0891b2",
     soft: "rgba(8,145,178,.12)",
-    creditLabel: "5 free/day",
+    creditLabel: "5/day free · Plans unlimited",
     group: "utility",
   }
 ];

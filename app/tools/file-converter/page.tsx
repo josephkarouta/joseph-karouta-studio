@@ -13,7 +13,7 @@ export default function FileConverterPage() {
       iconName="convert"
       accent="#0891b2"
       soft="rgba(8,145,178,.12)"
-      creditLabel="5 free/day"
+      creditLabel="5/day free · Plans unlimited"
     >
       <FileConverterWorkbench />
     </ToolFrame>
