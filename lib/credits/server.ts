@@ -334,14 +334,23 @@ export async function ensureCreditWallet({
     needsRecoveredSubscriptionGrant;
 
   if (needsMonthlyGrant) {
+    const effectiveGrantKey = needsRecoveredSubscriptionGrant
+      ? `stripe-recovery:${String(
+          resolved.subscription?.stripe_subscription_id || resolved.plan,
+        ).trim()}:${period.start}`
+      : reconciliationGrantKey;
+    const effectiveSource = needsRecoveredSubscriptionGrant
+      ? "payment_recovery"
+      : reconciliationSource;
+
     await applyMonthlyCredits(admin, {
       userId,
       plan: resolved.plan,
       amount: expectedMonthlyCredits,
       periodStart: period.start,
       periodEnd: period.end,
-      grantKey: reconciliationGrantKey,
-      source: reconciliationSource,
+      grantKey: effectiveGrantKey,
+      source: effectiveSource,
       metadata: {
         stripe_subscription_id: resolved.subscription?.stripe_subscription_id || null,
         subscription_status: stripeSubscriptionStatus || null,
