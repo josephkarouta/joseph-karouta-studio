@@ -264,7 +264,7 @@ export default function BillingPage() {
       <Eyebrow>Billing</Eyebrow>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black tracking-[-.055em] sm:text-5xl">Plan & billing</h1>
+          <h1 className="text-4xl font-black tracking-[-.055em] sm:text-5xl">Billing & plan</h1>
           <p className="mt-3 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
             Review your plan, credits, renewal details, invoices and payment settings.
           </p>

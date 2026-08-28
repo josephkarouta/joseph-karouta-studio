@@ -346,6 +346,21 @@ export async function userIdForSubscription(
       .maybeSingle();
     if (byCustomer.error) throw byCustomer.error;
     if (byCustomer.data?.user_id) return String(byCustomer.data.user_id);
+
+    // Stripe Dashboard subscription simulations clone billing objects and give
+    // them new IDs. If the cloned customer retained Heyy Studio's user_id
+    // metadata, use it as a final sandbox-safe identity fallback so simulated
+    // renewal webhooks can still exercise the real credit lifecycle.
+    try {
+      const stripe = getStripe();
+      const customer = await stripe.customers.retrieve(stripeCustomerId);
+      if (!("deleted" in customer && customer.deleted)) {
+        const metadataUserId = text(customer.metadata?.user_id);
+        if (metadataUserId) return metadataUserId;
+      }
+    } catch {
+      // Keep the webhook resilient if a cloned/deleted test customer cannot be retrieved.
+    }
   }
 
   return null;

@@ -203,7 +203,7 @@ export default function WorkspaceSidebar({
 
       <div className="space-y-2 border-t border-[var(--border)] p-3">
         <SidebarLink collapsed={collapsed} href="/account" icon={Settings} label="Account" active={pathname.startsWith("/account")} />
-        <SidebarLink collapsed={collapsed} href="/billing" icon={CreditCard} label="Plan & billing" active={pathname.startsWith("/billing")} />
+        <SidebarLink collapsed={collapsed} href="/billing" icon={CreditCard} label="Billing & plan" active={pathname.startsWith("/billing")} />
         <SidebarLink collapsed={collapsed} href="/help" icon={BadgeHelp} label="Help & support" active={pathname.startsWith("/help")} />
       </div>
     </aside>
