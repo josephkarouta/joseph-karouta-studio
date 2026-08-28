@@ -1,8 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ImageIcon, Images, PanelsTopLeft, Presentation, Video } from "lucide-react";
+import { ArrowRightLeft, FileText, ImageIcon, Images, PanelsTopLeft, Presentation, Video } from "lucide-react";
 import SiteHeader from "@/components/site-header";
+import { useAuth } from "@/components/auth-provider";
 import SiteFooter from "@/components/site-footer";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import StudioAccessGate from "@/components/studio-access-gate";
@@ -23,14 +24,18 @@ export default function ToolFrame({
   title: string;
   eyebrow: string;
   description: string;
-  iconName: "image" | "video" | "images" | "presentation" | "adaptation";
+  iconName: "image" | "video" | "images" | "presentation" | "adaptation" | "pdf" | "convert";
   accent: string;
   soft: string;
   creditLabel: string;
   children: ReactNode;
 }) {
-  const icons = { image: ImageIcon, video: Video, images: Images, presentation: Presentation, adaptation: PanelsTopLeft };
+  const { plan } = useAuth();
+  const icons = { image: ImageIcon, video: Video, images: Images, presentation: Presentation, adaptation: PanelsTopLeft, pdf: FileText, convert: ArrowRightLeft };
   const Icon = icons[iconName];
+  const utilityTool = iconName === "pdf" || iconName === "convert";
+  const subscribed = String(plan || "free").toLowerCase() !== "free";
+  const displayCreditLabel = utilityTool && subscribed ? "Unlimited" : creditLabel;
 
   return (
     <StudioAccessGate path={path}>
@@ -45,7 +50,7 @@ export default function ToolFrame({
                   <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border shadow-sm" style={{ background: soft, borderColor: `${accent}40`, color: accent }}><Icon size={23}/></span>
                   <div><Eyebrow>{eyebrow}</Eyebrow><h1 className="mt-3 text-4xl font-black leading-[.94] tracking-[-.06em] sm:text-6xl">{title}</h1><p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base">{description}</p></div>
                 </div>
-                <CreditPill credits={creditLabel} label="" className="w-fit" />
+                <CreditPill credits={displayCreditLabel} label="" className="w-fit" />
               </div>
             </section>
             <div className="mt-5">{children}</div>

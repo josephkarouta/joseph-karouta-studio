@@ -27,7 +27,9 @@ export type PlatformTool = {
     | "image_to_video"
     | "ai_upscaler"
     | "powerpoint_generator"
-    | "digital_adaptations";
+    | "digital_adaptations"
+    | "pdf_tools"
+    | "file_converter";
   label: string;
   description: string;
   href: string;
@@ -36,6 +38,7 @@ export type PlatformTool = {
   accent: string;
   soft: string;
   creditLabel: string;
+  group: "ai" | "utility";
 };
 
 export const PLATFORM_STUDIOS: PlatformStudio[] = [
@@ -190,6 +193,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     accent: "#7c3aed",
     soft: "rgba(124,58,237,.12)",
     creditLabel: `From ${CREDIT_COSTS.textToImagePreview} credits`,
+    group: "ai",
   },
   {
     id: "image_to_video",
@@ -201,6 +205,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     accent: "#db2777",
     soft: "rgba(219,39,119,.12)",
     creditLabel: `${CREDIT_COSTS.imageToVideoHigh} credits`,
+    group: "ai",
   },
   {
     id: "digital_adaptations",
@@ -212,6 +217,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     accent: "#6f2dff",
     soft: "rgba(111,45,255,.12)",
     creditLabel: `${CREDIT_COSTS.digitalAdaptationFamily} credits per aspect family`,
+    group: "ai",
   },
   {
     id: "ai_upscaler",
@@ -223,6 +229,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     accent: "#0284c7",
     soft: "rgba(2,132,199,.12)",
     creditLabel: `From ${CREDIT_COSTS.aiUpscale2x} credits`,
+    group: "ai",
   },
   {
     id: "powerpoint_generator",
@@ -234,6 +241,31 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
     accent: "#ea580c",
     soft: "rgba(234,88,12,.12)",
     creditLabel: `${CREDIT_COSTS.powerpointFull} credits`,
+    group: "ai",
+  },
+  {
+    id: "pdf_tools",
+    label: "PDF Tools",
+    description: "Compress, split, combine, protect and unlock PDFs.",
+    href: "/tools/pdf-tools",
+    availability: "live",
+    visible: true,
+    accent: "#0f766e",
+    soft: "rgba(15,118,110,.12)",
+    creditLabel: "5 free/day",
+    group: "utility",
+  },
+  {
+    id: "file_converter",
+    label: "File Converter",
+    description: "Convert PDF and common image formats, including HEIC/HEIF, without persistent file storage.",
+    href: "/tools/file-converter",
+    availability: "live",
+    visible: true,
+    accent: "#0891b2",
+    soft: "rgba(8,145,178,.12)",
+    creditLabel: "5 free/day",
+    group: "utility",
   }
 ];
 

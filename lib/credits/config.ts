@@ -1,4 +1,6 @@
 export const CREDIT_COSTS = {
+  pdfUtility: 1,
+  fileConversion: 1,
   textToImagePreview: 2,
   textToImageHigh: 2,
   imageEdit: 2,

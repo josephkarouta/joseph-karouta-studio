@@ -2,7 +2,7 @@ import { CREDIT_COSTS, getPowerPointCreditCost, POWERPOINT_INCLUDED_SLIDES } fro
 
 export type CreditGuideItem = {
   id: string;
-  category: "AI Tools" | "Brand Studio" | "Marketing Studio";
+  category: "AI Tools" | "Utilities" | "Brand Studio" | "Marketing Studio";
   label: string;
   credits: number;
   unit?: string;
@@ -10,6 +10,22 @@ export type CreditGuideItem = {
 };
 
 export const CUSTOMER_CREDIT_GUIDE: CreditGuideItem[] = [
+  {
+    id: "pdf-tools",
+    category: "Utilities",
+    label: "PDF Tools",
+    credits: CREDIT_COSTS.pdfUtility,
+    unit: "after 5 free daily uses",
+    detail: "Free accounts get 5 successful PDF operations each day. Starter and Pro use PDF Tools without credit deductions.",
+  },
+  {
+    id: "file-converter",
+    category: "Utilities",
+    label: "File Converter",
+    credits: CREDIT_COSTS.fileConversion,
+    unit: "after 5 free daily conversions",
+    detail: "Free accounts get 5 successful conversions each day. Starter and Pro conversions are unlimited subject to fair-use limits.",
+  },
   {
     id: "text-to-image",
     category: "AI Tools",

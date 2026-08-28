@@ -4,9 +4,11 @@ import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react
 import Link from "next/link";
 import {
   ArrowRight,
+  ArrowRightLeft,
   Building2,
   Check,
   CirclePlay,
+  FileText,
   ImageIcon,
   Images,
   Layers3,
@@ -82,6 +84,8 @@ const toolIcons: Record<string, LucideIcon> = {
   digital_adaptations: Layers3,
   ai_upscaler: Images,
   powerpoint_generator: Presentation,
+  pdf_tools: FileText,
+  file_converter: ArrowRightLeft,
 };
 
 const toolCopy: Record<string, { title: string; description: string }> = {
@@ -104,6 +108,14 @@ const toolCopy: Record<string, { title: string; description: string }> = {
   powerpoint_generator: {
     title: "Create a presentation",
     description: "Build a polished presentation from your content.",
+  },
+  pdf_tools: {
+    title: "Work with a PDF",
+    description: "Compress, split, combine, protect or unlock a PDF.",
+  },
+  file_converter: {
+    title: "Convert a file",
+    description: "Switch between common PDF and image formats quickly.",
   },
 };
 
@@ -265,7 +277,7 @@ export default function HomePage() {
             </ButtonLink>
           </div>
 
-          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {PLATFORM_TOOLS.map((tool, toolIndex) => {
               const Icon = toolIcons[tool.id] || Sparkles;
               const copy = toolCopy[tool.id] || { title: tool.label, description: tool.description };
@@ -289,7 +301,7 @@ export default function HomePage() {
                     <h3 className="mt-2 text-xl font-black tracking-[-0.04em]">{copy.title}</h3>
                     <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{copy.description}</p>
                     <div className="mt-auto flex items-center justify-between gap-3 pt-7">
-                      <CreditPill credits={tool.creditLabel.replace("From ", "").replace(" credits", "")} />
+                      <CreditPill credits={tool.creditLabel.replace("From ", "").replace(" credits", "")} label={tool.group === "utility" ? "" : "credits"} />
                       <ArrowRight size={16} style={{ color: tool.accent }} className="transition-transform group-hover:translate-x-1" />
                     </div>
                   </article>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowRightLeft,
   BadgeHelp,
   Blocks,
   Building2,
@@ -11,6 +12,7 @@ import {
   CreditCard,
   FolderKanban,
   FolderOpen,
+  FileText,
   Gauge,
   ImageIcon,
   Images,
@@ -58,6 +60,8 @@ const toolIcons: Record<string, LucideIcon> = {
   image_to_video: Video,
   ai_upscaler: Images,
   powerpoint_generator: Presentation,
+  pdf_tools: FileText,
+  file_converter: ArrowRightLeft,
 };
 
 export default function WorkspaceSidebar({
@@ -82,7 +86,15 @@ export default function WorkspaceSidebar({
     accent: studio.accent,
   }));
 
-  const toolItems: NavigationItem[] = PLATFORM_TOOLS.map((tool) => ({
+  const aiToolItems: NavigationItem[] = PLATFORM_TOOLS.filter((tool) => tool.group === "ai").map((tool) => ({
+    label: tool.label,
+    href: tool.href,
+    icon: toolIcons[tool.id] || Sparkles,
+    activePrefixes: [tool.href],
+    accent: tool.accent,
+  }));
+
+  const utilityItems: NavigationItem[] = PLATFORM_TOOLS.filter((tool) => tool.group === "utility").map((tool) => ({
     label: tool.label,
     href: tool.href,
     icon: toolIcons[tool.id] || Sparkles,
@@ -158,7 +170,14 @@ export default function WorkspaceSidebar({
         />
         <NavigationGroup
           label="AI Tools"
-          items={toolItems}
+          items={aiToolItems}
+          collapsed={collapsed}
+          onNavigate={onCloseMobile}
+          isActive={itemIsActive}
+        />
+        <NavigationGroup
+          label="Utilities"
+          items={utilityItems}
           collapsed={collapsed}
           onNavigate={onCloseMobile}
           isActive={itemIsActive}
