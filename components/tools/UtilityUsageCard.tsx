@@ -34,18 +34,22 @@ export default function UtilityUsageCard({
             <p className="text-sm font-black">
               {loading
                 ? "Checking today’s allowance…"
-                : unlimited
-                  ? "Unlimited with your plan"
-                  : paidPlanPaused
-                    ? "Plan utilities paused"
-                    : `${freeRemaining} of ${dailyLimit} free uses left today`}
+                : error
+                  ? "Usage temporarily unavailable"
+                  : unlimited
+                    ? "Unlimited with your plan"
+                    : paidPlanPaused
+                      ? "Plan utilities paused"
+                      : `${freeRemaining} of ${dailyLimit} free uses left today`}
             </p>
             <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
-              {unlimited
-                ? "PDF and conversion utilities do not use your subscription credits."
-                : paidPlanPaused
-                  ? `Your subscription needs attention. The free daily allowance still applies, then each successful operation uses ${creditCost} credit.`
-                  : `After the free daily allowance, each successful operation uses ${creditCost} credit.`}
+              {error
+                ? "Your saved daily usage has not been reset. Refresh after the usage service is available again."
+                : unlimited
+                  ? "PDF and conversion utilities do not use your subscription credits."
+                  : paidPlanPaused
+                    ? `Your subscription needs attention. The free daily allowance still applies, then each successful operation uses ${creditCost} credit.`
+                    : `After the free daily allowance, each successful operation uses ${creditCost} credit.`}
             </p>
           </div>
         </div>

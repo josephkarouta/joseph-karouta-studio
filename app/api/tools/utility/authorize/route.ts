@@ -97,7 +97,10 @@ export async function POST(request: Request) {
       .eq("usage_date", todayUtc)
       .eq("charge_type", "free")
       .eq("status", "reserved");
-    if (pendingFreeError) throw new Error(pendingFreeError.message || "Free daily usage could not be checked.");
+    if (pendingFreeError) {
+      console.error("Utility pending-free lookup failed:", { tool, userId: auth.user.id, error: pendingFreeError });
+      throw new Error(pendingFreeError.message || "Free daily usage could not be checked.");
+    }
     if (Number(pendingFreeCount || 0) > 0) {
       return NextResponse.json(
         {

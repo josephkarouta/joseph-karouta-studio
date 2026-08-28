@@ -58,6 +58,7 @@ export async function GET(request: Request) {
       .in("status", ["reserved", "completed"]);
 
     if (error) {
+      console.error("Utility usage lookup failed:", { tool, userId: auth.user.id, error });
       const missingMigration = /does not exist|schema cache|utility_operations/i.test(error.message || "");
       return NextResponse.json(
         { error: missingMigration ? "The utility-tools database migration has not been applied yet." : "Usage could not be loaded." },
