@@ -213,7 +213,10 @@ export async function POST(req: Request) {
       }
     }
 
-    if (event.type === "invoice.paid") {
+    if (
+      event.type === "invoice.paid" ||
+      event.type === "invoice.payment_succeeded"
+    ) {
       const invoice = event.data.object as Stripe.Invoice;
       const invoiceRecord = invoice as unknown as {
         subscription?: string | Stripe.Subscription | null;

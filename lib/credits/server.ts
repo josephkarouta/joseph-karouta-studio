@@ -290,12 +290,48 @@ export async function ensureCreditWallet({
     resolved.plan === "free" && Number(wallet?.monthly_balance || 0) > 0;
   const needsUnpaidSubscriptionReset =
     subscriptionPaymentOutstanding && Number(wallet?.monthly_balance || 0) > 0;
+
+  // A successful retry can move Stripe back to active before the paid-invoice
+  // webhook reaches us (or that webhook can be retried later). A zero monthly
+  // balance alone is not enough evidence to grant credits because the customer
+  // may simply have spent the allowance. Only recover automatically when this
+  // exact subscription period has a recorded zero-credit suspension caused by
+  // a failed/unpaid renewal. The normal paid grant key remains idempotent, so
+  // duplicate invoice events or repeated account refreshes cannot grant twice.
+  let needsRecoveredSubscriptionGrant = false;
+  if (
+    !subscriptionPaymentOutstanding &&
+    resolved.plan !== "free" &&
+    resolved.subscription &&
+    Number(wallet?.monthly_balance || 0) === 0
+  ) {
+    const { data: suspendedGrant, error: suspendedGrantError } = await admin
+      .from("credit_monthly_grants")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("amount", 0)
+      .eq("period_start", period.start)
+      .in("source", ["renewal_failed", "account_reconciliation_unpaid"])
+      .limit(1)
+      .maybeSingle();
+
+    if (suspendedGrantError) {
+      throw creditSystemError(
+        suspendedGrantError,
+        "The subscription credit recovery state could not be verified.",
+      );
+    }
+
+    needsRecoveredSubscriptionGrant = Boolean(suspendedGrant?.id);
+  }
+
   const needsMonthlyGrant =
     !wallet ||
     walletExpired ||
     periodAdvanced ||
     needsFreePaygReset ||
-    needsUnpaidSubscriptionReset;
+    needsUnpaidSubscriptionReset ||
+    needsRecoveredSubscriptionGrant;
 
   if (needsMonthlyGrant) {
     await applyMonthlyCredits(admin, {
@@ -310,6 +346,7 @@ export async function ensureCreditWallet({
         stripe_subscription_id: resolved.subscription?.stripe_subscription_id || null,
         subscription_status: stripeSubscriptionStatus || null,
         entitlement_suspended: subscriptionPaymentOutstanding,
+        entitlement_recovered: needsRecoveredSubscriptionGrant,
       },
     });
 
