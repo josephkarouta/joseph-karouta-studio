@@ -101,6 +101,7 @@ export default function BillingPage() {
   const { user, plan, credits, refreshAccount } = useAuth();
   const [billing, setBilling] = useState<BillingDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [changingPlan, setChangingPlan] = useState(false);
   const [error, setError] = useState("");
@@ -135,10 +136,15 @@ export default function BillingPage() {
     return token;
   }
 
-  const loadBilling = useCallback(async () => {
+  const loadBilling = useCallback(async (options?: { silent?: boolean; initial?: boolean }) => {
     if (!user?.id) return;
-    setLoading(true);
-    setError("");
+    const silent = Boolean(options?.silent);
+    const initial = Boolean(options?.initial);
+
+    if (initial) setLoading(true);
+    if (!silent && !initial) setRefreshing(true);
+    if (!silent) setError("");
+
     try {
       const token = await accessToken();
       const response = await fetch("/api/billing/summary", {
@@ -150,9 +156,13 @@ export default function BillingPage() {
       setBilling(result.billing || null);
       await refreshAccount();
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Unable to load billing details.");
+      // Background tab refreshes should never replace the page with a loading/error state.
+      if (!silent) {
+        setError(value instanceof Error ? value.message : "Unable to load billing details.");
+      }
     } finally {
-      setLoading(false);
+      if (initial) setLoading(false);
+      if (!silent && !initial) setRefreshing(false);
     }
   }, [refreshAccount, user?.id]);
 
@@ -232,7 +242,7 @@ export default function BillingPage() {
   }
 
   useEffect(() => {
-    void loadBilling();
+    void loadBilling({ initial: true });
   }, [loadBilling, user?.id]);
 
   useEffect(() => {
@@ -241,7 +251,7 @@ export default function BillingPage() {
     const refreshAfterPortal = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
-        void loadBilling();
+        void loadBilling({ silent: true });
       }, 700);
     };
 
@@ -269,8 +279,8 @@ export default function BillingPage() {
             Review your plan, credits, renewal details, invoices and payment settings.
           </p>
         </div>
-        <Button type="button" variant="ghost" onClick={loadBilling} disabled={loading}>
-          <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+        <Button type="button" variant="ghost" onClick={() => void loadBilling()} disabled={loading || refreshing}>
+          <RefreshCw size={15} className={loading || refreshing ? "animate-spin" : ""} />
           Refresh
         </Button>
       </div>
@@ -290,7 +300,7 @@ export default function BillingPage() {
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <h2 className="text-4xl font-black tracking-[-.055em]">{definition.name}</h2>
-                {loading ? (
+                {loading && !billing ? (
                   <LoaderCircle size={18} className="animate-spin text-[var(--text-muted)]" />
                 ) : hasPaidSubscription ? (
                   billing?.cancelAtPeriodEnd ? (
@@ -381,7 +391,7 @@ export default function BillingPage() {
                   <p className="text-xs font-black uppercase tracking-[.14em] text-[var(--text-muted)]">
                     Subscription schedule
                   </p>
-                  <p className="mt-1 text-sm font-black">{loading ? "Loading billing status…" : billingLine}</p>
+                  <p className="mt-1 text-sm font-black">{loading && !billing ? "Loading billing status…" : billingLine}</p>
                   {!loading && !hasPaidSubscription && definition.id !== "free" && (
                     <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-muted)]">
                       This is currently test or manually assigned access. Manage Billing appears after a subscription is completed through Stripe Checkout.

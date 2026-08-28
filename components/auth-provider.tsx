@@ -196,25 +196,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    let lastBackgroundRefresh = Date.now();
+    let lastBackgroundRefresh = 0;
 
     const refreshCredits = () => {
       lastBackgroundRefresh = Date.now();
       void loadAccount();
     };
 
-    const handleVisibility = () => {
+    const refreshOnReturn = () => {
       if (document.visibilityState !== "visible") return;
-      if (Date.now() - lastBackgroundRefresh < 60_000) return;
+      // Focus + visibilitychange can fire together when returning from Stripe.
+      // Refresh immediately, but coalesce the duplicate browser events.
+      if (Date.now() - lastBackgroundRefresh < 1_500) return;
       refreshCredits();
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refreshOnReturn();
+    };
+
     window.addEventListener("heyy:credits-changed", refreshCredits as EventListener);
+    window.addEventListener("focus", refreshOnReturn);
+    window.addEventListener("pageshow", refreshOnReturn);
     document.addEventListener("visibilitychange", handleVisibility);
     const interval = window.setInterval(refreshCredits, 5 * 60_000);
 
     return () => {
       window.removeEventListener("heyy:credits-changed", refreshCredits as EventListener);
+      window.removeEventListener("focus", refreshOnReturn);
+      window.removeEventListener("pageshow", refreshOnReturn);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.clearInterval(interval);
     };

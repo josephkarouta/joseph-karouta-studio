@@ -77,6 +77,25 @@ function validIsoDate(value: unknown) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
+const UNPAID_SUBSCRIPTION_STATUSES = new Set([
+  "past_due",
+  "unpaid",
+  "incomplete",
+  "incomplete_expired",
+  "paused",
+]);
+
+function subscriptionStatus(subscription: Record<string, unknown> | null) {
+  return String(
+    subscription?.status ||
+      subscription?.subscription_status ||
+      subscription?.state ||
+      "",
+  )
+    .trim()
+    .toLowerCase();
+}
+
 function monthlyPeriodForPlan(
   plan: PlanId,
   subscription: Record<string, unknown> | null,
@@ -213,6 +232,23 @@ export async function ensureCreditWallet({
   );
   const plan = getPlan(resolved.plan);
   const period = monthlyPeriodForPlan(resolved.plan, resolved.subscription);
+  const stripeSubscriptionStatus = subscriptionStatus(resolved.subscription);
+  const subscriptionPaymentOutstanding = Boolean(
+    resolved.plan !== "free" &&
+      resolved.subscription &&
+      UNPAID_SUBSCRIPTION_STATUSES.has(stripeSubscriptionStatus),
+  );
+  const expectedMonthlyCredits = subscriptionPaymentOutstanding
+    ? 0
+    : plan.monthlyCredits;
+  const reconciliationGrantKey = subscriptionPaymentOutstanding
+    ? `stripe-unpaid:${String(
+        resolved.subscription?.stripe_subscription_id || resolved.plan,
+      ).trim()}:${period.start}`
+    : period.grantKey;
+  const reconciliationSource = subscriptionPaymentOutstanding
+    ? "account_reconciliation_unpaid"
+    : period.source;
 
   // New Free accounts are created with a zero-credit wallet. The allowance is
   // granted only after Supabase has confirmed ownership of the email address.
@@ -252,20 +288,28 @@ export async function ensureCreditWallet({
   const periodAdvanced = Number.isFinite(periodStartTime) && periodStartTime > walletStartTime;
   const needsFreePaygReset =
     resolved.plan === "free" && Number(wallet?.monthly_balance || 0) > 0;
+  const needsUnpaidSubscriptionReset =
+    subscriptionPaymentOutstanding && Number(wallet?.monthly_balance || 0) > 0;
   const needsMonthlyGrant =
-    !wallet || walletExpired || periodAdvanced || needsFreePaygReset;
+    !wallet ||
+    walletExpired ||
+    periodAdvanced ||
+    needsFreePaygReset ||
+    needsUnpaidSubscriptionReset;
 
   if (needsMonthlyGrant) {
     await applyMonthlyCredits(admin, {
       userId,
       plan: resolved.plan,
-      amount: plan.monthlyCredits,
+      amount: expectedMonthlyCredits,
       periodStart: period.start,
       periodEnd: period.end,
-      grantKey: period.grantKey,
-      source: period.source,
+      grantKey: reconciliationGrantKey,
+      source: reconciliationSource,
       metadata: {
         stripe_subscription_id: resolved.subscription?.stripe_subscription_id || null,
+        subscription_status: stripeSubscriptionStatus || null,
+        entitlement_suspended: subscriptionPaymentOutstanding,
       },
     });
 
