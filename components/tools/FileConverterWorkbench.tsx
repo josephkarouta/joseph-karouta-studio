@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Archive, ArrowRightLeft, Download, FileText, Loader2, Paperclip, Trash2 } from "lucide-react";
+import { Archive, Download, FileText, Loader2, Paperclip, Trash2 } from "lucide-react";
 import { Button, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import UtilityUsageCard from "@/components/tools/UtilityUsageCard";
@@ -31,6 +31,8 @@ const FORMATS: Array<{ value: ConverterFormat; label: string }> = [
   { value: "avif", label: "AVIF" },
 ];
 
+const OUTPUT_FORMATS: ConverterFormat[] = ["jpg", "jpeg", "png", "webp", "pdf"];
+
 function formatLabel(value: ConverterFormat) {
   return FORMATS.find((item) => item.value === value)?.label || value.toUpperCase();
 }
@@ -39,7 +41,6 @@ export default function FileConverterWorkbench() {
   const { usage, loadingUsage, usageError, authorize, complete, fail, syncUsage } = useUtilityUsage("file_converter");
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
-  const [from, setFrom] = useState<ConverterFormat>("pdf");
   const [to, setTo] = useState<ConverterFormat>("jpg");
   const [outputs, setOutputs] = useState<PreparedOutput[]>([]);
   const [lastBatchName, setLastBatchName] = useState("converted-files");
@@ -52,7 +53,13 @@ export default function FileConverterWorkbench() {
   const subscribed = usage.unlimited;
   const maxFileBytes = (subscribed ? 100 : 25) * 1024 * 1024;
   const maxBatchFiles = subscribed ? 20 : 5;
-  const targetOptions = CONVERTER_TARGETS[from].map((value) => ({ value, label: formatLabel(value) }));
+  const detectedFormats = files.map((file) => formatFromFile(file)).filter(Boolean) as ConverterFormat[];
+  const availableTargets = OUTPUT_FORMATS.filter((target) =>
+    detectedFormats.length === 0
+      ? true
+      : detectedFormats.every((source) => source !== target && CONVERTER_TARGETS[source]?.includes(target)),
+  );
+  const targetOptions = availableTargets.map((value) => ({ value, label: formatLabel(value) }));
 
   useEffect(() => () => outputs.forEach((output) => URL.revokeObjectURL(output.url)), [outputs]);
 
@@ -65,15 +72,6 @@ export default function FileConverterWorkbench() {
   function clearFiles() {
     setFiles([]);
     if (inputRef.current) inputRef.current.value = "";
-  }
-
-  function setFromFormat(value: ConverterFormat) {
-    setFrom(value);
-    const nextTargets = CONVERTER_TARGETS[value];
-    if (!nextTargets.includes(to)) setTo(nextTargets[0]);
-    clearFiles();
-    setError("");
-    resetOutputs();
   }
 
   function setToFormat(value: ConverterFormat) {
@@ -103,15 +101,18 @@ export default function FileConverterWorkbench() {
       return;
     }
 
-    const sourceFormat = detected[0] as ConverterFormat;
-    if (detected.some((value) => value !== sourceFormat)) {
-      setError("Files in one batch must use the same source format. Convert mixed formats in separate batches.");
+    const supportedTargets = OUTPUT_FORMATS.filter((target) =>
+      (detected as ConverterFormat[]).every(
+        (source) => source !== target && CONVERTER_TARGETS[source]?.includes(target),
+      ),
+    );
+
+    if (!supportedTargets.length) {
+      setError("These files do not share a compatible output format. Remove one of the files or convert it separately.");
       return;
     }
 
-    setFrom(sourceFormat);
-    const nextTargets = CONVERTER_TARGETS[sourceFormat];
-    if (!nextTargets.includes(to)) setTo(nextTargets[0]);
+    if (!supportedTargets.includes(to)) setTo(supportedTargets[0]);
     setFiles(next);
     setError("");
     resetOutputs();
@@ -160,13 +161,19 @@ export default function FileConverterWorkbench() {
       for (const currentFile of batch) {
         let authorization: Awaited<ReturnType<typeof authorize>> | null = null;
         try {
+          const sourceFormat = formatFromFile(currentFile);
+          if (!sourceFormat) throw new Error("This file type is not supported.");
+          if (!CONVERTER_TARGETS[sourceFormat]?.includes(to)) {
+            throw new Error(`${formatLabel(sourceFormat)} cannot be converted to ${formatLabel(to)}.`);
+          }
+
           authorization = await authorize("convert");
-          const result = await convertFile(currentFile, from, to, subscribed ? 150 : 50);
+          const result = await convertFile(currentFile, sourceFormat, to, subscribed ? 150 : 50);
           await complete(
             authorization.operationId,
             {
               operation: "convert",
-              from,
+              from: sourceFormat,
               to,
               input_name: currentFile.name,
               input_bytes: currentFile.size,
@@ -247,10 +254,16 @@ export default function FileConverterWorkbench() {
           <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[.64rem] font-black uppercase tracking-[.12em] text-[var(--text-muted)]">No storage</span>
         </div>
 
-        <div className="mt-7 grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
-          <label><span className="text-xs font-black">From</span><div className="mt-2"><HeyySelect value={from} onChange={(value) => setFromFormat(value as ConverterFormat)} options={FORMATS} /></div></label>
-          <span className="mb-2 hidden h-10 w-10 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--accent-strong)] sm:grid"><ArrowRightLeft size={16}/></span>
-          <label><span className="text-xs font-black">To</span><div className="mt-2"><HeyySelect value={to} onChange={(value) => setToFormat(value as ConverterFormat)} options={targetOptions} /></div></label>
+        <div className="mt-7 max-w-md">
+          <label>
+            <span className="text-xs font-black">Convert to</span>
+            <div className="mt-2">
+              <HeyySelect value={to} onChange={(value) => setToFormat(value as ConverterFormat)} options={targetOptions} />
+            </div>
+          </label>
+          <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">
+            Mix supported source file types in one batch. The available output formats update automatically for the files you attach.
+          </p>
         </div>
 
         <input
@@ -279,8 +292,8 @@ export default function FileConverterWorkbench() {
           className={`mt-6 flex min-h-40 w-full flex-col items-center justify-center rounded-[1.7rem] border border-dashed px-6 text-center transition ${dragActive ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_0_0_3px_var(--accent-soft)]" : "border-[var(--border-strong)] bg-[var(--surface)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"}`}
         >
           <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Paperclip size={19}/></span>
-          <span className="mt-4 text-base font-black">{dragActive ? "Drop your files here" : `Attach or drag & drop up to ${maxBatchFiles} ${formatLabel(from)} files`}</span>
-          <span className="mt-1 text-xs font-semibold text-[var(--text-muted)]">Maximum {subscribed ? "100 MB" : "25 MB"} each{from === "pdf" ? ` · up to ${subscribed ? "150" : "50"} pages per PDF` : ""}</span>
+          <span className="mt-4 text-base font-black">{dragActive ? "Drop your files here" : `Attach or drag & drop up to ${maxBatchFiles} files`}</span>
+          <span className="mt-1 text-xs font-semibold text-[var(--text-muted)]">Maximum {subscribed ? "100 MB" : "25 MB"} each · PDFs up to {subscribed ? "150" : "50"} pages</span>
         </button>
 
         {files.length > 0 && (
@@ -292,7 +305,7 @@ export default function FileConverterWorkbench() {
             {files.map((file, index) => (
               <div key={`${file.name}-${file.lastModified}-${index}`} className="flex items-center gap-4 rounded-[1.5rem] border border-[var(--border)] bg-[var(--surface)] p-4">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><FileText size={17}/></span>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{file.name}</p><p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">{formatLabel(from)} · {fileSizeLabel(file.size)}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{file.name}</p><p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">{formatLabel(formatFromFile(file) || "pdf")} · {fileSizeLabel(file.size)}</p></div>
                 <button type="button" onClick={() => removeFile(index)} className="grid h-9 w-9 place-items-center rounded-xl text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-500" aria-label={`Remove ${file.name}`}><Trash2 size={15}/></button>
               </div>
             ))}
@@ -306,7 +319,7 @@ export default function FileConverterWorkbench() {
           {processing
             ? <><Loader2 size={15} className="animate-spin"/> Converting {files.length > 1 ? `${files.length} files…` : "…"}</>
             : files.length
-              ? <>Convert {files.length > 1 ? `${files.length} files` : `${formatLabel(from)} to ${formatLabel(to)}`}</>
+              ? <>Convert {files.length > 1 ? `${files.length} files to ${formatLabel(to)}` : `to ${formatLabel(to)}`}</>
               : <>Attach files to convert</>}
         </Button>
 

@@ -874,7 +874,7 @@ function OnboardingNavigation({
               className={cx(
                 "flex min-h-14 items-center gap-3 rounded-2xl border px-3 text-left transition",
                 active
-                  ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_0_0_1px_var(--accent)]"
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_0_0_3px_var(--accent-soft)]"
                   : "border-transparent hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]",
                 index > step && "cursor-default opacity-55",
               )}
@@ -922,7 +922,7 @@ function InteriorWorkspaceNavigation({
             className={cx(
               "rounded-2xl border px-4 py-3 text-xs font-black transition",
               activeTab === tab.id
-                ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_8px_22px_var(--accent-soft)]"
+                ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_0_0_3px_var(--accent-soft)]"
                 : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
             )}
           >
@@ -2245,7 +2245,7 @@ function InteriorProjectStart({
               className={cx(
                 "rounded-2xl border p-4 text-left transition",
                 active
-                  ? "border-[var(--accent)] bg-[var(--surface)] shadow-[0_0_0_1px_var(--accent)]"
+                  ? "border-[var(--accent)] bg-[var(--surface)] shadow-[0_0_0_3px_var(--accent-soft)]"
                   : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]",
               )}
             >
@@ -2379,7 +2379,7 @@ function FieldControl({ field, value, onChange }: { field: StudioField; value: s
                   className={cx(
                     "rounded-full border px-3.5 py-2 text-xs font-black transition",
                     active
-                      ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_8px_20px_var(--accent-soft)]"
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_0_0_3px_var(--accent-soft)]"
                       : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
                   )}
                 >

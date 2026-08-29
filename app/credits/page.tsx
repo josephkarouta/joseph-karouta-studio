@@ -5,6 +5,8 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   History,
   LoaderCircle,
 } from "lucide-react";
@@ -27,12 +29,15 @@ type Event = {
 export default function CreditsPage() {
   const { user, credits, refreshAccount } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPages, setHistoryPages] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [topUpMessage, setTopUpMessage] = useState("");
   const [topUpError, setTopUpError] = useState("");
 
-  const loadHistory = useCallback(async (token: string) => {
-    const response = await fetch("/api/account/credit-history", {
+  const loadHistory = useCallback(async (token: string, page: number) => {
+    const response = await fetch(`/api/account/credit-history?page=${page}`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
     });
@@ -40,6 +45,8 @@ export default function CreditsPage() {
     if (response.ok) {
       const result = await response.json();
       setEvents(result.events || []);
+      setHistoryPages(Math.max(1, Number(result.totalPages || 1)));
+      setHistoryTotal(Number(result.total || 0));
     }
   }, []);
 
@@ -83,6 +90,7 @@ export default function CreditsPage() {
             setTopUpMessage(`${Number(result.creditsAdded || 0).toLocaleString("en-US")} credits added.`);
             window.history.replaceState({}, "", "/credits?topup=confirmed");
             window.dispatchEvent(new Event("heyy:credits-changed"));
+            setHistoryPage(1);
             await refreshAccount();
           }
         } catch (error) {
@@ -96,14 +104,14 @@ export default function CreditsPage() {
         setTopUpError("Credit purchase cancelled. No credits were added.");
       }
 
-      await loadHistory(token);
+      await loadHistory(token, historyPage);
       if (!cancelled) setLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [loadHistory, refreshAccount, user]);
+  }, [historyPage, loadHistory, refreshAccount, user]);
 
   return (
     <AccountLayout>
@@ -218,6 +226,55 @@ export default function CreditsPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {!loading && historyTotal > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-5 py-4">
+            <p className="text-xs font-bold text-[var(--text-muted)]">
+              Showing {(historyPage - 1) * 10 + 1}–{Math.min(historyPage * 10, historyTotal)} of {historyTotal}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
+                disabled={historyPage <= 1}
+                className="grid h-9 w-9 place-items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition hover:border-[var(--accent-border)] hover:text-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-35"
+                aria-label="Previous credit history page"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              {Array.from({ length: historyPages }, (_, index) => index + 1)
+                .filter((page) => historyPages <= 7 || page === 1 || page === historyPages || Math.abs(page - historyPage) <= 1)
+                .map((page, index, pages) => {
+                  const previous = pages[index - 1];
+                  return (
+                    <span key={page} className="flex items-center gap-2">
+                      {previous && page - previous > 1 && <span className="px-1 text-xs font-black text-[var(--text-muted)]">…</span>}
+                      <button
+                        type="button"
+                        onClick={() => setHistoryPage(page)}
+                        className={`min-w-9 rounded-xl border px-3 py-2 text-xs font-black transition ${
+                          page === historyPage
+                            ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                            : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent-border)] hover:text-[var(--accent-strong)]"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    </span>
+                  );
+                })}
+              <button
+                type="button"
+                onClick={() => setHistoryPage((page) => Math.min(historyPages, page + 1))}
+                disabled={historyPage >= historyPages}
+                className="grid h-9 w-9 place-items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition hover:border-[var(--accent-border)] hover:text-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-35"
+                aria-label="Next credit history page"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
         )}
       </GlassCard>

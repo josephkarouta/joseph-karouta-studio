@@ -98,7 +98,7 @@ export default function BrandLogos({ project, brand }: { project: any; brand: an
               const loading = state.loadingDirection === index;
               const variationLoading = state.variationLoading === index;
               return (
-                <article key={`${direction.title}-${index}`} className={`overflow-hidden rounded-[23px] border bg-white shadow-[0_13px_32px_rgba(45,29,62,.065)] transition ${selected ? "border-2 border-violet-600 shadow-violet-600/15" : "border-slate-200 hover:-translate-y-1 hover:border-violet-400"}`}>
+                <article key={`${direction.title}-${index}`} className={`overflow-hidden rounded-[23px] border bg-white shadow-[0_13px_32px_rgba(45,29,62,.065)] transition ${selected ? "border-violet-600 shadow-[0_0_0_3px_rgba(161,61,240,.15)]" : "border-slate-200 hover:-translate-y-1 hover:border-violet-400"}`}>
                   <div className="relative bg-gradient-to-br from-slate-100 via-white to-violet-100 p-3">
                     <span className="absolute left-4 top-4 z-10 rounded-full bg-white px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-violet-700 shadow">Direction {index + 1}</span>
                     {selected && <span className="absolute right-4 top-4 z-10 rounded-full bg-emerald-500 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-white">✓ Selected</span>}

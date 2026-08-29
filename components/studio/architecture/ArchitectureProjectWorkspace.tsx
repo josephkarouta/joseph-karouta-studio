@@ -6594,7 +6594,7 @@ const workspaceStyles = `
   .paint-application-panel label,.custom-paint-builder label { display:grid; gap:6px; min-width:240px; }
   .paint-application-panel span,.custom-paint-builder label > span { color:#475569; font-size:9px; font-weight:900; }
   .paint-application-panel select,.custom-paint-builder input,.custom-paint-builder select { min-height:42px; border:1px solid #d7e0ea; border-radius:12px; background:#fff; padding:0 11px; font-size:11px; }
-  .paint-preset-card[data-selected="true"] { border:2px solid #1769d2; box-shadow:0 12px 28px rgba(46,124,246,.14); }
+  .paint-preset-card[data-selected="true"] { border:1px solid #1769d2; box-shadow:0 0 0 3px rgba(46,124,246,.14); }
   .paint-preset-card[data-selected="true"] button { border-color:#1769d2; background:#1769d2; color:#fff; }
   .custom-paint-builder { display:grid; grid-template-columns:70px minmax(150px,1fr) minmax(190px,1.2fr) minmax(130px,.8fr) auto; gap:12px; align-items:end; margin-top:18px; border-top:1px solid #e5e7eb; padding-top:18px; }
   .custom-paint-preview { width:70px; height:70px; border:2px solid #fff; border-radius:17px; box-shadow:0 0 0 1px #cbd5e1,0 10px 22px rgba(15,23,42,.12); }
@@ -6611,7 +6611,7 @@ const workspaceStyles = `
   .plan-view-group-legend { display:flex; flex-wrap:wrap; gap:8px; }
   .plan-view-group-legend span { display:inline-flex; min-height:30px; align-items:center; border-radius:999px; background:#eaf3ff; color:#1769d2; padding:0 11px; font-size:8px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
   .plan-visual-card { position:relative; }
-  .plan-visual-card[data-selected="true"] { border:2px solid #1769d2; box-shadow:0 16px 36px rgba(46,124,246,.15); }
+  .plan-visual-card[data-selected="true"] { border:1px solid #1769d2; box-shadow:0 0 0 3px rgba(46,124,246,.15); }
   .plan-card-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); background:var(--surface); padding:12px 14px; }
   .plan-select-toggle { position:static; z-index:auto; flex:0 0 auto; border:1px solid #a7c5ef; border-radius:999px; background:var(--surface-strong); color:#1769d2; padding:8px 11px; font-size:8px; font-weight:900; box-shadow:none; }
   .plan-select-toggle[data-selected="true"] { border-color:#1769d2; background:#1769d2; color:#fff; }

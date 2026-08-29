@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   BadgeCheck,
   BookOpenCheck,
@@ -28,6 +27,7 @@ import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import { CreditPill, Eyebrow, PageContainer } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import HeyyMultiSelect from "@/components/ui/heyy-multi-select";
+import StudioLoader from "@/components/ui/StudioLoader";
 import AuthModal from "@/app/AuthModal";
 import StudioAccessGate from "@/components/studio-access-gate";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -949,7 +949,7 @@ export default function BrandStudioPage() {
         .brand-choice[data-selected="true"] {
           border-color: var(--brand-accent) !important;
           background: linear-gradient(135deg,rgba(161,61,240,.18),var(--surface-strong)) !important;
-          box-shadow: 0 0 0 2px var(--brand-accent), 0 16px 34px rgba(159,44,224,.22) !important;
+          box-shadow: 0 0 0 3px var(--brand-soft) !important;
         }
         .brand-choice[data-selected="true"] .brand-choice-mark {
           background: var(--brand-accent) !important;
@@ -964,7 +964,7 @@ export default function BrandStudioPage() {
           border-color: var(--brand-accent) !important;
           background: var(--brand-accent) !important;
           color: #fff !important;
-          box-shadow: 0 8px 18px rgba(159,44,224,.23) !important;
+          box-shadow: 0 0 0 3px var(--brand-soft) !important;
         }
         .brand-compact-choice[data-selected="true"] span { color:#fff !important; }
         .brand-studio-v13 .bg-white { background:var(--surface-strong) !important; }
@@ -1364,32 +1364,17 @@ export default function BrandStudioPage() {
         </div>
       </PageContainer>
 
-      <AnimatePresence>
-        {isGenerating && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 p-5 backdrop-blur-md">
-            <motion.div initial={{ y: 18, scale: .97 }} animate={{ y: 0, scale: 1 }} className="w-full max-w-lg overflow-hidden rounded-[28px] border border-violet-300 bg-white p-6 shadow-2xl">
-              <div className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-gradient-to-br from-violet-700 to-fuchsia-500 text-xl font-black text-white">h</span>
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-600">Brand Studio is preparing</p>
-                  <h3 className="mt-1 text-xl font-black text-slate-950">{activeLoadingSteps[loadingStep]}</h3>
-                </div>
-              </div>
-              <div className="mt-5 overflow-hidden rounded-full bg-violet-100 p-1">
-                <div className="h-2 w-[36%] rounded-full bg-gradient-to-r from-violet-700 to-fuchsia-500" style={{ animation: "brandLoaderMove 1.15s ease-in-out infinite" }} />
-              </div>
-              <div className="mt-5 grid gap-2">
-                {activeLoadingSteps.map((step, index) => (
-                  <div key={step} className={`flex items-center gap-3 rounded-[13px] border px-3 py-2.5 ${index <= loadingStep ? "border-violet-200 bg-violet-50" : "border-slate-100 bg-slate-50"}`}>
-                    <span className={`flex h-6 w-6 items-center justify-center rounded-[8px] text-[10px] font-black ${index < loadingStep ? "bg-emerald-500 text-white" : index === loadingStep ? "bg-violet-700 text-white" : "bg-slate-200 text-slate-500"}`}>{index < loadingStep ? "✓" : index + 1}</span>
-                    <span className={`text-xs font-bold ${index <= loadingStep ? "text-slate-800" : "text-slate-400"}`}>{step}</span>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isGenerating && (
+        <StudioLoader
+          tone="brand"
+          eyebrow="Brand Studio"
+          title={activeLoadingSteps[loadingStep]}
+          detail="Preparing your connected Brand workspace. Keep this page open while the project is saved."
+          steps={activeLoadingSteps}
+          activeStep={loadingStep}
+          variant="fullscreen"
+        />
+      )}
     </main>
   );
 

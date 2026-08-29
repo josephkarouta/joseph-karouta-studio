@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   ArrowRightLeft,
@@ -76,6 +76,18 @@ export default function WorkspaceSidebar({
 }: Props) {
   const pathname = usePathname();
   const navigationScrollRef = useRef<HTMLDivElement>(null);
+  const [currentHash, setCurrentHash] = useState("");
+
+  useEffect(() => {
+    const syncHash = () => setCurrentHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+    };
+  }, [pathname]);
   const workspaceItems: NavigationItem[] = [
     { label: "Dashboard", href: "/dashboard", icon: Gauge, activePrefixes: ["/dashboard"] },
     { label: "Projects", href: "/dashboard/projects", icon: FolderKanban, activePrefixes: ["/dashboard/projects"] },
@@ -109,8 +121,18 @@ export default function WorkspaceSidebar({
   }));
 
   function itemIsActive(item: NavigationItem) {
-    if (item.href === "/dashboard") return pathname === "/dashboard";
+    if (item.href === "/dashboard#production") return pathname === "/dashboard" && currentHash === "#production";
+    if (item.href === "/dashboard") return pathname === "/dashboard" && currentHash !== "#production";
     return Boolean(item.activePrefixes?.some((prefix) => pathname.startsWith(prefix)));
+  }
+
+  function handleNavigationItem(item: NavigationItem) {
+    if (item.href.includes("#")) {
+      setCurrentHash(`#${item.href.split("#")[1]}`);
+    } else if (pathname === "/dashboard") {
+      setCurrentHash("");
+    }
+    onCloseMobile();
   }
 
   useLayoutEffect(() => {
@@ -181,28 +203,28 @@ export default function WorkspaceSidebar({
           label="Workspace"
           items={workspaceItems}
           collapsed={collapsed}
-          onNavigate={onCloseMobile}
+          onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
         <NavigationGroup
           label="Studios"
           items={studioItems}
           collapsed={collapsed}
-          onNavigate={onCloseMobile}
+          onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
         <NavigationGroup
           label="Tools"
           items={aiToolItems}
           collapsed={collapsed}
-          onNavigate={onCloseMobile}
+          onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
         <NavigationGroup
           label="Utilities"
           items={utilityItems}
           collapsed={collapsed}
-          onNavigate={onCloseMobile}
+          onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
       </div>
@@ -220,13 +242,13 @@ function NavigationGroup({
   label,
   items,
   collapsed,
-  onNavigate,
+  onNavigateItem,
   isActive,
 }: {
   label: string;
   items: NavigationItem[];
   collapsed: boolean;
-  onNavigate: () => void;
+  onNavigateItem: (item: NavigationItem) => void;
   isActive: (item: NavigationItem) => boolean;
 }) {
   return (
@@ -244,7 +266,7 @@ function NavigationGroup({
             <Link
               key={`${label}-${item.label}`}
               href={item.href}
-              onClick={onNavigate}
+              onClick={() => onNavigateItem(item)}
               title={collapsed ? item.label : undefined}
               className={cx(
                 "group relative flex min-h-11 items-center gap-3 rounded-2xl border px-3 text-sm font-extrabold transition",

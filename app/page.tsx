@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -419,6 +419,168 @@ export default function HomePage() {
         .home-motion-parallax {
           transform: translate3d(0, var(--home-parallax-y, 0px), 0);
           will-change: transform;
+        }
+
+        .hero-static-wrap {
+          display: grid;
+          place-items: center;
+        }
+
+        .hero-static-frame {
+          position: relative;
+          width: min(100%, 560px);
+          aspect-ratio: 1.05 / 1;
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+          border-radius: 2.2rem;
+          background:
+            linear-gradient(145deg, color-mix(in srgb, var(--surface-strong) 96%, #f5f0fb), color-mix(in srgb, var(--surface) 92%, #eef6ff));
+          box-shadow: 0 34px 90px rgba(40, 24, 68, 0.14);
+        }
+
+        .hero-static-grid {
+          position: absolute;
+          inset: 0;
+          opacity: 0.46;
+          background-image:
+            linear-gradient(color-mix(in srgb, var(--text-primary) 7%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 7%, transparent) 1px, transparent 1px);
+          background-size: 42px 42px;
+          mask-image: linear-gradient(to bottom right, black 12%, transparent 82%);
+        }
+
+        .hero-static-plane {
+          position: absolute;
+          overflow: hidden;
+          border-radius: 1.75rem;
+        }
+
+        .hero-static-plane-dark {
+          left: 8%;
+          top: 9%;
+          width: 47%;
+          height: 64%;
+          background:
+            linear-gradient(155deg, #17111f 0%, #25172f 55%, #11151d 100%);
+          box-shadow: 0 28px 50px rgba(24, 12, 34, 0.28);
+        }
+
+        .hero-static-plane-dark::after {
+          content: "";
+          position: absolute;
+          right: -14%;
+          bottom: -18%;
+          width: 72%;
+          height: 62%;
+          border-radius: 1.6rem;
+          background: linear-gradient(135deg, rgba(111,45,255,.88), rgba(239,63,180,.68));
+          transform: rotate(-18deg);
+        }
+
+        .hero-static-line {
+          position: absolute;
+          left: 13%;
+          z-index: 2;
+          display: block;
+          height: 1px;
+          background: rgba(255,255,255,.42);
+        }
+
+        .hero-static-line-one { top: 18%; width: 55%; }
+        .hero-static-line-two { top: 24%; width: 31%; opacity: .55; }
+
+        .hero-static-plane-light {
+          right: 7%;
+          bottom: 13%;
+          width: 54%;
+          height: 50%;
+          border: 1px solid rgba(255,255,255,.72);
+          background: color-mix(in srgb, var(--surface-strong) 93%, transparent);
+          box-shadow: 0 25px 55px rgba(39, 27, 58, .16);
+          backdrop-filter: blur(12px);
+        }
+
+        .hero-static-plane-light::before {
+          content: "";
+          position: absolute;
+          left: 9%;
+          right: 9%;
+          top: 18%;
+          height: 1px;
+          background: color-mix(in srgb, var(--text-primary) 17%, transparent);
+        }
+
+        .hero-static-block {
+          position: absolute;
+          border-radius: .85rem;
+        }
+
+        .hero-static-block-violet { left: 10%; bottom: 13%; width: 27%; height: 39%; background: #7135f4; }
+        .hero-static-block-pink { left: 40%; bottom: 13%; width: 18%; height: 27%; background: #eb3eae; }
+        .hero-static-block-blue { right: 10%; bottom: 13%; width: 25%; height: 52%; background: #4b8cf5; }
+        .hero-static-block-orange { left: 40%; top: 29%; width: 18%; height: 12%; background: #f4a04b; }
+
+        .hero-static-outline {
+          position: absolute;
+          right: 12%;
+          top: 8%;
+          width: 29%;
+          height: 29%;
+          border: 2px solid color-mix(in srgb, #7135f4 75%, var(--surface-strong));
+          border-radius: 1.5rem;
+          transform: rotate(8deg);
+        }
+
+        .hero-static-bar {
+          position: absolute;
+          left: 7%;
+          bottom: 7%;
+          display: flex;
+          width: 34%;
+          gap: .45rem;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+          padding: .55rem;
+          box-shadow: 0 13px 32px rgba(41, 24, 62, .12);
+        }
+
+        .hero-static-bar span {
+          height: .52rem;
+          flex: 1;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--text-primary) 11%, transparent);
+        }
+
+        .hero-static-bar span:first-child { background: #7135f4; }
+        .hero-static-bar span:nth-child(2) { background: #eb3eae; }
+
+        .hero-static-caption {
+          position: absolute;
+          right: 7%;
+          top: 47%;
+          z-index: 4;
+          display: flex;
+          align-items: center;
+          gap: .45rem;
+          padding: .55rem .7rem;
+          border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--surface-strong) 93%, transparent);
+          color: var(--text-muted);
+          font-size: .48rem;
+          font-weight: 900;
+          letter-spacing: .13em;
+        }
+
+        .hero-static-caption i {
+          width: 13px;
+          height: 1px;
+          background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+        }
+
+        @media (max-width: 640px) {
+          .hero-static-frame { width: min(100%, 430px); border-radius: 1.8rem; }
+          .hero-static-caption { font-size: .42rem; }
         }
 
         .hero-playground-stage {
@@ -1141,140 +1303,37 @@ function SectionHeading({
 }
 
 function HeroPlayground() {
-  const playgroundRef = useRef<HTMLDivElement>(null);
-
-  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const element = playgroundRef.current;
-    if (!element) return;
-    const bounds = element.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    element.style.setProperty("--hero-tilt-x", `${-y * 8}deg`);
-    element.style.setProperty("--hero-tilt-y", `${x * 10}deg`);
-    element.style.setProperty("--hero-shift-x", `${x * 18}px`);
-    element.style.setProperty("--hero-shift-y", `${y * 18}px`);
-    element.style.setProperty("--hero-particle-x-1", `${x * 8}px`);
-    element.style.setProperty("--hero-particle-y-1", `${y * 8}px`);
-    element.style.setProperty("--hero-particle-x-2", `${x * 15}px`);
-    element.style.setProperty("--hero-particle-y-2", `${y * 15}px`);
-    element.style.setProperty("--hero-particle-x-3", `${x * 24}px`);
-    element.style.setProperty("--hero-particle-y-3", `${y * 24}px`);
-  };
-
-  const resetPointer = () => {
-    const element = playgroundRef.current;
-    if (!element) return;
-    element.style.setProperty("--hero-tilt-x", "0deg");
-    element.style.setProperty("--hero-tilt-y", "0deg");
-    element.style.setProperty("--hero-shift-x", "0px");
-    element.style.setProperty("--hero-shift-y", "0px");
-    element.style.setProperty("--hero-particle-x-1", "0px");
-    element.style.setProperty("--hero-particle-y-1", "0px");
-    element.style.setProperty("--hero-particle-x-2", "0px");
-    element.style.setProperty("--hero-particle-y-2", "0px");
-    element.style.setProperty("--hero-particle-x-3", "0px");
-    element.style.setProperty("--hero-particle-y-3", "0px");
-  };
-
   return (
     <div
-      ref={playgroundRef}
       data-home-reveal
-      className="hero-playground relative mx-auto h-[430px] w-full max-w-[620px] py-5 lg:h-[520px] lg:py-0"
-      onPointerMove={handlePointerMove}
-      onPointerLeave={resetPointer}
+      className="hero-static-wrap relative mx-auto h-[430px] w-full max-w-[620px] py-5 lg:h-[520px] lg:py-0"
       aria-hidden="true"
     >
-      <div className="absolute inset-[8%] rounded-full bg-[conic-gradient(from_90deg,#6f2dff,#ef3fb4,#2e7cf6,#f08034,#6f2dff)] opacity-20 blur-[78px]" />
-      <div className="hero-playground-stage relative h-full w-full">
-        <div className="hero-particle-field">
-          {[
-            [12, 18, 1, 5, "#ef3fb4", 0.2], [28, 8, 2, 4, "#6f2dff", 1.1], [48, 15, 3, 6, "#22d3ee", 0.6],
-            [72, 9, 1, 4, "#ffb04a", 1.6], [88, 23, 2, 5, "#ef3fb4", 0.9], [8, 48, 3, 4, "#2e7cf6", 1.9],
-            [21, 69, 2, 6, "#ffb04a", 0.4], [43, 84, 1, 4, "#6f2dff", 1.4], [68, 79, 3, 5, "#22d3ee", 2.1],
-            [91, 61, 1, 6, "#ef3fb4", 0.75], [79, 43, 2, 4, "#2e7cf6", 1.25], [55, 4, 1, 3, "#ffcf64", 2.4],
-            [4, 31, 2, 3, "#22d3ee", 1.8], [34, 94, 3, 4, "#ef3fb4", 0.1], [94, 86, 2, 3, "#6f2dff", 2.7],
-          ].map(([left, top, depth, size, color, delay], index) => (
-            <span
-              key={index}
-              className={`hero-particle hero-particle-depth-${depth}`}
-              style={{
-                left: `${left}%`,
-                top: `${top}%`,
-                "--particle-size": `${size}px`,
-                "--particle-color": color,
-                "--particle-delay": `${delay}s`,
-                "--particle-speed": `${4.2 + (index % 4) * 0.7}s`,
-              } as CSSProperties}
-            />
-          ))}
+      <div className="hero-static-frame">
+        <div className="hero-static-grid" />
+        <div className="hero-static-plane hero-static-plane-dark">
+          <span className="hero-static-line hero-static-line-one" />
+          <span className="hero-static-line hero-static-line-two" />
         </div>
-        <div className="hero-orbit hero-orbit-one"><span /></div>
-        <div className="hero-orbit hero-orbit-two"><span /></div>
-        <div className="hero-orbit hero-orbit-three"><span /></div>
-
-        <div className="hero-ai-hub-shell">
-          <span className="hero-ai-pulse hero-ai-pulse-one" />
-          <span className="hero-ai-pulse hero-ai-pulse-two" />
-          <div className="hero-ai-hub">
-            <div className="hero-ai-shine" />
-            <span className="hero-core-ring hero-core-ring-one" />
-            <span className="hero-core-ring hero-core-ring-two" />
-            <span className="hero-core-symbol"><Sparkles size={30} /></span>
-          </div>
+        <div className="hero-static-plane hero-static-plane-light">
+          <span className="hero-static-block hero-static-block-violet" />
+          <span className="hero-static-block hero-static-block-pink" />
+          <span className="hero-static-block hero-static-block-blue" />
+          <span className="hero-static-block hero-static-block-orange" />
         </div>
-
-        <div className="hero-capability hero-capability-brand">
-          <div className="hero-capability-title">
-            <span className="hero-capability-icon bg-fuchsia-500/12 text-fuchsia-500"><Palette size={16} /></span>
-            <span>Brand</span>
-          </div>
-          <div className="hero-brand-colors">
-            <span className="bg-[#6f2dff]" />
-            <span className="bg-[#ef3fb4]" />
-            <span className="bg-[#ffb04a]" />
-            <span className="bg-[#22d3ee]" />
-          </div>
+        <div className="hero-static-outline" />
+        <div className="hero-static-bar">
+          <span />
+          <span />
+          <span />
         </div>
-
-        <div className="hero-capability hero-capability-marketing">
-          <div className="hero-capability-title">
-            <span className="hero-capability-icon bg-pink-500/12 text-pink-500"><Megaphone size={16} /></span>
-            <span>Marketing</span>
-          </div>
-          <div className="hero-strategy-chart">
-            <span /><span /><span /><span />
-            <i /><i /><i /><i />
-          </div>
+        <div className="hero-static-caption">
+          <span>IDEA</span>
+          <i />
+          <span>DIRECTION</span>
+          <i />
+          <span>FINISH</span>
         </div>
-
-        <div className="hero-capability hero-capability-architecture">
-          <div className="hero-capability-title">
-            <span className="hero-capability-icon bg-blue-500/12 text-blue-500"><Building2 size={16} /></span>
-            <span>Architecture</span>
-          </div>
-          <div className="hero-mini-buildings">
-            <span /><span /><span />
-          </div>
-        </div>
-
-        <div className="hero-capability hero-capability-interior">
-          <div className="hero-capability-title">
-            <span className="hero-capability-icon bg-orange-500/12 text-orange-500"><Sofa size={16} /></span>
-            <span>Interior</span>
-          </div>
-          <div className="hero-mini-room">
-            <span className="hero-mini-sofa" />
-            <span className="hero-mini-cushion" />
-            <span className="hero-mini-table" />
-            <span className="hero-mini-lamp" />
-          </div>
-        </div>
-
-        <span className="hero-hub-signal hero-hub-signal-one" />
-        <span className="hero-hub-signal hero-hub-signal-two" />
-        <span className="hero-hub-signal hero-hub-signal-three" />
-        <span className="hero-hub-signal hero-hub-signal-four" />
       </div>
     </div>
   );

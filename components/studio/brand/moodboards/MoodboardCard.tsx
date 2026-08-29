@@ -42,7 +42,7 @@ export default function MoodboardCard({
   ).slice(0, 8);
 
   return (
-    <article className={`overflow-hidden rounded-[24px] border bg-white shadow-[0_15px_38px_rgba(48,29,67,.07)] transition ${isSelected ? "border-2 border-violet-600 shadow-violet-600/15" : "border-slate-200 hover:-translate-y-1 hover:border-violet-400"}`}>
+    <article className={`overflow-hidden rounded-[24px] border bg-white shadow-[0_15px_38px_rgba(48,29,67,.07)] transition ${isSelected ? "border-violet-600 shadow-[0_0_0_3px_rgba(161,61,240,.15)]" : "border-slate-200 hover:-translate-y-1 hover:border-violet-400"}`}>
       <div className="relative min-h-[210px] bg-gradient-to-br from-slate-100 via-white to-violet-100 p-3">
         <span className="absolute left-4 top-4 z-10 rounded-full border border-violet-100 bg-white/95 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.15em] text-violet-700 shadow-sm">Direction {index + 1}</span>
         {isSelected && <span className="absolute right-4 top-4 z-10 rounded-full bg-emerald-500 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.15em] text-white">✓ Selected</span>}

@@ -9,6 +9,7 @@ import StudioAccessGate from "@/components/studio-access-gate";
 import { CreditPill, Eyebrow, PageContainer } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
+import StudioLoader from "@/components/ui/StudioLoader";
 import { ClipboardList, DraftingCompass, HousePlus, PanelsTopLeft, PencilRuler, Upload } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { CREDIT_COSTS } from "@/lib/credits/config";
@@ -541,23 +542,13 @@ export default function ArchitectureStudioPage() {
           <style>{architectureStyles}</style>
 
           {creating && (
-            <div className="architecture-creating-overlay" role="status" aria-live="polite">
-              <div className="architecture-creating-card">
-                <div className="architecture-loading-ring" aria-hidden="true" />
-                <p className="mt-5 text-[10px] font-black uppercase tracking-[0.2em] text-blue-700">
-                  Creating Project
-                </p>
-                <h2 className="mt-2 text-2xl font-black tracking-[-0.035em] text-slate-950">
-                  Building your Architecture workspace
-                </h2>
-                <p className="mt-3 text-sm leading-7 text-slate-600">
-                  {createMessage || "Saving your project information..."}
-                </p>
-                <p className="mt-4 text-[11px] font-bold leading-6 text-slate-400">
-                  Keep this page open. You will be taken to the project automatically.
-                </p>
-              </div>
-            </div>
+            <StudioLoader
+              tone="architecture"
+              eyebrow="Architecture Studio"
+              title="Building your Architecture workspace"
+              detail={createMessage || "Saving your project information. Keep this page open and we’ll take you to the project automatically."}
+              variant="fullscreen"
+            />
           )}
 
           <PageContainer className="architecture-wrap" aria-busy={creating}>
@@ -1115,7 +1106,7 @@ const architectureStyles = `
   .architecture-start-toggle button strong { font-size:14px; font-weight:900; }
   .architecture-start-toggle button small { color:var(--text-secondary); font-size:11px; font-weight:650; line-height:1.45; }
   .architecture-start-toggle button:hover { border-color:#1676e8; background:rgba(73,146,255,.08); }
-  .architecture-start-toggle button[data-active="true"] { border:2px solid #1676e8; background:rgba(73,146,255,.13); box-shadow:0 10px 26px rgba(22,118,232,.12); }
+  .architecture-start-toggle button[data-active="true"] { border:1px solid #1676e8; background:rgba(73,146,255,.13); box-shadow:0 0 0 3px rgba(73,146,255,.15); }
   .architecture-start-toggle button[data-active="true"] > svg { color:#fff; background:#1676e8; border-radius:10px; padding:4px; box-sizing:content-box; }
   .architecture-hero-icon { width:56px; height:56px; border-radius:18px; background:#1676e8; color:#fff; box-shadow:0 14px 30px rgba(22,118,232,.24); }
   .working-mode-panel { display:grid; gap:18px; margin-top:20px; border:1px solid var(--border); border-radius:var(--radius-card); background:var(--glass); padding:20px; box-shadow:var(--shadow-card); backdrop-filter:blur(24px); }
@@ -1127,7 +1118,7 @@ const architectureStyles = `
   .mode-grid { display:grid; gap:16px; margin-top:16px; }
   .mode-card { min-height:205px; border:1px solid var(--border); border-radius:var(--radius-card); background:var(--glass); color:var(--text-primary); padding:22px; text-align:left; transition:all 200ms ease; backdrop-filter:blur(24px); }
   .mode-card:hover { transform:translateY(-4px); border-color:#1676e8; background:rgba(73,146,255,.08); box-shadow:var(--shadow-card-hover); }
-  .mode-card[data-active="true"] { border:2px solid #1676e8; background:linear-gradient(135deg,rgba(73,146,255,.15),var(--surface-strong)); box-shadow:0 18px 40px rgba(22,118,232,.15); }
+  .mode-card[data-active="true"] { border:1px solid #1676e8; background:linear-gradient(135deg,rgba(73,146,255,.15),var(--surface-strong)); box-shadow:0 0 0 3px rgba(73,146,255,.15); }
   .mode-icon { width:48px; height:48px; border-radius:15px; background:rgba(73,146,255,.14); color:#1676e8; }
   .mode-card[data-active="true"] .mode-icon { background:#1676e8; color:#fff; }
   .builder-grid { display:grid; gap:22px; margin-top:22px; }
@@ -1211,7 +1202,7 @@ const architectureStyles = `
   .choice-grid { display:grid; gap:12px; }
   .choice-card { border:1px solid var(--border); border-radius:18px; background:var(--surface-strong); color:var(--text-primary); padding:17px; text-align:left; transition:all 180ms ease; }
   .choice-card:hover { border-color:#1676e8; background:rgba(73,146,255,.09); }
-  .choice-card[data-active="true"] { border:2px solid #1676e8; background:rgba(73,146,255,.14); box-shadow:0 10px 22px rgba(22,118,232,.13); }
+  .choice-card[data-active="true"] { border:1px solid #1676e8; background:rgba(73,146,255,.14); box-shadow:0 0 0 3px rgba(73,146,255,.15); }
   .upload-box { display:flex; min-height:190px; cursor:pointer; flex-direction:column; align-items:center; justify-content:center; border:1px dashed rgba(73,146,255,.58); border-radius:20px; background:linear-gradient(135deg,rgba(73,146,255,.09),var(--surface-strong)); padding:24px; text-align:center; transition:all 180ms ease; }
   .upload-box:hover { border-color:#1676e8; background:linear-gradient(135deg,rgba(73,146,255,.15),var(--surface-strong)); box-shadow:0 12px 25px rgba(22,118,232,.10); }
   .upload-icon { width:48px; height:48px; border-radius:15px; background:rgba(73,146,255,.14); color:#1676e8; }
@@ -1228,7 +1219,7 @@ const architectureStyles = `
   .professional-fields-head span { color:var(--text-secondary); font-size:11px; }
   .initial-material-card { position:relative; overflow:hidden; border:1px solid var(--border); border-radius:18px; background:var(--surface-strong); color:var(--text-primary); text-align:left; transition:all 180ms ease; }
   .initial-material-card:hover { transform:translateY(-3px); border-color:#1676e8; box-shadow:0 12px 26px rgba(22,118,232,.12); }
-  .initial-material-card[data-active="true"] { border:2px solid #1676e8; background:rgba(73,146,255,.11); }
+  .initial-material-card[data-active="true"] { border:1px solid #1676e8; background:rgba(73,146,255,.11); box-shadow:0 0 0 3px rgba(73,146,255,.15); }
   .initial-material-card img { width:100%; height:112px; object-fit:cover; }
   .initial-material-card > span { display:grid; gap:4px; padding:12px; }
   .initial-material-card small, .initial-material-card em { color:var(--text-secondary); font-size:10px; }
