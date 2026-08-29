@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 
-export type PdfOperation = "compress" | "split" | "merge" | "unlock" | "protect";
+export type PdfOperation = "compress" | "split" | "merge" | "protect";
 export type OutputFile = { name: string; blob: Blob; mimeType: string };
 
 type RenderedPage = {
@@ -65,7 +65,7 @@ async function renderPdf(source: PdfSource, options?: { scale?: number; pages?: 
     }).promise;
   } catch (error) {
     if (passwordError(error)) {
-      throw new Error(source.password ? "The PDF password is incorrect." : "This PDF is password-protected. Use Unlock PDF and enter the password first.");
+      throw new Error("This PDF is password-protected. Remove its password protection before uploading it to Heyy Studio.");
     }
     throw error;
   }
@@ -144,7 +144,7 @@ async function countPdfPages(file: File, password?: string) {
     return count;
   } catch (error) {
     if (passwordError(error)) {
-      throw new Error(password ? "The PDF password is incorrect." : "This PDF is password-protected. Use Unlock PDF first.");
+      throw new Error("This PDF is password-protected. Remove its password protection before uploading it to Heyy Studio.");
     }
     throw error;
   }
@@ -187,15 +187,13 @@ export async function processPdfOperation(input: {
   operation: PdfOperation;
   files: File[];
   pageSelection?: string;
-  sourcePassword?: string;
-  newPassword?: string;
+    newPassword?: string;
   maxPages?: number;
 }): Promise<OutputFile[]> {
   const {
     operation,
     files,
     pageSelection = "",
-    sourcePassword = "",
     newPassword = "",
     maxPages = 50,
   } = input;
@@ -220,13 +218,12 @@ export async function processPdfOperation(input: {
   }
 
   const source = files[0];
-  const password = operation === "unlock" ? sourcePassword : undefined;
-  const pageCount = await countPdfPages(source, password);
+  const pageCount = await countPdfPages(source);
   if (pageCount > maxPages) throw new Error(`This PDF has ${pageCount} pages. The current limit is ${maxPages} pages per operation.`);
 
   if (operation === "split") {
     const selected = parsePageSelection(pageSelection, pageCount);
-    const pages = await renderPdf({ file: source, password }, { pages: selected, scale: 1.4 });
+    const pages = await renderPdf({ file: source }, { pages: selected, scale: 1.4 });
     const blob = await createPdfFromPages(pages, { jpegQuality: 0.9 });
     return [{ name: downloadName(source.name, "selected-pages", "pdf"), blob, mimeType: "application/pdf" }];
   }
@@ -235,13 +232,6 @@ export async function processPdfOperation(input: {
     const pages = await renderPdf({ file: source }, { scale: 1.0 });
     const blob = await createPdfFromPages(pages, { jpegQuality: 0.58 });
     return [{ name: downloadName(source.name, "compressed", "pdf"), blob, mimeType: "application/pdf" }];
-  }
-
-  if (operation === "unlock") {
-    if (!sourcePassword.trim()) throw new Error("Enter the current PDF password.");
-    const pages = await renderPdf({ file: source, password: sourcePassword }, { scale: 1.4 });
-    const blob = await createPdfFromPages(pages, { jpegQuality: 0.9 });
-    return [{ name: downloadName(source.name, "unlocked", "pdf"), blob, mimeType: "application/pdf" }];
   }
 
   if (operation === "protect") {

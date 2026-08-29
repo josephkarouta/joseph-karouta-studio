@@ -261,7 +261,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unable to load billing details.",
+        error: error instanceof ApiAuthError ? error.message : "Unable to load billing details. Please try again.",
       },
       { status },
     );

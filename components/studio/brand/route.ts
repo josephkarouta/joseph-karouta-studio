@@ -315,7 +315,7 @@ Rules:
       return NextResponse.json(
         {
           success: false,
-          error: "OpenAI request failed.",
+          error: "Creative generation request failed.",
           details: data,
         },
         { status: 500 }
@@ -325,7 +325,7 @@ Rules:
     const outputText = extractOutputText(data);
 
     if (!outputText) {
-      console.error("OpenAI raw response:", JSON.stringify(data, null, 2));
+      console.error("Creative generation raw response:", JSON.stringify(data, null, 2));
 
       return NextResponse.json(
         {

@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     return loginErrorResponse(
       request,
       next,
-      "Supabase authentication is not configured.",
+      "Authentication is temporarily unavailable.",
     );
   }
 

@@ -243,6 +243,16 @@ export default function DashboardPage() {
 
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "Creator";
   const activeJobs = jobs.filter((job) => !["delivered", "completed", "cancelled"].includes(String(job.status || "").toLowerCase()));
+  useEffect(() => {
+    if (projectsLoading || activityLoading) return;
+    const hash = window.location.hash.replace("#", "");
+    if (!hash || !["projects", "production", "assets"].includes(hash)) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [projectsLoading, activityLoading]);
+
   const unreadNotifications = notifications.filter((item) => !item.read_at);
   const attentionItems = [
     ...unreadNotifications.slice(0, 2).map((item) => ({
@@ -279,10 +289,6 @@ export default function DashboardPage() {
               <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
                 Continue a project, see what needs attention and move your strongest ideas toward delivery.
               </p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <ButtonLink href="/brand-studio"><Plus size={15} /> New brand project</ButtonLink>
-                <ButtonLink href="/architecture-studio" variant="secondary"><Building2 size={15} /> New architecture project</ButtonLink>
-              </div>
             </div>
             <GlassCard className="w-full min-w-[290px] p-5 lg:w-[330px]">
               <div className="flex items-start justify-between gap-4">
@@ -308,7 +314,7 @@ export default function DashboardPage() {
               <div><Eyebrow>Continue working</Eyebrow><h2 className="mt-2 text-2xl font-black tracking-[-.045em]">Pick up where you left off</h2></div>
               <Link href="/dashboard/projects" className="text-xs font-black text-[var(--accent-strong)] hover:underline">All projects</Link>
             </div>
-            {projectsLoading ? <DashboardCardSkeleton className="mt-5 h-48" /> : projects[0] ? <ContinueProject project={projects[0]} /> : <EmptyState title="Your first project starts here" description="Choose a specialist Studio and create a structured project that stays in your workspace." href="/#studios" action="Explore Studios" />}
+            {projectsLoading ? <DashboardCardSkeleton className="mt-5 h-48" /> : projects[0] ? <ContinueProject project={projects[0]} /> : <EmptyState title="Your first project starts here" description="Choose a specialist Studio and create a structured project that stays in your workspace." href="/#create" action="Explore Studios" />}
           </GlassCard>
 
           <GlassCard className="p-5 sm:p-6">
@@ -332,7 +338,7 @@ export default function DashboardPage() {
           <GlassCard className="p-5 sm:p-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div><Eyebrow>Recent work</Eyebrow><h2 className="mt-2 text-3xl font-black tracking-[-.05em]">Your projects</h2><p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">Brand, architecture, interior and marketing projects in one view.</p></div>
-              <Link href="/#studios" className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-2.5 text-xs font-black transition hover:border-[var(--accent-border)] hover:text-[var(--accent-strong)]"><Plus size={14}/> New project</Link>
+              <Link href="/#create" className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-2.5 text-xs font-black transition hover:border-[var(--accent-border)] hover:text-[var(--accent-strong)]"><Plus size={14}/> New project</Link>
             </div>
             {projectsLoading ? (
               <div className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -349,19 +355,19 @@ export default function DashboardPage() {
                   </div>
                 )}
               </>
-            ) : <div className="mt-7"><EmptyState title="No projects yet" description="Start with a Studio and your project will appear here automatically." href="/#studios" action="Choose a Studio" /></div>}
+            ) : <div className="mt-7"><EmptyState title="No projects yet" description="Start with a Studio and your project will appear here automatically." href="/#create" action="Choose a Studio" /></div>}
           </GlassCard>
         </section>
 
-        <section className="mt-5 grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
-          <GlassCard id="production" className="scroll-mt-28 p-5 sm:p-6">
+        <section id="production" className="mt-5 scroll-mt-[calc(var(--header-height)+1rem)] grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
+          <GlassCard className="p-5 sm:p-6">
             <div className="flex items-end justify-between gap-4"><div><Eyebrow>Expert production</Eyebrow><h2 className="mt-2 text-3xl font-black tracking-[-.05em]">Production status</h2></div><Link href="/contact?topic=expert-production" className="text-xs font-black text-[var(--accent-strong)] hover:underline">Request production</Link></div>
             <div className="mt-6 space-y-2">
               {activityLoading ? [1, 2, 3].map((item) => <DashboardCardSkeleton key={item} className="h-[68px]" />) : jobs.length ? jobs.slice(0, 6).map((job) => <ProductionRow key={job.id} job={job} />) : <EmptyState title="No production jobs" description="When you approve a quote and pay, the project will enter production here." href="/contact?topic=expert-production" action="Learn about production" compact />}
             </div>
           </GlassCard>
 
-          <GlassCard id="assets" className="scroll-mt-28 p-5 sm:p-6">
+          <GlassCard id="assets" className="scroll-mt-[calc(var(--header-height)+1rem)] p-5 sm:p-6">
             <div className="flex items-end justify-between gap-4"><div><Eyebrow>Saved outputs</Eyebrow><h2 className="mt-2 text-3xl font-black tracking-[-.05em]">Recent assets</h2></div><span className="text-xs font-black text-[var(--text-muted)]">{assets.length} recent</span></div>
             {activityLoading ? <div className="mt-6 grid grid-cols-2 gap-3">{[1, 2, 3, 4].map((item) => <DashboardCardSkeleton key={item} className="aspect-[4/3]" />)}</div> : assets.length ? <div className="mt-6 grid grid-cols-2 gap-3">{assets.slice(0, 6).map((asset) => <AssetCard key={asset.id} asset={asset} />)}</div> : <div className="mt-6"><EmptyState title="No saved assets yet" description="Generated images, presentation files and production deliverables will collect here." href="/tools/text-to-image" action="Create an image" compact /></div>}
           </GlassCard>

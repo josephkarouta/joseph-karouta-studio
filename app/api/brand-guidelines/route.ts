@@ -320,7 +320,7 @@ Rules:
         const data = await response.json();
         if (!response.ok) throw new Error(data?.error?.message || "Guideline generation failed.");
         const output = extractOutputText(data);
-        if (!output) throw new Error("OpenAI returned an empty guidelines response.");
+        if (!output) throw new Error("Guidelines generation returned an empty response.");
         const parsed = JSON.parse(output);
         return {
           guidelines: normaliseGuidelines(parsed, brandWithLogoPalette, project),

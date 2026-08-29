@@ -54,7 +54,10 @@ export default function UtilityUsageCard({
           </div>
         </div>
         {!unlimited && !loading && (
-          <Link href="/billing" className="text-xs font-black text-[var(--accent-strong)] hover:underline">
+          <Link
+            href={paidPlanPaused ? "/billing" : "/pricing"}
+            className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-4 text-xs font-black text-[var(--accent-strong)] transition hover:-translate-y-0.5 hover:bg-[var(--surface-strong)]"
+          >
             {paidPlanPaused ? "Fix billing" : "Upgrade for unlimited"}
           </Link>
         )}

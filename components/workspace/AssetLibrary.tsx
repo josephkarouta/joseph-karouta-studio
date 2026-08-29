@@ -295,7 +295,7 @@ export default function AssetLibrary() {
           </div>
         </section>
 
-        {setupRequired && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">Run the Phase 4 Supabase migration before using Rename, Archive, Remove or cross-Studio reuse.</div>}
+        {setupRequired && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">Asset management is temporarily unavailable. Refresh the page or contact support if the problem continues.</div>}
 
         <GlassCard className="mt-5 p-4 sm:p-5">
           <div className="grid gap-3 xl:grid-cols-[1.4fr_repeat(4,minmax(0,.75fr))_auto]">

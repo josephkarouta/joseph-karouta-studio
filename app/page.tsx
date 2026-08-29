@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -111,7 +111,7 @@ const toolCopy: Record<string, { title: string; description: string }> = {
   },
   pdf_tools: {
     title: "Work with a PDF",
-    description: "Compress, split, combine, protect or unlock a PDF.",
+    description: "Compress, split, combine or protect a PDF.",
   },
   file_converter: {
     title: "Convert a file",
@@ -478,6 +478,30 @@ export default function HomePage() {
           background: #ffcf64;
         }
 
+        .hero-particle-field {
+          position: absolute;
+          inset: 3%;
+          z-index: 1;
+          pointer-events: none;
+        }
+
+        .hero-particle {
+          position: absolute;
+          height: var(--particle-size, 5px);
+          width: var(--particle-size, 5px);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--particle-color, #8b5cf6) 86%, white);
+          box-shadow: 0 0 18px color-mix(in srgb, var(--particle-color, #8b5cf6) 45%, transparent);
+          opacity: 0.55;
+          animation: hero-particle-twinkle var(--particle-speed, 4.8s) ease-in-out infinite;
+          animation-delay: var(--particle-delay, 0s);
+          transition: transform 180ms ease-out;
+        }
+
+        .hero-particle-depth-1 { transform: translate3d(var(--hero-particle-x-1, 0px), var(--hero-particle-y-1, 0px), 14px); }
+        .hero-particle-depth-2 { transform: translate3d(var(--hero-particle-x-2, 0px), var(--hero-particle-y-2, 0px), 32px); }
+        .hero-particle-depth-3 { transform: translate3d(var(--hero-particle-x-3, 0px), var(--hero-particle-y-3, 0px), 54px); }
+
         .hero-ai-hub-shell {
           position: absolute;
           left: 50%;
@@ -501,11 +525,14 @@ export default function HomePage() {
           align-items: center;
           justify-content: center;
           overflow: hidden;
-          border: 1px solid rgba(255, 255, 255, 0.55);
-          background: conic-gradient(from 210deg, #6f2dff, #ef3fb4, #ffb04a, #22d3ee, #6f2dff);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          background:
+            radial-gradient(circle at 34% 30%, rgba(255,255,255,.82), rgba(255,255,255,.16) 22%, transparent 42%),
+            radial-gradient(circle at 70% 68%, rgba(34,211,238,.44), transparent 38%),
+            conic-gradient(from 210deg, rgba(111,45,255,.92), rgba(239,63,180,.82), rgba(255,176,74,.76), rgba(34,211,238,.84), rgba(111,45,255,.92));
           color: white;
-          box-shadow: inset 0 0 35px rgba(255, 255, 255, 0.24);
-          animation: hero-hub-morph 8s ease-in-out infinite, hero-hue 14s linear infinite;
+          box-shadow: inset 0 0 42px rgba(255, 255, 255, 0.25), 0 0 70px rgba(111,45,255,.22);
+          animation: hero-hub-morph 8s ease-in-out infinite, hero-hue 18s linear infinite;
         }
 
         .hero-ai-hub::after {
@@ -571,6 +598,32 @@ export default function HomePage() {
         .hero-ai-pulse-two {
           animation-delay: 1.6s;
         }
+
+        .hero-core-symbol {
+          position: relative;
+          z-index: 4;
+          display: grid;
+          height: 66px;
+          width: 66px;
+          place-items: center;
+          border: 1px solid rgba(255,255,255,.52);
+          border-radius: 22px;
+          background: rgba(23, 10, 42, .22);
+          box-shadow: inset 0 0 24px rgba(255,255,255,.14), 0 16px 38px rgba(40,18,72,.24);
+          backdrop-filter: blur(12px);
+          animation: hero-icon-pulse 3.4s ease-in-out infinite;
+        }
+
+        .hero-core-ring {
+          position: absolute;
+          z-index: 2;
+          border: 1px solid rgba(255,255,255,.28);
+          border-radius: 999px;
+          animation: hero-orbit-spin 9s linear infinite;
+        }
+
+        .hero-core-ring-one { inset: 24px; }
+        .hero-core-ring-two { inset: 46px; border-style: dashed; animation-direction: reverse; animation-duration: 13s; }
 
         .hero-capability {
           position: absolute;
@@ -907,6 +960,11 @@ export default function HomePage() {
           to { transform: translate(-50%, -50%) rotate(0deg); }
         }
 
+        @keyframes hero-particle-twinkle {
+          0%, 100% { opacity: .28; scale: .72; }
+          50% { opacity: .92; scale: 1.22; }
+        }
+
         @keyframes hero-hub-morph {
           0%, 100% { border-radius: 45% 55% 58% 42% / 52% 45% 55% 48%; }
           33% { border-radius: 58% 42% 44% 56% / 43% 58% 42% 57%; }
@@ -1095,6 +1153,12 @@ function HeroPlayground() {
     element.style.setProperty("--hero-tilt-y", `${x * 10}deg`);
     element.style.setProperty("--hero-shift-x", `${x * 18}px`);
     element.style.setProperty("--hero-shift-y", `${y * 18}px`);
+    element.style.setProperty("--hero-particle-x-1", `${x * 8}px`);
+    element.style.setProperty("--hero-particle-y-1", `${y * 8}px`);
+    element.style.setProperty("--hero-particle-x-2", `${x * 15}px`);
+    element.style.setProperty("--hero-particle-y-2", `${y * 15}px`);
+    element.style.setProperty("--hero-particle-x-3", `${x * 24}px`);
+    element.style.setProperty("--hero-particle-y-3", `${y * 24}px`);
   };
 
   const resetPointer = () => {
@@ -1104,6 +1168,12 @@ function HeroPlayground() {
     element.style.setProperty("--hero-tilt-y", "0deg");
     element.style.setProperty("--hero-shift-x", "0px");
     element.style.setProperty("--hero-shift-y", "0px");
+    element.style.setProperty("--hero-particle-x-1", "0px");
+    element.style.setProperty("--hero-particle-y-1", "0px");
+    element.style.setProperty("--hero-particle-x-2", "0px");
+    element.style.setProperty("--hero-particle-y-2", "0px");
+    element.style.setProperty("--hero-particle-x-3", "0px");
+    element.style.setProperty("--hero-particle-y-3", "0px");
   };
 
   return (
@@ -1117,6 +1187,28 @@ function HeroPlayground() {
     >
       <div className="absolute inset-[8%] rounded-full bg-[conic-gradient(from_90deg,#6f2dff,#ef3fb4,#2e7cf6,#f08034,#6f2dff)] opacity-20 blur-[78px]" />
       <div className="hero-playground-stage relative h-full w-full">
+        <div className="hero-particle-field">
+          {[
+            [12, 18, 1, 5, "#ef3fb4", 0.2], [28, 8, 2, 4, "#6f2dff", 1.1], [48, 15, 3, 6, "#22d3ee", 0.6],
+            [72, 9, 1, 4, "#ffb04a", 1.6], [88, 23, 2, 5, "#ef3fb4", 0.9], [8, 48, 3, 4, "#2e7cf6", 1.9],
+            [21, 69, 2, 6, "#ffb04a", 0.4], [43, 84, 1, 4, "#6f2dff", 1.4], [68, 79, 3, 5, "#22d3ee", 2.1],
+            [91, 61, 1, 6, "#ef3fb4", 0.75], [79, 43, 2, 4, "#2e7cf6", 1.25], [55, 4, 1, 3, "#ffcf64", 2.4],
+            [4, 31, 2, 3, "#22d3ee", 1.8], [34, 94, 3, 4, "#ef3fb4", 0.1], [94, 86, 2, 3, "#6f2dff", 2.7],
+          ].map(([left, top, depth, size, color, delay], index) => (
+            <span
+              key={index}
+              className={`hero-particle hero-particle-depth-${depth}`}
+              style={{
+                left: `${left}%`,
+                top: `${top}%`,
+                "--particle-size": `${size}px`,
+                "--particle-color": color,
+                "--particle-delay": `${delay}s`,
+                "--particle-speed": `${4.2 + (index % 4) * 0.7}s`,
+              } as CSSProperties}
+            />
+          ))}
+        </div>
         <div className="hero-orbit hero-orbit-one"><span /></div>
         <div className="hero-orbit hero-orbit-two"><span /></div>
         <div className="hero-orbit hero-orbit-three"><span /></div>
@@ -1126,10 +1218,9 @@ function HeroPlayground() {
           <span className="hero-ai-pulse hero-ai-pulse-two" />
           <div className="hero-ai-hub">
             <div className="hero-ai-shine" />
-            <Sparkles className="hero-ai-spark" size={24} />
-            <span className="hero-ai-kicker">HEYY</span>
-            <strong>AI</strong>
-            <span className="hero-ai-label">Creative hub</span>
+            <span className="hero-core-ring hero-core-ring-one" />
+            <span className="hero-core-ring hero-core-ring-two" />
+            <span className="hero-core-symbol"><Sparkles size={30} /></span>
           </div>
         </div>
 

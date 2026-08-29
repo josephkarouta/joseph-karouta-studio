@@ -126,7 +126,7 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
         if (data.session) {
           await supabase.auth.signOut({ scope: "local" });
           throw new Error(
-            "Email verification is not enabled for this Supabase project. Turn on Confirm email before public beta testing.",
+            "Email verification is temporarily unavailable. Please try again later or contact support if the problem continues.",
           );
         }
 

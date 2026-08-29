@@ -6,10 +6,10 @@ import { CUSTOMER_CREDIT_GUIDE } from "@/lib/credits/customer-catalog";
 
 export const metadata = {
   title: "Credit Guide | Heyy Studio",
-  description: "See how Heyy Studio credits are used across AI tools, Brand Studio and Marketing Studio.",
+  description: "See how Heyy Studio credits are used across tools and Studios, including the daily utility allowance.",
 };
 
-const CATEGORIES = ["AI Tools", "Brand Studio", "Marketing Studio"] as const;
+const CATEGORIES = ["Utilities", "AI Tools", "Brand Studio", "Marketing Studio"] as const;
 
 export default function CreditGuidePage() {
   return (

@@ -11,10 +11,10 @@ export async function POST(request: Request) {
     const { sessionId } = (await request.json()) as { sessionId?: string };
 
     if (!sessionId || !sessionId.startsWith("cs_")) {
-      return NextResponse.json({ error: "Invalid Stripe session." }, { status: 400 });
+      return NextResponse.json({ error: "Invalid payment session." }, { status: 400 });
     }
     if (!process.env.STRIPE_SECRET_KEY) {
-      return NextResponse.json({ error: "Stripe is not configured." }, { status: 503 });
+      return NextResponse.json({ error: "Payment processing is temporarily unavailable." }, { status: 503 });
     }
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);

@@ -157,7 +157,7 @@ export default function AccountPreferencesPage() {
               <PreferenceRow
                 icon={<CreditCard size={17} />}
                 title="Billing & quote emails"
-                description="Heyy Studio quote, payment and billing-status notifications. Stripe receipts or legally required service notices may still be sent separately."
+                description="Heyy Studio quote, payment and billing-status notifications. Transaction receipts or legally required service notices may still be sent separately."
                 checked={preferences.billing_email}
                 onChange={(value) => update("billing_email", value)}
               />

@@ -94,7 +94,7 @@ Requirements:
       });
 
   const base64 = generated.data?.[0]?.b64_json;
-  if (!base64) throw new Error("OpenAI returned no logo image data.");
+  if (!base64) throw new Error("Logo generation returned no image data.");
   const webp = await sharp(Buffer.from(base64, "base64"))
     .resize({ width: tier === "final" ? 1400 : 900, withoutEnlargement: true })
     .webp({ quality: tier === "final" ? 90 : 76, effort: 5 })
@@ -132,7 +132,7 @@ export async function generateBrandLogoVariation(
     output_format: "png",
   });
   const base64 = generated.data?.[0]?.b64_json;
-  if (!base64) throw new Error("OpenAI returned no logo variation image data.");
+  if (!base64) throw new Error("Logo variation generation returned no image data.");
   const webp = await sharp(Buffer.from(base64, "base64"))
     .resize({ width: 900, withoutEnlargement: true })
     .webp({ quality: 76, effort: 5 })
@@ -181,7 +181,7 @@ Direction-specific image prompt: ${direction.imagePrompt || direction.visualWorl
     output_format: "png",
   });
   const base64 = generated.data?.[0]?.b64_json;
-  if (!base64) throw new Error("OpenAI returned no creative-direction image data.");
+  if (!base64) throw new Error("Creative-direction generation returned no image data.");
   const webp = await sharp(Buffer.from(base64, "base64"))
     .resize({ width: tier === "final" ? 1400 : 900, withoutEnlargement: true })
     .webp({ quality: tier === "final" ? 88 : 74, effort: 5 })
@@ -229,7 +229,7 @@ export async function generateBrandMoodboardVariation(
         output_format: "png",
       });
   const base64 = generated.data?.[0]?.b64_json;
-  if (!base64) throw new Error("OpenAI returned no direction variation image.");
+  if (!base64) throw new Error("Direction variation generation returned no image.");
   const webp = await sharp(Buffer.from(base64, "base64"))
     .resize({ width: 900, withoutEnlargement: true })
     .webp({ quality: 74, effort: 5 })

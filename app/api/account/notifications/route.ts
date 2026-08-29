@@ -38,7 +38,7 @@ function notificationSetupMessage(message: string) {
       lower.includes("schema cache") ||
       lower.includes("could not find"))
   ) {
-    return "The notifications database setup is missing or outdated. Run supabase/migrations/20260801_notifications_repair.sql in Supabase, then refresh this page.";
+    return "Notifications are temporarily unavailable. Refresh the page or contact support if the problem continues.";
   }
 
   return message;

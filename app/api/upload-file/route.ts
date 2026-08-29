@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   if (uploadError) {
     console.error("Supabase upload error:", uploadError);
-    return NextResponse.json({ success: false, error: uploadError.message });
+    return NextResponse.json({ success: false, error: "The file could not be uploaded. Please try again." });
   }
 
   const { data: urlData } = supabase.storage

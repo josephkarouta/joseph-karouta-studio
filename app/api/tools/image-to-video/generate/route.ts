@@ -217,7 +217,7 @@ async function startVeoVideo({
   });
 
   const operationName = String(operation?.name || "").trim();
-  if (!operationName) throw new Error("Veo 3.1 returned no operation ID.");
+  if (!operationName) throw new Error("Video generation did not return a job ID.");
 
   return {
     provider: "google_veo_3_1",

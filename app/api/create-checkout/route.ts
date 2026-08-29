@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const priceId = getPlanPriceId(normalizedPlan);
     if (!priceId) {
       return NextResponse.json(
-        { error: `The USD Stripe price for ${normalizedPlan} is not configured yet.` },
+        { error: `The ${normalizedPlan} subscription is temporarily unavailable.` },
         { status: 503 },
       );
     }
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     });
 
     if (!customer) {
-      return NextResponse.json({ error: "Unable to create the Stripe customer." }, { status: 500 });
+      return NextResponse.json({ error: "Unable to prepare secure checkout." }, { status: 500 });
     }
 
     const currentSubscription = await findBestSubscription(stripe, customer.id);

@@ -104,7 +104,7 @@ export default function ProjectsPage() {
               <button type="button" onClick={() => void loadProjects()} disabled={loading} className="inline-flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-xs font-black transition hover:border-[var(--accent-border)] disabled:opacity-60">
                 <RefreshCcw size={14} className={loading ? "animate-spin" : ""}/> Refresh
               </button>
-              <ButtonLink href="/#studios" size="sm"><Plus size={14}/> New project</ButtonLink>
+              <ButtonLink href="/#create" size="sm"><Plus size={14}/> New project</ButtonLink>
             </div>
           </div>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -141,7 +141,7 @@ export default function ProjectsPage() {
             </div>
           </section>
         ) : (
-          <State icon={<FolderKanban/>} title={projects.length ? "No projects match these filters" : "No projects yet"} text={projects.length ? "Try another search or Studio filter." : "Start with a Studio and your projects will collect here."} action={!projects.length ? <ButtonLink href="/#studios" size="sm">Choose a Studio</ButtonLink> : undefined}/>
+          <State icon={<FolderKanban/>} title={projects.length ? "No projects match these filters" : "No projects yet"} text={projects.length ? "Try another search or Studio filter." : "Start with a Studio and your projects will collect here."} action={!projects.length ? <ButtonLink href="/#create" size="sm">Choose a Studio</ButtonLink> : undefined}/>
         )}
       </PageContainer>
     </main>

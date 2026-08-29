@@ -148,10 +148,10 @@ Rules:
         const data = await response.json();
         if (!response.ok) throw new Error(data?.error?.message || "Direction generation failed.");
         const output = extractOutputText(data);
-        if (!output) throw new Error("OpenAI returned an empty creative-direction response.");
+        if (!output) throw new Error("Creative-direction generation returned an empty response.");
         const parsed = JSON.parse(output);
         const directions = (Array.isArray(parsed?.directions) ? parsed.directions : []).slice(0, 3).map(normaliseDirection);
-        if (directions.length !== 3) throw new Error("OpenAI did not return three creative directions.");
+        if (directions.length !== 3) throw new Error("Creative-direction generation did not return three usable directions.");
         return { directions, usage: data?.usage || null };
       },
     });

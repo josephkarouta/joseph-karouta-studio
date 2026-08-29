@@ -11,7 +11,6 @@ import {
   PlusCircle,
   ReceiptText,
   RefreshCw,
-  Settings2,
   Sparkles,
 } from "lucide-react";
 import AccountLayout from "@/components/account/AccountLayout";
@@ -116,7 +115,7 @@ export default function BillingPage() {
     if (!billing?.subscriptionId) {
       return definition.id === "free"
         ? "Free plan — no paid subscription"
-        : `${definition.name} access is enabled, but no Stripe subscription is connected`;
+        : `${definition.name} access is enabled, but no paid subscription is connected`;
     }
     if (isTerminalSubscriptionStatus(billing.status)) {
       return `Ended on ${formatDate(
@@ -214,8 +213,8 @@ export default function BillingPage() {
     const portalWindow = window.open("about:blank", "_blank");
     if (portalWindow) {
       portalWindow.opener = null;
-      portalWindow.document.title = "Opening Stripe billing…";
-      portalWindow.document.body.innerHTML = '<p style="font-family:system-ui;padding:24px">Opening secure Stripe billing…</p>';
+      portalWindow.document.title = "Opening billing…";
+      portalWindow.document.body.innerHTML = '<p style="font-family:system-ui;padding:24px">Opening secure billing…</p>';
     }
     try {
       const token = await accessToken();
@@ -426,16 +425,11 @@ export default function BillingPage() {
                     Change to Starter at renewal
                   </Button>
                 ) : null}
-                {billing?.canManage ? (
-                <Button type="button" onClick={openPortal} disabled={openingPortal}>
-                  {openingPortal ? <LoaderCircle size={16} className="animate-spin" /> : <Settings2 size={16} />}
-                  Manage billing
-                </Button>
-              ) : (
-                <ButtonLink href="/pricing">
-                  View subscription plans <ExternalLink size={15} />
-                </ButtonLink>
-              )}
+                {!billing?.canManage && (
+                  <ButtonLink href="/pricing">
+                    View subscription plans <ExternalLink size={15} />
+                  </ButtonLink>
+                )}
               </div>
             </div>
           </div>
@@ -451,19 +445,18 @@ export default function BillingPage() {
         <div className="grid gap-4">
           <GlassCard className="p-7">
             <ReceiptText size={22} className="text-[var(--accent-strong)]" />
-            <h2 className="mt-5 text-xl font-black">Subscription management</h2>
+            <h2 className="mt-5 text-xl font-black">Subscription & payments</h2>
             <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-              Use the secure Stripe billing portal to update payment details, view invoices or cancel a subscription.
-              Plan changes are scheduled from Heyy Studio for your next renewal so credits and billing stay aligned. The portal opens in a new tab and this page refreshes when you return.
+              Update your payment method, view invoices or cancel your subscription securely. Plan changes are scheduled from Heyy Studio for your next renewal so credits and billing stay aligned.
             </p>
             {billing?.canManage ? (
               <Button type="button" variant="secondary" className="mt-6 w-full" onClick={openPortal} disabled={openingPortal}>
                 {openingPortal ? <LoaderCircle size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                Open secure billing portal
+                Manage subscription
               </Button>
             ) : (
               <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-                No Stripe billing account is connected yet. Complete a Starter or Pro subscription through the Pricing page to enable invoices, payment-method updates and cancellation.
+                No paid subscription is connected yet. Choose Starter or Pro to enable invoices, payment-method updates and cancellation.
               </div>
             )}
           </GlassCard>

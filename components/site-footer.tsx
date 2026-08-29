@@ -11,7 +11,7 @@ const columns = [
       ["Architecture", "/#create"],
       ["Interior", "/#create"],
       ["Marketing", "/#create"],
-      ["AI tools", "/#tools"],
+      ["Tools", "/#tools"],
     ],
   },
   {
@@ -22,14 +22,13 @@ const columns = [
       ["Credit guide", "/credit-guide"],
       ["About", "/about"],
       ["Careers", "/careers"],
-      ["Contact", "/contact"],
     ],
   },
   {
     title: "Help",
     links: [
       ["Help center", "/help"],
-      ["Contact", "/contact"],
+      ["Contact & support", "/contact"],
       ["Responsible AI", "/responsible-ai"],
       ["Security", "/security"],
     ],

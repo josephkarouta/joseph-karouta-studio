@@ -1300,7 +1300,7 @@ function QuoteReady({
 
   async function reconcilePayment(silent = false) {
     setReconciling(true);
-    if (!silent) setPaymentMessage("Checking the payment securely with Stripe...");
+    if (!silent) setPaymentMessage("Checking the payment securely...");
 
     try {
       const supabase = createSupabaseBrowserClient();
@@ -1352,7 +1352,7 @@ function QuoteReady({
       }
 
       setPaymentConfirmed(false);
-      setPaymentMessage(data.message || "Stripe has not confirmed this payment yet.");
+      setPaymentMessage(data.message || "The payment is still being confirmed. Please try again shortly.");
     } catch (error) {
       setPaymentConfirmed(false);
       setPaymentMessage(
@@ -1371,7 +1371,7 @@ function QuoteReady({
     if (returnedQuoteId !== quote.id) return;
 
     if (payment === "success") {
-      setPaymentMessage("Payment completed. Confirming it with Stripe...");
+      setPaymentMessage("Payment completed. Confirming it securely...");
       void reconcilePayment(true);
     } else if (payment === "cancelled") {
       setPaymentMessage("Checkout was cancelled. Your quote is still available.");

@@ -7,7 +7,6 @@ import {
   Files,
   Loader2,
   LockKeyhole,
-  LockOpen,
   Minimize2,
   Paperclip,
   Scissors,
@@ -34,7 +33,6 @@ const OPERATIONS: Array<{
   { id: "compress", label: "Compress", description: "Reduce PDF size for easier sharing.", icon: Minimize2 },
   { id: "split", label: "Split", description: "Extract selected pages into a new PDF.", icon: Scissors },
   { id: "merge", label: "Combine", description: "Merge multiple PDFs into one document.", icon: Files },
-  { id: "unlock", label: "Unlock", description: "Remove a password when you know the current password.", icon: LockOpen },
   { id: "protect", label: "Protect", description: "Create a password-protected PDF.", icon: LockKeyhole },
 ];
 
@@ -44,7 +42,6 @@ export default function PdfToolsWorkbench() {
   const [operation, setOperation] = useState<PdfOperation>("compress");
   const [files, setFiles] = useState<File[]>([]);
   const [pageSelection, setPageSelection] = useState("1");
-  const [sourcePassword, setSourcePassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [outputs, setOutputs] = useState<PreparedOutput[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -131,7 +128,6 @@ export default function PdfToolsWorkbench() {
           operation,
           files: inputFiles,
           pageSelection,
-          sourcePassword,
           newPassword,
           maxPages: subscribed ? 150 : 50,
         });
@@ -280,13 +276,6 @@ export default function PdfToolsWorkbench() {
             <span className="text-xs font-black">Pages to keep</span>
             <span className="ml-2 text-[.66rem] font-semibold text-[var(--text-muted)]">Applied to each attached PDF. Examples: 1-3 or 1,3,5-8</span>
             <input value={pageSelection} onChange={(event) => setPageSelection(event.target.value)} className="heyy-input mt-2" placeholder="1-3" />
-          </label>
-        )}
-        {operation === "unlock" && (
-          <label className="mt-5 block">
-            <span className="text-xs font-black">Current password</span>
-            <span className="ml-2 text-[.66rem] font-semibold text-[var(--text-muted)]">Applied to each attached PDF.</span>
-            <input type="password" value={sourcePassword} onChange={(event) => setSourcePassword(event.target.value)} className="heyy-input mt-2" placeholder="Enter the PDF password" autoComplete="off" />
           </label>
         )}
         {operation === "protect" && (

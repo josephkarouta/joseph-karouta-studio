@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
         processing: session.status === "complete",
         message:
           session.status === "complete"
-            ? "Stripe is still confirming this payment."
+            ? "The payment is still being confirmed."
             : "This checkout has not been paid.",
       });
     }

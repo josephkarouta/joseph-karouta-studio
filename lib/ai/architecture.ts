@@ -829,8 +829,8 @@ async function structuredCompletion<T>(args: {
 
     throw new Error(
       refusal
-        ? `OpenAI refused the architecture request: ${refusal}`
-        : `OpenAI returned no visible architecture JSON using ${modelUsed}. Finish reason: ${finishReason}. Usage: ${usage}.`,
+        ? `The architecture request could not be completed: ${refusal}`
+        : `Architecture generation returned no usable project data. Finish reason: ${finishReason}.`,
     );
   }
 
@@ -844,7 +844,7 @@ async function structuredCompletion<T>(args: {
     };
   } catch {
     throw new Error(
-      `OpenAI returned architecture content that was not valid JSON using ${modelUsed}.`,
+      `Architecture generation returned invalid project data.`,
     );
   }
 }
@@ -3068,7 +3068,7 @@ export async function generateAndStoreArchitectureImage(args: {
       });
 
   const base64 = result.data?.[0]?.b64_json;
-  if (!base64) throw new Error("OpenAI returned no architecture image data.");
+  if (!base64) throw new Error("Architecture generation returned no image data.");
   const stored = await storeArchitectureImageVariants({
     supabase: args.supabase,
     userId: args.userId,
@@ -3856,7 +3856,7 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
     output_format: "png",
   });
   const base64 = result.data?.[0]?.b64_json;
-  if (!base64) throw new Error("OpenAI returned no detailed architecture document image data.");
+  if (!base64) throw new Error("Architecture document generation returned no image data.");
   const stored = await storeArchitectureImageVariants({
     supabase: args.supabase,
     userId: args.userId,
@@ -4045,12 +4045,12 @@ async function generateGeminiArchitectureImage(args: {
     usageMetadata?: unknown;
   };
   if (!response.ok) {
-    throw new Error(payload.error?.message || `Gemini image generation failed with HTTP ${response.status}.`);
+    throw new Error(`Architecture image generation failed (${response.status}).`);
   }
   const parts = payload.candidates?.flatMap((candidate) => candidate.content?.parts || []) || [];
   const image = parts.find((part) => part.inlineData?.data || part.inline_data?.data);
   const base64 = image?.inlineData?.data || image?.inline_data?.data;
-  if (!base64) throw new Error("Gemini returned no architecture image data.");
+  if (!base64) throw new Error("Architecture image generation returned no image data.");
   return {
     bytes: Buffer.from(base64, "base64"),
     usage: payload.usageMetadata || null,
@@ -4150,7 +4150,7 @@ export async function generateAndStoreRenderedPlanImage(args: {
       output_format: "png",
     });
     const base64 = result.data?.[0]?.b64_json;
-    if (!base64) throw new Error("OpenAI returned no rendered plan image data.");
+    if (!base64) throw new Error("Rendered plan generation returned no image data.");
     sourceBytes = Buffer.from(base64, "base64");
     usage = result.usage || null;
   }

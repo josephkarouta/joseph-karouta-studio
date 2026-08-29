@@ -79,7 +79,7 @@ async function checkOmni(auth: GenerationStatusAccess, job: any) {
     cache: "no-store",
   });
   const data = await readJson(response);
-  if (!response.ok) throw new Error(data?.error?.message || "Could not check Gemini Omni file status.");
+  if (!response.ok) throw new Error(data?.error?.message || "Could not check video generation status.");
 
   const state = String(data?.state || "PROCESSING").toUpperCase();
   if (state === "FAILED") {
@@ -87,7 +87,7 @@ async function checkOmni(auth: GenerationStatusAccess, job: any) {
   }
   if (state === "ACTIVE") {
     const videoUri = String(job.output?.video_uri || data?.uri || "");
-    if (!videoUri) throw new Error("Gemini Omni completed without a downloadable video URI.");
+    if (!videoUri) throw new Error("Video generation completed without a downloadable result.");
     return await claimAndPersistVideo(auth, job, videoUri, String(job.input?.model || "gemini-omni-flash-preview"));
   }
 
@@ -100,14 +100,14 @@ async function checkOmni(auth: GenerationStatusAccess, job: any) {
 
 async function checkVeo(auth: GenerationStatusAccess, job: any) {
   const operationName = String(job.provider_job_id || job.output?.operation_name || "");
-  if (!operationName) throw new Error("Veo operation ID is missing.");
+  if (!operationName) throw new Error("Video generation job ID is missing.");
 
   const response = await fetch(`${GEMINI_BASE}/${operationName.replace(/^\/+/, "")}`, {
     headers: { "x-goog-api-key": process.env.GEMINI_API_KEY! },
     cache: "no-store",
   });
   const data = await readJson(response);
-  if (!response.ok) throw new Error(data?.error?.message || "Could not check Veo 3.1 status.");
+  if (!response.ok) throw new Error(data?.error?.message || "Could not check video generation status.");
 
   if (data?.error) {
     return await failJob(auth, job, "Video generation failed. Your credits were returned.", data);

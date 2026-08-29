@@ -82,5 +82,5 @@ export async function generateGeminiImage({
     }
   }
 
-  throw new Error("Gemini did not return an image");
+  throw new Error("Image generation did not return an image");
 }

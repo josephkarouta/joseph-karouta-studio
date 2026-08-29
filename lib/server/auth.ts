@@ -67,7 +67,7 @@ export async function requireApiUser(request: Request): Promise<AuthenticatedReq
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !anonKey || !serviceKey) throw new ApiAuthError("Supabase is not configured.", 503);
+  if (!url || !anonKey || !serviceKey) throw new ApiAuthError("Account services are temporarily unavailable.", 503);
 
   const authClient = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       createIfMissing: false,
     });
     if (!customer) {
-      return NextResponse.json({ error: "No Stripe billing account exists for this user." }, { status: 404 });
+      return NextResponse.json({ error: "No paid billing account exists for this user." }, { status: 404 });
     }
 
     const subscription = await findBestSubscription(stripe, customer.id);
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     }
     if (!String(schedule.metadata?.heyy_pending_plan || "").trim()) {
       return NextResponse.json(
-        { error: "This Stripe schedule was not created by Heyy Studio and was left unchanged." },
+        { error: "This scheduled billing update cannot be changed from Heyy Studio." },
         { status: 409 },
       );
     }
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     const status = error instanceof ApiAuthError ? error.status : 500;
     console.error("Cancel Stripe plan change error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Scheduled plan change could not be cancelled." },
+      { error: error instanceof ApiAuthError ? error.message : "Scheduled plan change could not be cancelled. Please try again." },
       { status },
     );
   }

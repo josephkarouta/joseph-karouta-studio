@@ -89,7 +89,7 @@ export default function ImageToVideoWorkbench() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not check video status.");
       if (payload.status === "failed") {
-        throw new Error(payload.error || "The video provider could not complete this clip.");
+        throw new Error(payload.error || "The video could not be completed.");
       }
       if (payload.status === "succeeded") {
         const fileResponse = await fetch(`/api/tools/image-to-video/file?job=${encodeURIComponent(jobId)}`, {
@@ -207,7 +207,7 @@ export default function ImageToVideoWorkbench() {
               : `Generate video · ${cost} credits`}
         </Button>
         <p className="mt-3 text-center text-[.65rem] font-semibold text-[var(--text-muted)]">
-          Credits are reserved while rendering and refunded automatically if the provider reports failure.
+          Credits are reserved while rendering and refunded automatically if generation fails.
         </p>
       </GlassCard>
 

@@ -310,7 +310,7 @@ function localRoute(message: string, signedIn: boolean): AssistantReply {
     answer: `${answer}${guard}`,
     actions: [
       { label: signedIn ? `Open ${label}` : "Sign in to continue", href: signedIn ? href : `/login?next=${encodeURIComponent(href)}`, kind: "primary" },
-      { label: "View all Studios", href: "/#studios", kind: "secondary" },
+      { label: "View all Studios", href: "/#create", kind: "secondary" },
     ],
     suggestions: ["What will it create?", "How do credits work?"],
   });
@@ -353,6 +353,6 @@ function localRoute(message: string, signedIn: boolean): AssistantReply {
   return {
     answer: "I can route that once I understand the outcome. Are you trying to create a brand, space, campaign, image, video or presentation?",
     suggestions: quickStarts.map((item) => item.label),
-    actions: [{ label: "Explore all Studios", href: "/#studios", kind: "secondary" }],
+    actions: [{ label: "Explore all Studios", href: "/#create", kind: "secondary" }],
   };
 }

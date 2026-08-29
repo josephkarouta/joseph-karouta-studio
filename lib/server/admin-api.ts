@@ -18,7 +18,7 @@ export async function requireAdminApiAccess(): Promise<NextResponse | null> {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return NextResponse.json(
-      { success: false, error: "Supabase authentication is not configured." },
+      { success: false, error: "Authentication is temporarily unavailable." },
       { status: 503 },
     );
   }

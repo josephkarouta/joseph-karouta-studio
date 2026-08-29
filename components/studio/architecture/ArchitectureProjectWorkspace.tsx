@@ -4402,7 +4402,7 @@ function ConceptTab({
           <p className="eyebrow">Architecture Concept</p>
           <h2>{concept.title}</h2>
           <p>{concept.summary}</p>
-          <span className="stage-source-chip">{concept.generation_mode === "live" ? "AI prepared" : "Demo prepared"} · Saved in Supabase</span>
+          <span className="stage-source-chip">{concept.generation_mode === "live" ? "AI prepared" : "Demo prepared"} · Saved to project</span>
         </div>
         <button type="button" className="secondary-action" disabled={generating} onClick={onGenerate}>
           {generating ? "Refreshing..." : `Refresh Concept Strategy · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
@@ -5878,8 +5878,7 @@ function ArchitectureProductionTab({
           <p className="eyebrow">Expert Development</p>
           <h2>Develop the AI concept with qualified architecture professionals</h2>
           <p>
-            This uses the existing Heyy Studio request, quote, Stripe payment, production job,
-            deliverables and revision system. No separate Architecture payment system is created.
+            This uses the existing Heyy Studio request, quote, secure payment, production, deliverables and revision workflow. Everything stays connected to the same project.
           </p>
         </div>
       </div>

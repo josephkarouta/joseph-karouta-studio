@@ -104,7 +104,7 @@ export async function processBrandSystemJob(jobId: string) {
       const providerMessage =
         cleanString(data?.error?.message) ||
         cleanString(data?.message) ||
-        `OpenAI request failed (${response.status}).`;
+        `Creative generation request failed (${response.status}).`;
       throw new Error(providerMessage);
     }
 

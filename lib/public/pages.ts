@@ -4,8 +4,8 @@ export const legalPages: Record<string, { eyebrow: string; title: string; summar
   terms: {
     eyebrow: "Legal",
     title: "Terms and Conditions",
-    summary: "These terms explain how Heyy Studio accounts, AI tools, credits, subscriptions and separately quoted expert production work.",
-    updated: "July 27, 2026",
+    summary: "These terms explain how Heyy Studio accounts, creative tools, credits, subscriptions and separately quoted expert production work.",
+    updated: "August 29, 2026",
     sections: [
       { title: "Using Heyy Studio", paragraphs: ["You must provide accurate account information, protect your sign-in credentials and use the platform lawfully. You remain responsible for the briefs, prompts, files and instructions you submit."], bullets: ["Do not upload content you do not have the right to use.", "Do not attempt to bypass plan, credit, security or rate limits.", "Do not use generated output as professional technical documentation without appropriate review."] },
       { title: "AI concepts and professional review", paragraphs: ["AI outputs are working concepts and creative assistance. They may contain errors, omissions or unsuitable recommendations. Architecture and interior outputs are not permits, engineering, construction, safety or installation documentation. Brand concepts are not automatically trademark cleared or production ready."] },
@@ -19,12 +19,12 @@ export const legalPages: Record<string, { eyebrow: string; title: string; summar
     eyebrow: "Trust",
     title: "Privacy Policy",
     summary: "This policy explains the information Heyy Studio processes to provide accounts, projects, generation, payment and production workflows.",
-    updated: "July 27, 2026",
+    updated: "August 29, 2026",
     sections: [
       { title: "Information we collect", bullets: ["Account information such as name, email and authentication identifiers.", "Project briefs, prompts, uploads, generated outputs, assets and workspace activity.", "Subscription, quote and payment metadata provided by payment processors.", "Support, contact, career and production communications.", "Technical information needed for security, diagnostics and service operation."] },
       { title: "How information is used", paragraphs: ["We use information to operate the workspace, generate outputs, save project context, enforce credits, process payments, manage production, provide support and improve reliability. We do not sell personal data to advertisers."] },
-      { title: "Service providers", paragraphs: ["Heyy Studio relies on providers for authentication and database services, payments, AI generation, email, hosting, storage and enhancement. Information is shared only as needed to perform the requested service and remains subject to provider terms and safeguards."] },
-      { title: "Project privacy and retention", paragraphs: ["Project data is intended to be scoped to the account and project. Retention depends on the account, legal obligations and operational needs. You may request access, correction or deletion, subject to records that must be kept for payment, legal or fraud-prevention reasons."] },
+      { title: "Service providers", paragraphs: ["Heyy Studio uses specialist service providers to operate account access, payments, creative generation, email, hosting, file processing and storage. Information is shared only when needed to provide the requested service and is handled under appropriate contractual and security safeguards."] },
+      { title: "Project privacy and retention", paragraphs: ["Project data is associated with the signed-in account and relevant workspace. Retention depends on the service used, account status, legal obligations and operational needs. Eligible personal project data can be removed from account controls, while financial, production or security records may need to be retained for legitimate business or legal reasons."] },
       { title: "Your choices", bullets: ["Manage account and billing details from your workspace.", "Avoid placing unnecessary sensitive personal information in prompts or uploads.", "Contact Heyy Studio to request privacy access, correction or deletion."] },
     ],
   },
@@ -32,7 +32,7 @@ export const legalPages: Record<string, { eyebrow: string; title: string; summar
     eyebrow: "Billing",
     title: "Refund Policy",
     summary: "Subscription, credit and custom production payments are different products and are reviewed under different conditions.",
-    updated: "July 27, 2026",
+    updated: "August 29, 2026",
     sections: [
       { title: "AI generation credits", paragraphs: ["When a provider generation fails before a usable result is returned, reserved credits should be released automatically. Dissatisfaction with a successfully completed creative result does not automatically create a refund because generation is variable and iterative." ] },
       { title: "Subscriptions", paragraphs: ["You may cancel future renewal through the available billing controls. Except where required by law, charges already processed are generally non-refundable after the billing period begins and credits are made available."] },
@@ -45,7 +45,7 @@ export const legalPages: Record<string, { eyebrow: string; title: string; summar
     eyebrow: "Trust",
     title: "Responsible AI",
     summary: "Heyy Studio uses AI to accelerate structured creative work while keeping limits, professional review and user responsibility visible.",
-    updated: "July 27, 2026",
+    updated: "August 29, 2026",
     sections: [
       { title: "AI is a starting point", paragraphs: ["Generated strategies, visuals, plans and recommendations may be incomplete or incorrect. The platform labels concept output and provides an expert-production route when professional finalization is needed."] },
       { title: "High-risk boundaries", bullets: ["Architecture output is not permit, engineering or construction documentation.", "Interior output is not electrical, structural, fire, accessibility or installation advice.", "Brand and marketing output is not automatic trademark, legal, claims or platform-policy approval.", "Users should verify important facts, rights, specifications and decisions."] },
@@ -57,9 +57,9 @@ export const legalPages: Record<string, { eyebrow: string; title: string; summar
     eyebrow: "Trust",
     title: "Security",
     summary: "Heyy Studio separates client, server and payment responsibilities so sensitive credentials and operational records remain controlled.",
-    updated: "July 27, 2026",
+    updated: "August 29, 2026",
     sections: [
-      { title: "Platform safeguards", bullets: ["Service-role database credentials and provider secret keys remain server-side.", "User-owned project records use authentication and row-level access policies.", "Stripe webhook signatures are verified before payment state changes.", "Payment events are processed idempotently to reduce duplicate jobs.", "Generated and delivered assets are organized by user and project paths."] },
+      { title: "Platform safeguards", bullets: ["Sensitive service credentials are kept away from the browser.", "Account and project access is checked before private workspace data is returned.", "Payment updates are verified before billing or entitlement changes are applied.", "Important payment and credit events use duplicate-protection controls.", "Generated and delivered files are separated by account and project context."] },
       { title: "Account responsibility", paragraphs: ["Use a strong password, protect your email account and sign out from shared devices. Contact support promptly if you suspect unauthorized access."] },
       { title: "Reporting a security issue", paragraphs: ["Send a responsible disclosure through the contact page with enough information to reproduce the issue. Do not access, alter or retain data that does not belong to you."] },
     ],
@@ -68,7 +68,7 @@ export const legalPages: Record<string, { eyebrow: string; title: string; summar
     eyebrow: "Trust",
     title: "Content Policy",
     summary: "These rules protect users, rights holders, providers and the integrity of the creative platform.",
-    updated: "July 27, 2026",
+    updated: "August 29, 2026",
     sections: [
       { title: "Not permitted", bullets: ["Illegal, exploitative, abusive or deliberately harmful content.", "Content that meaningfully facilitates fraud, impersonation, malware or unauthorized surveillance.", "Uploads or requests that violate copyright, trademark, privacy or contractual rights.", "Attempts to generate deceptive professional documentation or false approvals.", "Content intended to evade provider safeguards or platform limits."] },
       { title: "Commercial review", paragraphs: ["Before using generated work commercially, review licenses, claims, likeness, trademarks, product representations and local requirements. Heyy Studio may remove content, restrict access or decline production where risk cannot be responsibly managed."] },

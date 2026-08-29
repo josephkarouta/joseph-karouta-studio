@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
   BadgeHelp,
@@ -25,8 +25,8 @@ import { ButtonLink } from "@/components/ui/heyy";
 
 const navItems = [
   ["Studios", "/#create"],
-  ["How it works", "/#how-it-works"],
   ["Tools", "/#tools"],
+  ["How it works", "/#how-it-works"],
   ["Pricing", "/#pricing"],
 ] as const;
 
@@ -62,6 +62,16 @@ export default function SiteHeader() {
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, []);
 
+  function handleLogoClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+    if (pathname !== "/") return;
+    event.preventDefault();
+    setMenuOpen(false);
+    setNotificationsOpen(false);
+    setMobileOpen(false);
+    window.history.replaceState(null, "", "/");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function handleSignOut() {
     await signOut();
     window.location.href = "/";
@@ -70,7 +80,7 @@ export default function SiteHeader() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-[var(--border)] bg-[color:var(--glass)] backdrop-blur-2xl">
       <div className="mx-auto flex h-[var(--header-height)] max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="shrink-0" aria-label="Heyy Studio home">
+        <Link href="/" onClick={handleLogoClick} className="shrink-0" aria-label="Heyy Studio home">
           <HeyyLogo
             variant={resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
             height={31}

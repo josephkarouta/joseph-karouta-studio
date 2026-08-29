@@ -2,11 +2,8 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  ArchiveRestore,
   CheckCircle2,
   ChevronDown,
-  Download,
-  FileArchive,
   LoaderCircle,
   LockKeyhole,
   RefreshCw,
@@ -41,7 +38,6 @@ export default function PrivacyDataPage() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -82,39 +78,6 @@ export default function PrivacyDataPage() {
     setProjectsOpen(nextOpen);
     if (nextOpen && !projectsLoaded && !loading) {
       void loadProjects();
-    }
-  }
-
-  async function exportData() {
-    setExporting(true);
-    setMessage("");
-    setError("");
-    try {
-      const access = await token();
-      const response = await fetch("/api/account/data-export", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${access}` },
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Data export could not be prepared.");
-      }
-      const blob = await response.blob();
-      const disposition = response.headers.get("content-disposition") || "";
-      const filename = disposition.match(/filename="([^"]+)"/)?.[1] || "heyy-studio-data-export.json";
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setMessage("Your account data export was prepared and downloaded.");
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Data export could not be prepared.");
-    } finally {
-      setExporting(false);
     }
   }
 
@@ -183,7 +146,7 @@ export default function PrivacyDataPage() {
         <Eyebrow>Account</Eyebrow>
         <h1 className="mt-3 text-4xl font-black tracking-[-.055em] sm:text-5xl">Privacy & data</h1>
         <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-          Export your account data, remove personal projects and manage account-deletion requests without affecting unrelated users or Studio records.
+          Manage personal project deletion and account-deletion requests from one place.
         </p>
       </div>
 
@@ -198,33 +161,13 @@ export default function PrivacyDataPage() {
         </div>
       )}
 
-      <div className="mt-7 grid gap-5 xl:grid-cols-2">
-        <GlassCard className="p-7">
-          <FileArchive size={22} className="text-[var(--accent-strong)]" />
-          <h2 className="mt-5 text-xl font-black">Export your data</h2>
-          <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-            Download a machine-readable JSON copy of your account profile, preferences, project records, asset metadata, version history, notifications, credits and available production records.
-          </p>
-          <p className="mt-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-            Large image, video and PDF files are not embedded in the export; their saved metadata and project references are included instead.
-          </p>
-          <Button className="mt-6" onClick={() => void exportData()} disabled={exporting}>
-            {exporting ? <LoaderCircle size={16} className="animate-spin" /> : <Download size={16} />}
-            {exporting ? "Preparing export…" : "Download my data"}
-          </Button>
-        </GlassCard>
-
-        <GlassCard className="p-7">
-          <ArchiveRestore size={22} className="text-emerald-500" />
-          <h2 className="mt-5 text-xl font-black">After subscription cancellation</h2>
-          <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-            Cancelling a subscription does not itself delete your Heyy Studio account or saved project history. Saved Studio projects, generated assets and completed production deliverables remain connected to the account unless you remove eligible personal project data or request account deletion.
-          </p>
-          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-xs font-semibold leading-6 text-[var(--text-muted)]">
-            Paid-plan features and future generation allowances follow the subscription state. Completed production/payment records can be retained separately where required for accounting, fraud prevention, dispute handling or legal obligations.
-          </div>
-        </GlassCard>
-      </div>
+      <GlassCard className="mt-7 p-6 sm:p-7">
+        <ShieldCheck size={22} className="text-[var(--accent-strong)]" />
+        <h2 className="mt-5 text-xl font-black">Your privacy controls</h2>
+        <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
+          You can remove eligible personal Studio projects below or request deletion of your Heyy Studio account. Some completed billing, production or security records may need to be retained where required for legitimate business or legal reasons.
+        </p>
+      </GlassCard>
 
       <GlassCard className="mt-5 overflow-hidden">
         <button
@@ -345,7 +288,7 @@ export default function PrivacyDataPage() {
           <ShieldCheck size={24} className="text-red-500" />
           <h3 className="mt-4 text-2xl font-black">Request account deletion</h3>
           <p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            This records a formal deletion request for the signed-in account. Download your data first if you want a copy for your records.
+            This records a formal deletion request for the signed-in account. We may contact you if additional verification is needed before the request is completed.
           </p>
           <label className="mt-5 block text-xs font-black uppercase tracking-[.12em] text-[var(--text-muted)]">Optional reason</label>
           <textarea className="heyy-input mt-2 min-h-24 w-full resize-y" value={accountReason} onChange={(event) => setAccountReason(event.target.value)} placeholder="Optional" />

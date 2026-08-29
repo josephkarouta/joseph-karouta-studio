@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "No Stripe billing account exists for this user yet.",
+          error: "No paid billing account exists for this user yet.",
         },
         { status: 404 },
       );
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unable to open billing management.",
+        error: error instanceof ApiAuthError ? error.message : "Unable to open billing management. Please try again.",
       },
       { status },
     );

@@ -346,7 +346,7 @@ async function generateGeminiArtwork(args: {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "Gemini is selected for Brand Studio applications, but GEMINI_API_KEY is missing.",
+      "Brand application generation is temporarily unavailable.",
     );
   }
 
@@ -409,7 +409,7 @@ async function generateGeminiArtwork(args: {
   }
 
   throw new Error(
-    "Gemini returned no application artwork. Check the Gemini model access and billing for this API key.",
+    "Brand application generation returned no artwork. Please try again.",
   );
 }
 
@@ -432,7 +432,7 @@ async function generateArtwork(args: {
   }
 
   if (!args.openai) {
-    throw new Error("OpenAI is selected but the OpenAI image client is unavailable.");
+    throw new Error("Brand application generation is temporarily unavailable.");
   }
 
   const editImages: any[] = [];
@@ -461,7 +461,7 @@ async function generateArtwork(args: {
       });
 
   const base64 = generated.data?.[0]?.b64_json;
-  if (!base64) throw new Error("OpenAI returned no application artwork.");
+  if (!base64) throw new Error("Brand application generation returned no artwork.");
   return { buffer: Buffer.from(base64, "base64"), usage: generated.usage || null };
 }
 

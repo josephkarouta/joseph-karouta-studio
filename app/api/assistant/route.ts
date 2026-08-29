@@ -84,7 +84,7 @@ Return ONLY valid JSON:
   "answer": "concise helpful answer",
   "routeLabel": "one allowed route label or empty",
   "route": "exact allowed href or empty",
-  "secondaryAction": { "label": "optional", "href": "exact allowed href or /#studios" },
+  "secondaryAction": { "label": "optional", "href": "exact allowed href or /#create" },
   "suggestions": ["2 to 4 useful next user messages"]
 }
 `;
@@ -120,7 +120,7 @@ Return ONLY valid JSON:
       : route;
 
     const secondaryHref = String(parsed?.secondaryAction?.href || "");
-    const secondaryAllowed = secondaryHref === "/#studios" || allowedRoutes.has(secondaryHref);
+    const secondaryAllowed = secondaryHref === "/#create" || allowedRoutes.has(secondaryHref);
     const actions = [];
     if (effectiveRoute) {
       actions.push({

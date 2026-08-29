@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error:
-            "No valid Stripe Checkout Session was found for this quote. The quote is safe, but its old checkout reference was not saved correctly.",
+            "No valid checkout session was found for this quote. The quote is safe, but its previous checkout reference was not saved correctly.",
         },
         { status: 400 },
       );
@@ -172,10 +172,10 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        lastStripeError = "The Stripe session belongs to a different quote.";
+        lastStripeError = "The checkout session belongs to a different quote.";
       } catch (error) {
         lastStripeError =
-          error instanceof Error ? error.message : "Stripe session lookup failed.";
+          error instanceof Error ? error.message : "Checkout session lookup failed.";
       }
     }
 
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error:
             lastStripeError ||
-            "Stripe could not find the Checkout Session for this quote.",
+            "The payment service could not find the checkout session for this quote.",
         },
         { status: 400 },
       );
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
         processing: session.status === "complete",
         message:
           session.status === "complete"
-            ? "Stripe has completed checkout but is still confirming the payment. Try again shortly."
+            ? "Checkout is complete but the payment is still being confirmed. Try again shortly."
             : "This checkout has not been paid.",
       });
     }

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     });
 
     if (!customer) {
-      return NextResponse.json({ error: "Unable to create the Stripe customer." }, { status: 500 });
+      return NextResponse.json({ error: "Unable to prepare secure checkout." }, { status: 500 });
     }
 
     const site = new URL(request.url).origin;

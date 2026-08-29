@@ -364,7 +364,7 @@ async function downloadAndPersist(
 
   const buffer = Buffer.from(await imageResponse.arrayBuffer());
   if (!buffer.length) {
-    throw new Error("Topaz returned an empty enhanced image.");
+    throw new Error("The enhancement service returned an empty image.");
   }
 
   const responseType = imageResponse.headers.get("content-type") || "image/png";
@@ -372,7 +372,7 @@ async function downloadAndPersist(
     /application\/json|text\/|application\/xml|text\/xml/i.test(responseType)
   ) {
     throw new Error(
-      `Topaz returned ${responseType} instead of an enhanced image.`,
+      `The enhancement service returned an unexpected result (${responseType}).`,
     );
   }
 
@@ -447,7 +447,7 @@ async function downloadTopazOutput(
   providerJobId: string,
   providerStatus: any,
 ): Promise<Response> {
-  let lastError = "Topaz output download failed.";
+  let lastError = "Enhanced image download failed.";
 
   // Topaz may include the finished GET URL directly in the completed status response.
   const statusDownloadUrl = validHttpUrl(providerStatus?.download_url);
@@ -472,10 +472,10 @@ async function downloadTopazOutput(
         return imageResponse;
       }
 
-      lastError = `Topaz output download failed (${imageResponse.status}).`;
+      lastError = `Enhanced image download failed (${imageResponse.status}).`;
     } catch (error) {
       lastError =
-        error instanceof Error ? error.message : "Topaz output download failed.";
+        error instanceof Error ? error.message : "Enhanced image download failed.";
     }
 
     if (attempt < 3) {
@@ -509,7 +509,7 @@ async function requestFreshTopazDownloadUrl(providerJobId: string) {
     const message = String(
       data?.error?.message ||
         data?.message ||
-        `Topaz download-link request failed (${response.status}).`,
+        `Enhanced image download request failed (${response.status}).`,
     );
     throw new Error(message);
   }
@@ -517,7 +517,7 @@ async function requestFreshTopazDownloadUrl(providerJobId: string) {
   const signedUrl = validHttpUrl(data?.download_url);
   if (!signedUrl) {
     throw new Error(
-      "Topaz completed but returned no downloadable image URL.",
+      "Enhancement completed but returned no downloadable image.",
     );
   }
 

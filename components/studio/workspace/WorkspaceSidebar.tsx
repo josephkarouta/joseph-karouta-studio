@@ -116,11 +116,14 @@ export default function WorkspaceSidebar({
       )}
       aria-label="Workspace navigation"
     >
-      <div className="flex h-[70px] items-center justify-between gap-3 border-b border-[var(--border)] px-4">
+      <div className={cx(
+        "flex h-[70px] items-center justify-between gap-3 border-b border-[var(--border)] px-4",
+        collapsed && "gap-1 px-1.5",
+      )}>
         <Link
           href="/dashboard"
           onClick={onCloseMobile}
-          className="flex min-w-0 items-center gap-3 overflow-hidden"
+          className={cx("flex min-w-0 items-center gap-3 overflow-hidden", collapsed && "shrink-0")}
         >
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(135deg,#6f2dff,#d83cb8)] text-white shadow-lg">
             <Sparkles size={18} />
@@ -146,7 +149,10 @@ export default function WorkspaceSidebar({
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="hidden h-9 w-9 place-items-center rounded-xl border border-[var(--border)] text-[var(--text-secondary)] transition hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)] lg:grid"
+          className={cx(
+            "hidden place-items-center border border-[var(--border)] text-[var(--text-secondary)] transition hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)] lg:grid",
+            collapsed ? "h-7 w-7 rounded-lg" : "h-9 w-9 rounded-xl",
+          )}
           aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
         >
           {collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
@@ -169,7 +175,7 @@ export default function WorkspaceSidebar({
           isActive={itemIsActive}
         />
         <NavigationGroup
-          label="AI Tools"
+          label="Tools"
           items={aiToolItems}
           collapsed={collapsed}
           onNavigate={onCloseMobile}

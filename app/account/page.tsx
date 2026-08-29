@@ -55,7 +55,10 @@ export default function AccountPage() {
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
-  const [sessionBusy, setSessionBusy] = useState<"others" | "all" | null>(null);
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState("");
+  const [removeAvatarPending, setRemoveAvatarPending] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -66,7 +69,14 @@ export default function AccountPage() {
       ).trim(),
     [user],
   );
+  const displayAvatarUrl = pendingAvatarUrl || (!removeAvatarPending ? avatarUrl : "");
   const currentDevice = useMemo(() => browserLabel(), []);
+
+  useEffect(() => {
+    return () => {
+      if (pendingAvatarUrl) URL.revokeObjectURL(pendingAvatarUrl);
+    };
+  }, [pendingAvatarUrl]);
 
   useEffect(() => {
     setName(String(user?.user_metadata?.full_name || user?.user_metadata?.name || ""));
@@ -76,30 +86,74 @@ export default function AccountPage() {
   async function saveProfile() {
     if (!user) return;
     setSaving(true);
+    setAvatarBusy(Boolean(pendingAvatarFile || removeAvatarPending));
     setMessage("");
     setError("");
+
+    const previousPath = String(user.user_metadata?.heyy_avatar_path || "").trim();
+    let uploadedPath = "";
+
     try {
+      let nextAvatarUrl = avatarUrl || null;
+      let nextAvatarPath: string | null = previousPath || null;
+
+      if (pendingAvatarFile) {
+        const token = await accessToken();
+        const form = new FormData();
+        form.append("file", pendingAvatarFile);
+        const response = await fetch("/api/account/avatar", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+        const data = (await response.json()) as { error?: string; avatarUrl?: string; storagePath?: string };
+        if (!response.ok || !data.avatarUrl || !data.storagePath) {
+          throw new Error(data.error || "Profile image could not be updated.");
+        }
+        nextAvatarUrl = data.avatarUrl;
+        nextAvatarPath = data.storagePath;
+        uploadedPath = data.storagePath;
+      } else if (removeAvatarPending) {
+        nextAvatarUrl = String(user.user_metadata?.picture || "").trim() || null;
+        nextAvatarPath = null;
+      }
+
       const supabase = createSupabaseBrowserClient();
-      const updates: {
-        data: Record<string, unknown>;
-        email?: string;
-      } = {
-        data: { ...user.user_metadata, full_name: name.trim() },
+      const updates: { data: Record<string, unknown>; email?: string } = {
+        data: {
+          ...user.user_metadata,
+          full_name: name.trim(),
+          avatar_url: nextAvatarUrl,
+          heyy_avatar_path: nextAvatarPath,
+        },
       };
       const nextEmail = email.trim();
       if (nextEmail && nextEmail !== user.email) updates.email = nextEmail;
+
       const { error: updateError } = await supabase.auth.updateUser(updates);
       if (updateError) throw updateError;
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) throw refreshError;
       await refreshUser();
+
+      if (previousPath && previousPath !== nextAvatarPath) void removeStoredAvatar(previousPath);
+      if (pendingAvatarUrl) URL.revokeObjectURL(pendingAvatarUrl);
+      setPendingAvatarFile(null);
+      setPendingAvatarUrl("");
+      setRemoveAvatarPending(false);
+      if (fileRef.current) fileRef.current.value = "";
+
       setMessage(
         nextEmail !== user.email
           ? "Profile saved. Check your email if confirmation is required before the new address becomes active."
           : "Profile updated.",
       );
     } catch (value) {
+      if (uploadedPath && uploadedPath !== previousPath) void removeStoredAvatar(uploadedPath);
       setError(value instanceof Error ? value.message : "Profile could not be updated.");
     } finally {
       setSaving(false);
+      setAvatarBusy(false);
     }
   }
 
@@ -122,86 +176,23 @@ export default function AccountPage() {
     }
   }
 
-  async function uploadAvatar(file: File) {
-    if (!user) return;
-    setAvatarBusy(true);
-    setMessage("");
+  function stageAvatar(file: File) {
+    if (pendingAvatarUrl) URL.revokeObjectURL(pendingAvatarUrl);
+    setPendingAvatarFile(file);
+    setPendingAvatarUrl(URL.createObjectURL(file));
+    setRemoveAvatarPending(false);
+    setMessage("Photo selected. Save profile to apply the change.");
     setError("");
-    try {
-      const previousPath = String(user.user_metadata?.heyy_avatar_path || "").trim();
-      const token = await accessToken();
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch("/api/account/avatar", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        avatarUrl?: string;
-        storagePath?: string;
-      };
-      if (!response.ok || !data.avatarUrl || !data.storagePath) {
-        throw new Error(data.error || "Profile image could not be updated.");
-      }
-
-      const supabase = createSupabaseBrowserClient();
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: {
-          ...user.user_metadata,
-          avatar_url: data.avatarUrl,
-          heyy_avatar_path: data.storagePath,
-        },
-      });
-      if (updateError) throw updateError;
-
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) throw refreshError;
-      await refreshUser();
-
-      if (previousPath && previousPath !== data.storagePath) {
-        void removeStoredAvatar(previousPath);
-      }
-
-      setMessage("Profile image updated.");
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Profile image could not be updated.");
-    } finally {
-      setAvatarBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
   }
 
-  async function removeAvatar() {
-    if (!user) return;
-    setAvatarBusy(true);
-    setMessage("");
+  function stageAvatarRemoval() {
+    if (pendingAvatarUrl) URL.revokeObjectURL(pendingAvatarUrl);
+    setPendingAvatarFile(null);
+    setPendingAvatarUrl("");
+    setRemoveAvatarPending(true);
+    if (fileRef.current) fileRef.current.value = "";
+    setMessage("Photo removal is ready. Save profile to apply the change.");
     setError("");
-    try {
-      const previousPath = String(user.user_metadata?.heyy_avatar_path || "").trim();
-      const fallback = String(user.user_metadata?.picture || "").trim() || null;
-      const supabase = createSupabaseBrowserClient();
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: {
-          ...user.user_metadata,
-          avatar_url: fallback,
-          heyy_avatar_path: null,
-        },
-      });
-      if (updateError) throw updateError;
-
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) throw refreshError;
-      await refreshUser();
-
-      if (previousPath) void removeStoredAvatar(previousPath);
-      setMessage("Profile image removed.");
-    } catch (value) {
-      setError(value instanceof Error ? value.message : "Profile image could not be removed.");
-    } finally {
-      setAvatarBusy(false);
-    }
   }
 
   async function sendPasswordReset() {
@@ -220,25 +211,19 @@ export default function AccountPage() {
     }
   }
 
-  async function signOutSessions(scope: "others" | "all") {
-    setSessionBusy(scope);
+  async function signOutOtherSessions() {
+    setSessionBusy(true);
     setMessage("");
     setError("");
     try {
       const supabase = createSupabaseBrowserClient();
-      if (scope === "others") {
-        const { error: signOutError } = await supabase.auth.signOut({ scope: "others" });
-        if (signOutError) throw signOutError;
-        setMessage("Other active sessions have been signed out. This browser remains signed in.");
-      } else {
-        const { error: signOutError } = await supabase.auth.signOut({ scope: "global" });
-        if (signOutError) throw signOutError;
-        window.location.href = "/login";
-      }
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "others" });
+      if (signOutError) throw signOutError;
+      setMessage("Other active sessions have been signed out. This browser remains signed in.");
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Session action could not be completed.");
+      setError(value instanceof Error ? value.message : "Other sessions could not be signed out.");
     } finally {
-      setSessionBusy(null);
+      setSessionBusy(false);
     }
   }
 
@@ -271,8 +256,8 @@ export default function AccountPage() {
 
           <div className="mt-6 flex flex-wrap items-center gap-5">
             <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-violet-600 to-fuchsia-500 text-3xl font-black text-white">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Profile" className="h-full w-full object-cover" />
+              {displayAvatarUrl ? (
+                <img src={displayAvatarUrl} alt="Profile" className="h-full w-full object-cover" />
               ) : (
                 String(name || email || "A").slice(0, 1).toUpperCase()
               )}
@@ -285,7 +270,7 @@ export default function AccountPage() {
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (file) void uploadAvatar(file);
+                  if (file) stageAvatar(file);
                 }}
               />
               <Button
@@ -297,15 +282,15 @@ export default function AccountPage() {
                 {avatarBusy ? <LoaderCircle size={16} className="animate-spin" /> : <Camera size={16} />}
                 Change photo
               </Button>
-              {avatarUrl && (
-                <Button type="button" variant="ghost" disabled={avatarBusy} onClick={() => void removeAvatar()}>
+              {displayAvatarUrl && (
+                <Button type="button" variant="ghost" disabled={avatarBusy} onClick={stageAvatarRemoval}>
                   <Trash2 size={15} /> Remove
                 </Button>
               )}
             </div>
           </div>
           <p className="mt-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-            JPG, PNG or WebP · maximum 5 MB. Your custom profile image appears in the account menu.
+            JPG, PNG or WebP · maximum 5 MB. Photo changes are applied only when you save the profile.
           </p>
 
           <label className="mt-6 block text-xs font-black uppercase tracking-[.14em] text-[var(--text-muted)]">
@@ -333,7 +318,7 @@ export default function AccountPage() {
             />
           </div>
           <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-            Depending on your Supabase authentication settings, changing email may require confirmation from the old or new address before it becomes active.
+            Changing your email may require confirmation before the new address becomes active.
           </p>
 
           <Button onClick={() => void saveProfile()} disabled={saving} className="mt-6">
@@ -345,7 +330,7 @@ export default function AccountPage() {
           <ShieldCheck size={21} className="text-emerald-500" />
           <h2 className="mt-5 text-xl font-black">Security & sessions</h2>
           <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-            Review this browser and revoke other Supabase sessions when a device is lost, shared or no longer trusted.
+            Review this browser and sign out other devices if one is lost, shared or no longer trusted.
           </p>
 
           <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -369,29 +354,17 @@ export default function AccountPage() {
             </Button>
             <Button
               variant="secondary"
-              disabled={sessionBusy !== null}
-              onClick={() => void signOutSessions("others")}
+              disabled={sessionBusy}
+              onClick={() => void signOutOtherSessions()}
             >
-              {sessionBusy === "others" ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}
-              Sign out other sessions
+              {sessionBusy ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}
+              Sign out other devices
             </Button>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4">
-            <p className="text-sm font-black text-amber-800 dark:text-amber-200">Sign out everywhere</p>
-            <p className="mt-1 text-xs font-semibold leading-5 text-amber-700 dark:text-amber-300">
-              Revokes all active Supabase sessions, including this browser. You will need to sign in again on every device.
-            </p>
-            <Button
-              className="mt-4"
-              variant="secondary"
-              disabled={sessionBusy !== null}
-              onClick={() => void signOutSessions("all")}
-            >
-              {sessionBusy === "all" ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}
-              Sign out from all sessions
-            </Button>
-          </div>
+          <p className="mt-5 text-xs font-semibold leading-5 text-[var(--text-muted)]">
+            To sign out this browser, use Sign out from the account menu in the header.
+          </p>
         </GlassCard>
       </div>
     </AccountLayout>

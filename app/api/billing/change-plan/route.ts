@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       createIfMissing: false,
     });
     if (!customer) {
-      return NextResponse.json({ error: "No Stripe billing account exists for this user." }, { status: 404 });
+      return NextResponse.json({ error: "No paid billing account exists for this user." }, { status: 404 });
     }
 
     const subscription = await findBestSubscription(stripe, customer.id);
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
     const currentPriceId = priceId(subscription.items?.data?.[0]?.price);
     const targetPriceId = configuredPriceId(targetPlan as ChangeablePlan);
     if (!currentPriceId || !targetPriceId) {
-      return NextResponse.json({ error: "The Stripe plan prices are not configured." }, { status: 503 });
+      return NextResponse.json({ error: "Plan changes are temporarily unavailable." }, { status: 503 });
     }
 
     let schedule = await retrieveSchedule(stripe, subscription);
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
       const ownedByHeyy = Boolean(String(schedule.metadata?.heyy_pending_plan || "").trim());
       if (!ownedByHeyy) {
         return NextResponse.json(
-          { error: "A Stripe subscription schedule already exists. Remove that scheduled update before changing plans in Heyy Studio." },
+          { error: "A billing update is already scheduled. Cancel that update before scheduling another plan change." },
           { status: 409 },
         );
       }
@@ -154,11 +154,11 @@ export async function POST(request: Request) {
     }
 
     const phase = currentPhaseFor(schedule);
-    if (!phase) throw new Error("Stripe did not return the current subscription schedule phase.");
+    if (!phase) throw new Error("The current billing schedule could not be read.");
 
     const currentInput = currentPhaseInput(phase, currentPriceId);
     if (!currentInput.start_date || !currentInput.end_date) {
-      throw new Error("The current Stripe billing period could not be scheduled safely.");
+      throw new Error("The current billing period could not be scheduled safely.");
     }
 
     const updated = await stripe.subscriptionSchedules.update(schedule.id, {
@@ -195,7 +195,7 @@ export async function POST(request: Request) {
     const status = error instanceof ApiAuthError ? error.status : 500;
     console.error("Schedule Stripe plan change error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Plan change could not be scheduled." },
+      { error: error instanceof ApiAuthError ? error.message : "Plan change could not be scheduled. Please try again." },
       { status },
     );
   }
