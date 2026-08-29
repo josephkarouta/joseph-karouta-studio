@@ -55,6 +55,17 @@ type LibraryItem = {
   versionCount?: number;
 };
 type ProjectItem = { id: string; name: string; studio: "brand" | "architecture" | "interior" | "marketing"; href: string };
+type StorageEntitlement = {
+  mode: "active" | "grace" | "paused" | "free" | "expired";
+  plan: "free" | "starter" | "pro";
+  paidPlan: "starter" | "pro" | null;
+  canBrowse: boolean;
+  canDownload: boolean;
+  canManage: boolean;
+  canSave: boolean;
+  graceEndsAt: string | null;
+  daysRemaining: number | null;
+};
 
 const STUDIO_LABELS: Record<Studio, string> = {
   architecture: "Architecture",
@@ -102,6 +113,7 @@ export default function AssetLibrary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [setupRequired, setSetupRequired] = useState(false);
+  const [storage, setStorage] = useState<StorageEntitlement | null>(null);
   const [search, setSearch] = useState("");
   const [studio, setStudio] = useState("all");
   const [project, setProject] = useState("all");
@@ -136,6 +148,7 @@ export default function AssetLibrary() {
       setItems(Array.isArray(payload.items) ? payload.items : []);
       setProjects(Array.isArray(payload.projects) ? payload.projects : []);
       setSetupRequired(Boolean(payload.setupRequired));
+      setStorage(payload.storage || null);
       const requested = new URLSearchParams(window.location.search).get("asset");
       if (requested) {
         const matched = (payload.items || []).find((item: LibraryItem) => item.sourceKey === requested || item.sourceId === requested);
@@ -295,8 +308,10 @@ export default function AssetLibrary() {
           </div>
         </section>
 
+        {storage && <StorageAccessNotice storage={storage} />}
         {setupRequired && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">Asset management is temporarily unavailable. Refresh the page or contact support if the problem continues.</div>}
 
+        {storage && !storage.canBrowse ? <StorageGate storage={storage} /> : <>
         <GlassCard className="mt-5 p-4 sm:p-5">
           <div className="grid gap-3 xl:grid-cols-[1.4fr_repeat(4,minmax(0,.75fr))_auto]">
             <label className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={15}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets, projects or types" className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] pl-11 pr-4 text-sm font-bold outline-none transition focus:border-[var(--accent-border)]"/></label>
@@ -314,9 +329,10 @@ export default function AssetLibrary() {
             {filtered.map((item)=><AssetCard key={item.sourceKey} item={item} onOpen={()=>{setActionError("");setActive(item);}} onDownload={()=>void download(item)}/>) }
           </section>
         )}
+        </>}
       </PageContainer>
 
-      {active && <AssetModal item={active} onClose={()=>{setActive(null);setActionError("");}} onDownload={()=>void download()} downloadBusy={busy === "download"} onRename={openRename} onArchive={()=>void toggleArchive()} archiveBusy={busy === "archive" || busy === "unarchive"} onRemove={()=>setRemoveOpen(true)} onReuse={openReuse} actionError={actionError}/>} 
+      {active && storage?.canBrowse && <AssetModal item={active} readOnly={!storage.canManage} onClose={()=>{setActive(null);setActionError("");}} onDownload={()=>void download()} downloadBusy={busy === "download"} onRename={openRename} onArchive={()=>void toggleArchive()} archiveBusy={busy === "archive" || busy === "unarchive"} onRemove={()=>setRemoveOpen(true)} onReuse={openReuse} actionError={actionError}/>} 
       {renameOpen && active && <SmallDialog title="Rename asset" description="This changes the name shown in Assets Library without changing the source project record." onClose={()=>setRenameOpen(false)}><input autoFocus value={renameTitle} onChange={(event)=>setRenameTitle(event.target.value)} className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-bold outline-none focus:border-[var(--accent-border)]"/><div className="mt-4 flex justify-end gap-2"><DialogButton onClick={()=>setRenameOpen(false)} secondary>Cancel</DialogButton><DialogButton onClick={()=>void saveRename()} disabled={!renameTitle.trim() || busy === "rename"}>{busy === "rename" ? <Loader2 size={14} className="animate-spin"/> : null}Save name</DialogButton></div></SmallDialog>}
       {removeOpen && active && <SmallDialog title="Remove from Assets Library?" description="The source project and its production history will remain untouched. This only removes the item from your unified Assets Library." onClose={()=>setRemoveOpen(false)}><div className="flex justify-end gap-2"><DialogButton onClick={()=>setRemoveOpen(false)} secondary>Keep asset</DialogButton><DialogButton onClick={()=>void removeFromLibrary()} disabled={busy === "delete"}>{busy === "delete" ? <Loader2 size={14} className="animate-spin"/> : <Trash2 size={14}/>}Remove</DialogButton></div></SmallDialog>}
       {reuseOpen && active && <SmallDialog title="Use in another Studio" description="Heyy Studio will copy this asset into the selected project as a reusable reference. Your original asset stays unchanged." onClose={()=>setReuseOpen(false)}>
@@ -327,6 +343,24 @@ export default function AssetLibrary() {
       </SmallDialog>}
     </main>
   );
+}
+
+function StorageAccessNotice({ storage }: { storage: StorageEntitlement }) {
+  if (storage.mode === "active") {
+    return <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100"><span>Unlimited saved projects & assets with your plan · subject to fair use.</span><span className="rounded-full bg-white/70 px-3 py-1 text-[.62rem] font-black uppercase tracking-[.12em] dark:bg-black/20">Cloud saving on</span></div>;
+  }
+  if (storage.mode === "grace") {
+    return <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"><div><p>30-day download grace period · {storage.daysRemaining || 0} day{storage.daysRemaining === 1 ? "" : "s"} left.</p><p className="mt-1 text-xs font-semibold opacity-80">Your saved work is read-only. Download what you need or resubscribe before the grace period ends.</p></div><Link href="/billing" className="rounded-full bg-amber-900 px-4 py-2 text-xs font-black text-white dark:bg-amber-300 dark:text-amber-950">Manage plan</Link></div>;
+  }
+  if (storage.mode === "paused") {
+    return <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"><div><p>Saved work is temporarily read-only.</p><p className="mt-1 text-xs font-semibold opacity-80">Resolve your billing status to resume cloud saving and version management.</p></div><Link href="/billing" className="rounded-full bg-amber-900 px-4 py-2 text-xs font-black text-white dark:bg-amber-300 dark:text-amber-950">Billing & plan</Link></div>;
+  }
+  return null;
+}
+
+function StorageGate({ storage }: { storage: StorageEntitlement }) {
+  const expired = storage.mode === "expired";
+  return <div className="mt-5 grid min-h-[320px] place-items-center rounded-[1.8rem] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center"><div className="max-w-xl"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><FolderOpen size={24}/></span><h3 className="mt-4 text-2xl font-black">{expired ? "Cloud storage grace period ended" : "Cloud saving is included with Starter and Pro"}</h3><p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">{expired ? "The 30-day download window has ended. Files may no longer be available. Resubscribe to restore workspace storage where your saved work is still retained." : "Free accounts can create and download results, while the Assets Library and Version History are paid-plan workspace features."}</p><Link href={expired ? "/billing" : "/pricing"} className="mt-5 inline-flex h-11 items-center rounded-full bg-[var(--accent-strong)] px-5 text-xs font-black text-white">{expired ? "View billing options" : "View plans"}</Link></div></div>;
 }
 
 function Metric({ label, value }: { label: string; value: number }) { return <div className="rounded-2xl border border-white/40 bg-white/55 p-4 backdrop-blur dark:border-white/10 dark:bg-black/10"><p className="text-[.6rem] font-black uppercase tracking-[.16em] text-[var(--text-muted)]">{label}</p><p className="mt-2 text-3xl font-black tracking-[-.05em]">{value}</p></div>; }
@@ -342,14 +376,14 @@ function AssetCard({ item, onOpen, onDownload }: { item:LibraryItem; onOpen:()=>
   </article>;
 }
 
-function AssetModal({ item, onClose, onDownload, downloadBusy, onRename, onArchive, archiveBusy, onRemove, onReuse, actionError }: { item:LibraryItem; onClose:()=>void; onDownload:()=>void; downloadBusy:boolean; onRename:()=>void; onArchive:()=>void; archiveBusy:boolean; onRemove:()=>void; onReuse:()=>void; actionError:string }) {
+function AssetModal({ item, readOnly, onClose, onDownload, downloadBusy, onRename, onArchive, archiveBusy, onRemove, onReuse, actionError }: { item:LibraryItem; readOnly:boolean; onClose:()=>void; onDownload:()=>void; downloadBusy:boolean; onRename:()=>void; onArchive:()=>void; archiveBusy:boolean; onRemove:()=>void; onReuse:()=>void; actionError:string }) {
   const kind=previewKind(item);
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==="Escape")onClose();};document.addEventListener("keydown",key);const previous=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{document.removeEventListener("keydown",key);document.body.style.overflow=previous;};},[onClose]);
   return <div className="fixed inset-0 z-[140] overflow-y-auto bg-black/70 p-3 backdrop-blur-md sm:p-6" onMouseDown={(event)=>{if(event.target===event.currentTarget)onClose();}}><div className="mx-auto flex min-h-full max-w-7xl items-center justify-center"><div className="w-full overflow-hidden rounded-[1.7rem] border border-white/10 bg-[var(--surface-strong)] shadow-2xl"><div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[color:var(--surface-strong)]/95 px-4 py-3 backdrop-blur sm:px-6"><div className="min-w-0"><p className="text-[.58rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)]">Asset preview</p><h2 className="mt-1 truncate text-lg font-black">{item.title}</h2></div><div className="flex items-center gap-2"><button onClick={onDownload} disabled={downloadBusy} className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--accent-strong)] px-4 text-xs font-black text-white disabled:opacity-50">{downloadBusy?<Loader2 size={14} className="animate-spin"/>:<Download size={14}/>}Download</button><button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--border)]"><X size={16}/></button></div></div>
       <div className="grid gap-0 xl:grid-cols-[1fr_320px]"><div className="min-h-[55vh] bg-[#0e0d12] p-4 sm:p-6">{item.previewUrl && kind==="image" ? <img src={item.previewUrl} alt={item.title} className="mx-auto max-h-[72vh] max-w-full rounded-xl object-contain"/> : item.previewUrl && kind==="pdf" ? <iframe src={item.previewUrl} title={item.title} className="h-[72vh] w-full rounded-xl bg-white"/> : item.previewUrl && kind==="video" ? <video src={item.previewUrl} controls className="mx-auto max-h-[72vh] max-w-full rounded-xl"/> : <div className="grid h-[60vh] place-items-center text-white/60"><div className="text-center"><File size={42} className="mx-auto"/><p className="mt-3 text-sm font-bold">Preview unavailable</p><p className="mt-1 text-xs">Download the file to inspect it.</p></div></div>}</div>
         <aside className="border-l border-[var(--border)] p-5"><div className="flex flex-wrap gap-2"><StatusPill tone={statusTone(item.status)}>{item.status}</StatusPill><span className="rounded-full border border-[var(--border)] px-2.5 py-1 text-[.62rem] font-black">Version {item.version}</span></div><Info label="Studio" value={STUDIO_LABELS[item.studio]}/><Info label="Project" value={item.projectName}/><Info label="Asset type" value={item.assetTypeLabel}/><Info label="Updated" value={formatDate(item.updatedAt || item.createdAt)}/>{item.productionReady && <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-black text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"><CheckCircle2 size={14} className="mr-2 inline"/>Production-ready asset</div>}
           {actionError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700 dark:bg-red-500/10 dark:text-red-200">{actionError}</p>}
-          <div className="mt-5 space-y-2">{item.projectHref && <Link href={item.projectHref} className="flex h-11 items-center justify-between rounded-xl border border-[var(--border)] px-3 text-xs font-black hover:border-[var(--accent-border)]">Open source project <ExternalLink size={13}/></Link>}{item.versionFamilyKey && <Link href={`/dashboard/versions?family=${encodeURIComponent(item.versionFamilyKey)}`} className="flex h-11 items-center justify-between rounded-xl border border-[var(--border)] px-3 text-xs font-black hover:border-[var(--accent-border)]">Version history{item.versionCount && item.versionCount > 1 ? ` · ${item.versionCount}` : ""}<FileClock size={13}/></Link>}<ActionButton icon={Pencil} label="Rename in library" onClick={onRename}/><ActionButton icon={item.archived?ArchiveRestore:Archive} label={item.archived?"Restore from archive":"Archive asset"} onClick={onArchive} busy={archiveBusy}/>{item.reusable && <ActionButton icon={Sparkles} label="Use in another Studio" onClick={onReuse}/>}<ActionButton icon={Trash2} label="Remove from library" onClick={onRemove} danger/></div>{item.locked && <p className="mt-4 text-[.66rem] font-semibold leading-5 text-[var(--text-muted)]">Production finals are locked to their delivery history. Removing them from this Library never deletes the delivered production file.</p>}</aside>
+          <div className="mt-5 space-y-2">{item.projectHref && <Link href={item.projectHref} className="flex h-11 items-center justify-between rounded-xl border border-[var(--border)] px-3 text-xs font-black hover:border-[var(--accent-border)]">Open source project <ExternalLink size={13}/></Link>}{item.versionFamilyKey && <Link href={`/dashboard/versions?family=${encodeURIComponent(item.versionFamilyKey)}`} className="flex h-11 items-center justify-between rounded-xl border border-[var(--border)] px-3 text-xs font-black hover:border-[var(--accent-border)]">Version history{item.versionCount && item.versionCount > 1 ? ` · ${item.versionCount}` : ""}<FileClock size={13}/></Link>}{readOnly ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold leading-5 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100">This library is read-only right now. You can preview and download saved work, but changes require an active Starter or Pro plan.</div> : <><ActionButton icon={Pencil} label="Rename in library" onClick={onRename}/><ActionButton icon={item.archived?ArchiveRestore:Archive} label={item.archived?"Restore from archive":"Archive asset"} onClick={onArchive} busy={archiveBusy}/>{item.reusable && <ActionButton icon={Sparkles} label="Use in another Studio" onClick={onReuse}/>}<ActionButton icon={Trash2} label="Remove from library" onClick={onRemove} danger/></>}</div>{item.locked && <p className="mt-4 text-[.66rem] font-semibold leading-5 text-[var(--text-muted)]">Production finals are locked to their delivery history. Removing them from this Library never deletes the delivered production file.</p>}</aside>
       </div></div></div></div>;
 }
 

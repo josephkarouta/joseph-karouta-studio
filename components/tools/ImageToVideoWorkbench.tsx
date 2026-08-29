@@ -215,7 +215,7 @@ export default function ImageToVideoWorkbench() {
         <div className="flex items-center justify-between gap-4 px-1 pb-4">
           <div>
             <Eyebrow>Generated clip</Eyebrow>
-            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Persistent motion output saved to your Assets Library.</p>
+            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Download your clip here. Starter and Pro also keep completed outputs in Assets.</p>
           </div>
           <CreditPill credits={cost} />
         </div>

@@ -164,7 +164,7 @@ export default function TextToImageWorkbench() {
       }
     }
 
-    throw new Error("Your image is still processing. It will remain available in Assets when completed.");
+    throw new Error("Your image is still processing. Return to this tool to check again; Starter and Pro also keep completed outputs in Assets.");
   }
 
   async function downloadResult() {

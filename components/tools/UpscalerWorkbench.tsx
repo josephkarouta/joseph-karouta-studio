@@ -208,7 +208,7 @@ export default function UpscalerWorkbench() {
         <div className="flex items-center justify-between gap-4 px-1 pb-4">
           <div>
             <Eyebrow>Enhanced result</Eyebrow>
-            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Enhanced output saved to your Assets Library.</p>
+            <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Download your enhanced result here. Starter and Pro also keep completed outputs in Assets.</p>
           </div>
           <CreditPill credits={cost} />
         </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import { resolveLibrarySource } from "@/lib/assets/library";
+import { getWorkspaceStorageEntitlement, storageAccessError } from "@/lib/workspace-storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,10 @@ function extension(contentType: string, source: string) {
 export async function GET(request: Request) {
   try {
     const { user, admin } = await requireApiUser(request);
+    const entitlement = await getWorkspaceStorageEntitlement(admin, user.id);
+    if (!entitlement.canDownload) {
+      return NextResponse.json({ error: storageAccessError(entitlement) }, { status: 403 });
+    }
     const sourceKey = new URL(request.url).searchParams.get("sourceKey")?.trim() || "";
     if (!sourceKey) return NextResponse.json({ error: "Asset is required." }, { status: 400 });
 

@@ -329,7 +329,7 @@ export default function DigitalAdaptationsWorkbench() {
       setProgress(payload.progress || { message: "Your adaptations are still processing" });
     }
 
-    throw new Error("Your adaptations are still processing. They will remain available in Assets when completed.");
+    throw new Error("Your adaptations are still processing. Return to this tool to check again; Starter and Pro also keep completed outputs in Assets.");
   }
 
   async function downloadOutput(output: AdaptationOutput) {

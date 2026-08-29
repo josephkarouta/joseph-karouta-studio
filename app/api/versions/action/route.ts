@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
+import { getWorkspaceStorageEntitlement, storageAccessError } from "@/lib/workspace-storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +56,10 @@ function tableFor(sourceKind: string) {
 export async function POST(request: Request) {
   try {
     const { user, admin } = await requireApiUser(request);
+    const entitlement = await getWorkspaceStorageEntitlement(admin, user.id);
+    if (!entitlement.canManage) {
+      return NextResponse.json({ success: false, error: storageAccessError(entitlement) }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || "");
     const versionId = String(body.versionId || "");
