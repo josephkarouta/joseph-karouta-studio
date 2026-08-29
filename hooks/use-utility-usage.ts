@@ -33,6 +33,39 @@ const DEFAULT_USAGE: UsageState = {
   subscriptionStatus: "",
 };
 
+const USAGE_CACHE_PREFIX = "heyy-utility-usage:";
+const usageMemoryCache = new Map<string, UsageState>();
+
+function usageCacheKey(userId: string, tool: UtilityTool) {
+  return `${userId}:${tool}`;
+}
+
+function readCachedUsage(userId: string, tool: UtilityTool): UsageState | null {
+  const key = usageCacheKey(userId, tool);
+  const memory = usageMemoryCache.get(key);
+  if (memory) return memory;
+  try {
+    const raw = window.sessionStorage.getItem(`${USAGE_CACHE_PREFIX}${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as UsageState;
+    if (!parsed || typeof parsed.freeRemaining !== "number") return null;
+    usageMemoryCache.set(key, parsed);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUsage(userId: string, tool: UtilityTool, usage: UsageState) {
+  const key = usageCacheKey(userId, tool);
+  usageMemoryCache.set(key, usage);
+  try {
+    window.sessionStorage.setItem(`${USAGE_CACHE_PREFIX}${key}`, JSON.stringify(usage));
+  } catch {
+    // The in-memory cache still prevents a visible reload in this tab.
+  }
+}
+
 async function readPayload(response: Response) {
   const text = await response.text();
   try {
@@ -56,10 +89,17 @@ export function useUtilityUsage(tool: UtilityTool) {
     return accessToken;
   }, [supabase]);
 
-  const refreshUsage = useCallback(async () => {
-    if (!user) return;
-    setLoadingUsage(true);
+  const refreshUsage = useCallback(async (options?: { silent?: boolean }) => {
+    if (!user) {
+      setUsage(DEFAULT_USAGE);
+      setLoadingUsage(false);
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    if (!silent) setLoadingUsage(true);
     setUsageError("");
+
     try {
       const accessToken = await token();
       const response = await fetch(`/api/tools/utility/usage?tool=${encodeURIComponent(tool)}`, {
@@ -68,7 +108,9 @@ export function useUtilityUsage(tool: UtilityTool) {
       });
       const payload = await readPayload(response);
       if (!response.ok) throw new Error(payload.error || "Daily usage could not be loaded.");
-      setUsage({ ...DEFAULT_USAGE, ...payload });
+      const nextUsage = { ...DEFAULT_USAGE, ...payload } as UsageState;
+      setUsage(nextUsage);
+      writeCachedUsage(user.id, tool, nextUsage);
     } catch (error) {
       setUsageError(error instanceof Error ? error.message : "Daily usage could not be loaded.");
     } finally {
@@ -77,8 +119,21 @@ export function useUtilityUsage(tool: UtilityTool) {
   }, [token, tool, user]);
 
   useEffect(() => {
-    void refreshUsage();
-  }, [refreshUsage]);
+    if (!user) {
+      setUsage(DEFAULT_USAGE);
+      setLoadingUsage(false);
+      return;
+    }
+
+    const cached = readCachedUsage(user.id, tool);
+    if (cached) {
+      setUsage(cached);
+      setLoadingUsage(false);
+      void refreshUsage({ silent: true });
+    } else {
+      void refreshUsage();
+    }
+  }, [refreshUsage, tool, user]);
 
   const authorize = useCallback(async (operation: string): Promise<Authorization> => {
     const accessToken = await token();
@@ -89,18 +144,28 @@ export function useUtilityUsage(tool: UtilityTool) {
     });
     const payload = await readPayload(response);
     if (!response.ok) throw new Error(payload.error || "This operation could not be started.");
-    setUsage((current) => ({
-      ...current,
-      unlimited: Boolean(payload.unlimited),
-      freeRemaining: Number(payload.freeRemaining ?? current.freeRemaining),
-      freeUsed: payload.unlimited
-        ? current.freeUsed
-        : Math.max(0, current.dailyLimit - Number(payload.freeRemaining ?? current.freeRemaining)),
-    }));
-    return payload as Authorization;
-  }, [token, tool]);
 
-  const complete = useCallback(async (operationId: string, metadata: Record<string, unknown> = {}) => {
+    setUsage((current) => {
+      const nextUsage: UsageState = {
+        ...current,
+        unlimited: Boolean(payload.unlimited),
+        freeRemaining: Number(payload.freeRemaining ?? current.freeRemaining),
+        freeUsed: payload.unlimited
+          ? current.freeUsed
+          : Math.max(0, current.dailyLimit - Number(payload.freeRemaining ?? current.freeRemaining)),
+      };
+      if (user) writeCachedUsage(user.id, tool, nextUsage);
+      return nextUsage;
+    });
+
+    return payload as Authorization;
+  }, [token, tool, user]);
+
+  const complete = useCallback(async (
+    operationId: string,
+    metadata: Record<string, unknown> = {},
+    options?: { refresh?: boolean },
+  ) => {
     const accessToken = await token();
     const response = await fetch("/api/tools/utility/complete", {
       method: "POST",
@@ -109,12 +174,14 @@ export function useUtilityUsage(tool: UtilityTool) {
     });
     const payload = await readPayload(response);
     if (!response.ok) throw new Error(payload.error || "The completed file could not be released.");
-    await refreshAccount();
-    await refreshUsage();
+    if (options?.refresh !== false) {
+      await refreshAccount();
+      await refreshUsage({ silent: true });
+    }
     return payload;
   }, [refreshAccount, refreshUsage, token]);
 
-  const fail = useCallback(async (operationId: string, reason: string) => {
+  const fail = useCallback(async (operationId: string, reason: string, options?: { refresh?: boolean }) => {
     try {
       const accessToken = await token();
       await fetch("/api/tools/utility/fail", {
@@ -123,10 +190,26 @@ export function useUtilityUsage(tool: UtilityTool) {
         body: JSON.stringify({ operationId, reason }),
       });
     } finally {
-      await refreshAccount();
-      await refreshUsage();
+      if (options?.refresh !== false) {
+        await refreshAccount();
+        await refreshUsage({ silent: true });
+      }
     }
   }, [refreshAccount, refreshUsage, token]);
 
-  return { usage, loadingUsage, usageError, refreshUsage, authorize, complete, fail };
+  const syncUsage = useCallback(async () => {
+    await refreshAccount();
+    await refreshUsage({ silent: true });
+  }, [refreshAccount, refreshUsage]);
+
+  return {
+    usage,
+    loadingUsage,
+    usageError,
+    refreshUsage: () => refreshUsage(),
+    authorize,
+    complete,
+    fail,
+    syncUsage,
+  };
 }

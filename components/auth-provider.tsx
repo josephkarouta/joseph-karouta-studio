@@ -183,11 +183,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [resetAccount, user]);
 
   const signInWithGoogle = useCallback(async (redirectTo?: string) => {
+    let next = `${window.location.pathname}${window.location.search}${window.location.hash}` || "/dashboard";
+
+    if (redirectTo) {
+      try {
+        const destination = new URL(redirectTo, window.location.origin);
+        if (destination.origin === window.location.origin) {
+          next = `${destination.pathname}${destination.search}${destination.hash}` || "/dashboard";
+        }
+      } catch {
+        // Keep the current same-origin destination.
+      }
+    }
+
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("next", next.startsWith("/") ? next : "/dashboard");
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo:
-          redirectTo || `${window.location.origin}${window.location.pathname}`,
+        redirectTo: callbackUrl.toString(),
         queryParams: { prompt: "select_account" },
       },
     });

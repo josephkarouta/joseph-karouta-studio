@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -53,6 +53,23 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
   const supabase = createSupabaseBrowserClient();
   const { resolvedTheme } = useTheme();
   const signup = mode === "signup";
+
+  useEffect(() => {
+    if (signup) return;
+    let active = true;
+
+    void (async () => {
+      const result = await supabase.auth.getSession();
+      if (!active || !result.data.session) return;
+      // If an OAuth callback has already established the session, do not leave
+      // the user looking at an empty sign-in form while the browser catches up.
+      window.location.replace(next);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [next, signup, supabase]);
 
   function verificationRedirect() {
     const url = new URL("/signup", window.location.origin);
