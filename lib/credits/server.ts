@@ -6,6 +6,7 @@ import { getCreditCost } from "@/lib/credits/config";
 import { getPlan, type PlanId } from "@/lib/platform/plans";
 import { resolveSubscriptionPlan } from "@/lib/server/subscription-plan";
 import { commitReservedCredits } from "@/lib/credits/lifecycle";
+import { getWelcomeCreditAmount } from "@/lib/credits/welcome";
 
 export type CreditReservation = {
   id: string;
@@ -257,7 +258,7 @@ export async function ensureCreditWallet({
   if (resolved.plan === "free" && !wallet?.verified_signup_granted_at) {
     const { error: grantError } = await admin.rpc("heyy_grant_verified_signup_credits", {
       p_user_id: userId,
-      p_amount: plan.monthlyCredits,
+      p_amount: getWelcomeCreditAmount(),
     });
 
     if (grantError) {
@@ -286,8 +287,17 @@ export async function ensureCreditWallet({
   const walletExpired =
     !wallet?.period_end || new Date(wallet.period_end).getTime() <= Date.now();
   const periodAdvanced = Number.isFinite(periodStartTime) && periodStartTime > walletStartTime;
+  const hasActiveWelcomeCredits = Boolean(
+    resolved.plan === "free" &&
+      wallet?.verified_signup_granted_at &&
+      Number(wallet?.monthly_balance || 0) > 0 &&
+      wallet?.period_end &&
+      new Date(wallet.period_end).getTime() > Date.now(),
+  );
   const needsFreePaygReset =
-    resolved.plan === "free" && Number(wallet?.monthly_balance || 0) > 0;
+    resolved.plan === "free" &&
+    Number(wallet?.monthly_balance || 0) > 0 &&
+    !hasActiveWelcomeCredits;
   const needsUnpaidSubscriptionReset =
     subscriptionPaymentOutstanding && Number(wallet?.monthly_balance || 0) > 0;
 
@@ -328,7 +338,7 @@ export async function ensureCreditWallet({
   const needsMonthlyGrant =
     !wallet ||
     walletExpired ||
-    periodAdvanced ||
+    (!hasActiveWelcomeCredits && periodAdvanced) ||
     needsFreePaygReset ||
     needsUnpaidSubscriptionReset ||
     needsRecoveredSubscriptionGrant;

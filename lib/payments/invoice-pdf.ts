@@ -41,45 +41,59 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const width = doc.internal.pageSize.getWidth();
   const margin = 48;
-  const accent = [111, 45, 255] as const;
-  const dark = [24, 20, 32] as const;
+  const accent = [108, 0, 255] as const;
+  const dark = [23, 19, 31] as const;
   const muted = [103, 96, 114] as const;
   const subtotal = Math.max(0, data.amountTotal - data.taxAmount);
 
-  doc.setFillColor(...dark);
-  doc.rect(0, 0, width, 120, "F");
-  doc.setTextColor(255, 255, 255);
+  // Keep the invoice masthead intentionally light. The official primary
+  // black + purple wordmark remains readable in PDFs and does not depend on
+  // transparency/background behaviour from the source SVG.
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, width, 126, "F");
+  doc.setFillColor(...accent);
+  doc.rect(0, 0, width, 6, "F");
 
   const logo = await getHeyyEmailLogoPng();
   if (logo) {
-    const logoWidth = 142;
-    const logoHeight = logoWidth * (logo.height / logo.width);
+    const maxLogoWidth = 126;
+    const maxLogoHeight = 48;
+    const scale = Math.min(maxLogoWidth / logo.width, maxLogoHeight / logo.height);
+    const logoWidth = logo.width * scale;
+    const logoHeight = logo.height * scale;
     doc.addImage(
       `data:image/png;base64,${logo.buffer.toString("base64")}`,
       "PNG",
       margin,
-      34,
+      26,
       logoWidth,
       logoHeight,
     );
   } else {
+    doc.setTextColor(...dark);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(25);
-    doc.text("Heyy Studio", margin, 62);
+    doc.setFontSize(24);
+    doc.text("Heyy Studio", margin, 54);
   }
 
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "normal");
-  doc.text("Create with AI. Build with Experts.", margin, 87);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text(business.gstRegistered ? "Tax Invoice" : "Invoice", width - margin, 58, { align: "right" });
+  doc.setTextColor(...muted);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text(data.invoiceNumber, width - margin, 80, { align: "right" });
+  doc.text("Create with AI. Build with Experts.", margin, 91);
 
-  let y = 158;
+  doc.setTextColor(...dark);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text(business.gstRegistered ? "Tax Invoice" : "Invoice", width - margin, 48, { align: "right" });
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...muted);
+  doc.text(data.invoiceNumber, width - margin, 70, { align: "right" });
+
+  doc.setDrawColor(230, 226, 235);
+  doc.line(margin, 112, width - margin, 112);
+
+  let y = 154;
   doc.setTextColor(...dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);

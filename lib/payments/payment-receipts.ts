@@ -130,6 +130,7 @@ export async function recordAndSendPaymentReceipt(input: PaymentReceiptInput) {
     intro: resolved.body,
     preheader: resolved.preheader,
     amount,
+    detailsTitle: "Payment details",
     details: [
       { label: "Invoice", value: record.invoice_number },
       { label: "Payment status", value: "Paid" },

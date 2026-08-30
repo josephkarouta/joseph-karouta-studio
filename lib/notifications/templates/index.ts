@@ -18,6 +18,7 @@ type BuildEmailOptions = {
   status?: string | null;
   amount?: string | null;
   details?: EmailDetail[];
+  detailsTitle?: string;
   note?: string | null;
   ctaLabel?: string;
   ctaUrl?: string;
