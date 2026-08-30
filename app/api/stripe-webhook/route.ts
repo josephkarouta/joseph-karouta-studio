@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { processQuotePayment } from "../../../lib/payments/process-quote-payment";
 import { applyMonthlyCredits } from "@/lib/credits/server";
 import { getCreditPack, getPlan, normalizePlan } from "@/lib/platform/plans";
+import { recordCheckoutPayment, recordProductionCheckoutReceipt, recordSubscriptionInvoice } from "@/lib/payments/payment-receipts";
 import {
   getStripe,
   planFromSubscription,
@@ -172,6 +173,13 @@ export async function POST(req: Request) {
       const quoteResult = await processQuotePayment(session);
 
       if (quoteResult.handled) {
+        if (quoteResult.quoteId) {
+          try {
+            await recordProductionCheckoutReceipt({ session, quoteId: quoteResult.quoteId });
+          } catch (receiptError) {
+            console.error("Production payment receipt failed:", receiptError);
+          }
+        }
         return NextResponse.json({
           received: true,
           quoteId: quoteResult.quoteId,
@@ -200,6 +208,18 @@ export async function POST(req: Request) {
           p_currency: session.currency || "usd",
         });
         if (error) throw error;
+        try {
+          await recordCheckoutPayment({
+            session,
+            userId,
+            paymentType: "credit_pack",
+            description: `Heyy Studio ${pack.name}`,
+            relatedId: pack.id,
+            metadata: { pack_id: pack.id, credits: pack.credits },
+          });
+        } catch (receiptError) {
+          console.error("Credit purchase receipt failed:", receiptError);
+        }
         return NextResponse.json({ received: true, creditTopUp: true });
       }
 
@@ -232,6 +252,11 @@ export async function POST(req: Request) {
         const { userId, plan } = await syncStripeSubscription(subscription);
         if (userId) {
           await applyMonthlyPlanCredits({ userId, planValue: plan, subscription });
+          try {
+            await recordSubscriptionInvoice({ invoice, userId, plan });
+          } catch (receiptError) {
+            console.error("Subscription payment receipt failed:", receiptError);
+          }
         }
       }
     }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { requireAdminApiAccess } from "@/lib/server/admin-api";
+import { requireAdminApiCapability } from "@/lib/server/admin-api";
+import { recordAdminAudit } from "@/lib/admin/audit";
 import {
   cleanMessage,
   createProductionMessage,
@@ -18,8 +19,8 @@ const supabase = createClient(
 );
 
 export async function GET(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   try {
     const jobId = request.nextUrl.searchParams.get("jobId")?.trim() || "";
@@ -81,8 +82,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   try {
     const contentType = request.headers.get("content-type") || "";
@@ -152,6 +153,15 @@ export async function POST(request: NextRequest) {
         },
       });
     }
+
+    await recordAdminAudit({
+      actorUserId: access.user!.id,
+      action: "production.message_sent",
+      entityType: "production_job",
+      entityId: job.id,
+      summary: `Sent production message for ${job.project_name || job.service || "project"}`,
+      metadata: { message_id: created.id, attachment_count: files.length },
+    });
 
     return NextResponse.json({
       success: true,

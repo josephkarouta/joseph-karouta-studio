@@ -125,8 +125,13 @@ export default function AdminCommandCenter({
   const [search, setSearch] = useState("");
   const [requestStatus, setRequestStatus] = useState("All");
   const [requestStudio, setRequestStudio] = useState("all");
+  const [requestService, setRequestService] = useState("all");
+  const [requestQuoteStatus, setRequestQuoteStatus] = useState("all");
+  const [requestClient, setRequestClient] = useState("all");
   const [productionStatus, setProductionStatus] = useState("All");
   const [productionStudio, setProductionStudio] = useState("all");
+  const [productionService, setProductionService] = useState("all");
+  const [productionClient, setProductionClient] = useState("all");
 
   const quoteByRequest = useMemo(() => {
     const map = new Map<string, any>();
@@ -137,6 +142,36 @@ export default function AdminCommandCenter({
     });
     return map;
   }, [quotes]);
+
+  const requestServiceOptions = useMemo(() => uniqueOptions(
+    requests.map((request) => request.service || request.metadata?.service),
+    "All services",
+  ), [requests]);
+
+  const requestClientOptions = useMemo(() => uniqueOptions(
+    requests.map((request) =>
+      request.client_email ||
+      request.metadata?.client_email ||
+      request.client_name ||
+      request.metadata?.client_name,
+    ),
+    "All clients",
+  ), [requests]);
+
+  const quoteStatusOptions = useMemo(() => uniqueOptions(
+    ["No quote", ...Array.from(quoteByRequest.values()).map((quote) => quote?.status || "Sent")],
+    "All quote states",
+  ), [quoteByRequest]);
+
+  const productionServiceOptions = useMemo(() => uniqueOptions(
+    jobs.map((job) => job.service || job.service_id),
+    "All services",
+  ), [jobs]);
+
+  const productionClientOptions = useMemo(() => uniqueOptions(
+    jobs.map((job) => job.client_email || job.client_name || job.user_id),
+    "All clients",
+  ), [jobs]);
 
   const unreadMessageCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -208,13 +243,22 @@ export default function AdminCommandCenter({
     ),
   );
 
-  const paidRevenue = payments
-    .filter((payment) =>
-      ["paid", "succeeded", "completed"].includes(
-        String(payment.status || "").toLowerCase(),
-      ),
-    )
+  const paidPayments = payments.filter((payment) =>
+    ["paid", "succeeded", "completed"].includes(
+      String(payment.status || "").toLowerCase(),
+    ),
+  );
+  const paidRevenue = paidPayments.reduce(
+    (sum, payment) => sum + toNumber(payment.amount),
+    0,
+  );
+  const currentMonthRevenue = paidPayments
+    .filter((payment) => isCurrentMonth(payment.paid_at || payment.created_at))
     .reduce((sum, payment) => sum + toNumber(payment.amount), 0);
+  const outstandingQuoteValue = awaitingPaymentQuotes.reduce(
+    (sum, quote) => sum + toNumber(quote.amount),
+    0,
+  );
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const unreadJobs = jobs
@@ -322,6 +366,16 @@ export default function AdminCommandCenter({
       const studioId = normalizeStudioId(
         request.studio || request.metadata?.studio,
       );
+      const quote = quoteByRequest.get(String(request.id));
+      const quoteStatus = String(quote?.status || "No quote");
+      const serviceValue = String(request.service || request.metadata?.service || "").trim();
+      const clientValue = String(
+        request.client_email ||
+        request.metadata?.client_email ||
+        request.client_name ||
+        request.metadata?.client_name ||
+        "",
+      ).trim();
       const haystack = [
         request.project_name,
         request.service,
@@ -331,6 +385,8 @@ export default function AdminCommandCenter({
         request.metadata?.project_name,
         request.metadata?.client_name,
         request.metadata?.client_email,
+        quote?.title,
+        quote?.status,
       ]
         .filter(Boolean)
         .join(" ")
@@ -339,16 +395,30 @@ export default function AdminCommandCenter({
       return (
         (requestStatus === "All" || status === requestStatus) &&
         (requestStudio === "all" || studioId === requestStudio) &&
+        (requestService === "all" || serviceValue === requestService) &&
+        (requestQuoteStatus === "all" || quoteStatus === requestQuoteStatus) &&
+        (requestClient === "all" || clientValue === requestClient) &&
         (!term || haystack.includes(term))
       );
     });
-  }, [requests, requestStatus, requestStudio, search]);
+  }, [
+    quoteByRequest,
+    requestClient,
+    requestQuoteStatus,
+    requestService,
+    requests,
+    requestStatus,
+    requestStudio,
+    search,
+  ]);
 
   const filteredJobs = useMemo(() => {
     const term = search.trim().toLowerCase();
     return jobs.filter((job) => {
       const status = String(job.status || "Waiting Assignment");
       const studioId = normalizeStudioId(job.studio || job.assigned_studio);
+      const serviceValue = String(job.service || job.service_id || "").trim();
+      const clientValue = String(job.client_email || job.client_name || job.user_id || "").trim();
       const haystack = [
         job.project_name,
         job.service,
@@ -364,10 +434,19 @@ export default function AdminCommandCenter({
       return (
         (productionStatus === "All" || status === productionStatus) &&
         (productionStudio === "all" || studioId === productionStudio) &&
+        (productionService === "all" || serviceValue === productionService) &&
+        (productionClient === "all" || clientValue === productionClient) &&
         (!term || haystack.includes(term))
       );
     });
-  }, [jobs, productionStatus, productionStudio, search]);
+  }, [
+    jobs,
+    productionClient,
+    productionService,
+    productionStatus,
+    productionStudio,
+    search,
+  ]);
 
   function switchTab(tab: AdminTab) {
     setActiveTab(tab);
@@ -439,7 +518,7 @@ export default function AdminCommandCenter({
         <AdminTabButton
           active={activeTab === "inbox"}
           icon={Inbox}
-          label="Inbox"
+          label="Notifications & inbox"
           count={unreadMessages.length + newContacts.length + newApplications.length}
           onClick={() => switchTab("inbox")}
         />
@@ -457,6 +536,8 @@ export default function AdminCommandCenter({
             unreadMessages={unreadMessages}
             requestedRevisions={requestedRevisions}
             paidRevenue={paidRevenue}
+            currentMonthRevenue={currentMonthRevenue}
+            outstandingQuoteValue={outstandingQuoteValue}
             attentionItems={attentionItems}
             unreadMessageCounts={unreadMessageCounts}
           />
@@ -472,6 +553,15 @@ export default function AdminCommandCenter({
             setStatus={setRequestStatus}
             studio={requestStudio}
             setStudio={setRequestStudio}
+            service={requestService}
+            setService={setRequestService}
+            serviceOptions={requestServiceOptions}
+            quoteStatus={requestQuoteStatus}
+            setQuoteStatus={setRequestQuoteStatus}
+            quoteStatusOptions={quoteStatusOptions}
+            client={requestClient}
+            setClient={setRequestClient}
+            clientOptions={requestClientOptions}
             total={requests.length}
             open={openRequests.length}
             quoteNeeded={quoteNeeded.length}
@@ -488,6 +578,12 @@ export default function AdminCommandCenter({
             setStatus={setProductionStatus}
             studio={productionStudio}
             setStudio={setProductionStudio}
+            service={productionService}
+            setService={setProductionService}
+            serviceOptions={productionServiceOptions}
+            client={productionClient}
+            setClient={setProductionClient}
+            clientOptions={productionClientOptions}
             total={jobs.length}
             active={activeJobs.length}
             unreadMessageCounts={unreadMessageCounts}
@@ -518,6 +614,8 @@ function OverviewPanel({
   unreadMessages,
   requestedRevisions,
   paidRevenue,
+  currentMonthRevenue,
+  outstandingQuoteValue,
   attentionItems,
   unreadMessageCounts,
 }: {
@@ -530,6 +628,8 @@ function OverviewPanel({
   unreadMessages: any[];
   requestedRevisions: any[];
   paidRevenue: number;
+  currentMonthRevenue: number;
+  outstandingQuoteValue: number;
   attentionItems: AttentionItem[];
   unreadMessageCounts: Map<string, number>;
 }) {
@@ -572,9 +672,9 @@ function OverviewPanel({
         />
         <MetricCard
           icon={Clock3}
-          label="Awaiting payment"
-          value={awaitingPaymentQuotes.length}
-          note="Sent quotes not yet paid"
+          label="Outstanding quotes"
+          value={formatMoney(outstandingQuoteValue)}
+          note={`${awaitingPaymentQuotes.length} quote${awaitingPaymentQuotes.length === 1 ? "" : "s"} awaiting payment`}
           tone="amber"
         />
         <MetricCard
@@ -600,16 +700,16 @@ function OverviewPanel({
         />
         <MetricCard
           icon={CircleDollarSign}
-          label="Paid production"
-          value={formatMoney(paidRevenue)}
-          note="Confirmed quote payments"
+          label="Revenue this month"
+          value={formatMoney(currentMonthRevenue)}
+          note={`All-time paid production ${formatMoney(paidRevenue)}`}
           tone="green"
         />
       </section>
 
       <section className="heyy-admin-two-column">
         <Panel
-          eyebrow="Priority queue"
+          eyebrow="Operational queues"
           title="Needs your attention"
           description="Only actions tied to live requests, production and submissions appear here."
           action={<Link href="/admin?tab=requests">View all requests <ArrowRight size={14} /></Link>}
@@ -723,6 +823,7 @@ function OverviewPanel({
           description="Direct access to the real public content and operational records."
         >
           <div className="heyy-quick-grid">
+            <QuickLink href="/admin/platform/clients" icon={Users} title="Client history" note="Projects, quotes and revenue" />
             <QuickLink href="/admin/platform/users" icon={Users} title="Users" note="Accounts and plans" />
             <QuickLink href="/admin/platform/contact" icon={Mail} title="Contact" note="Website enquiries" />
             <QuickLink href="/admin/platform/careers" icon={BriefcaseBusiness} title="Careers" note="Positions and applicants" />
@@ -745,6 +846,15 @@ function RequestsPanel({
   setStatus,
   studio,
   setStudio,
+  service,
+  setService,
+  serviceOptions,
+  quoteStatus,
+  setQuoteStatus,
+  quoteStatusOptions,
+  client,
+  setClient,
+  clientOptions,
   total,
   open,
   quoteNeeded,
@@ -758,6 +868,15 @@ function RequestsPanel({
   setStatus: (value: string) => void;
   studio: string;
   setStudio: (value: string) => void;
+  service: string;
+  setService: (value: string) => void;
+  serviceOptions: Array<{ value: string; label: string }>;
+  quoteStatus: string;
+  setQuoteStatus: (value: string) => void;
+  quoteStatusOptions: Array<{ value: string; label: string }>;
+  client: string;
+  setClient: (value: string) => void;
+  clientOptions: Array<{ value: string; label: string }>;
   total: number;
   open: number;
   quoteNeeded: number;
@@ -786,7 +905,11 @@ function RequestsPanel({
           studio={studio}
           setStudio={setStudio}
           placeholder="Search project, client or service…"
-        />
+        >
+          <AdminFilter value={service} options={serviceOptions} onChange={setService} label="Filter requests by service" />
+          <AdminFilter value={quoteStatus} options={quoteStatusOptions} onChange={setQuoteStatus} label="Filter requests by quote status" />
+          <AdminFilter value={client} options={clientOptions} onChange={setClient} label="Filter requests by client" />
+        </AdminToolbar>
         <div className="heyy-request-grid">
           {requests.map((request) => (
             <RequestCard
@@ -818,6 +941,12 @@ function ProductionPanel({
   setStatus,
   studio,
   setStudio,
+  service,
+  setService,
+  serviceOptions,
+  client,
+  setClient,
+  clientOptions,
   total,
   active,
   unreadMessageCounts,
@@ -830,6 +959,12 @@ function ProductionPanel({
   setStatus: (value: string) => void;
   studio: string;
   setStudio: (value: string) => void;
+  service: string;
+  setService: (value: string) => void;
+  serviceOptions: Array<{ value: string; label: string }>;
+  client: string;
+  setClient: (value: string) => void;
+  clientOptions: Array<{ value: string; label: string }>;
   total: number;
   active: number;
   unreadMessageCounts: Map<string, number>;
@@ -865,7 +1000,10 @@ function ProductionPanel({
           studio={studio}
           setStudio={setStudio}
           placeholder="Search project, client or service…"
-        />
+        >
+          <AdminFilter value={service} options={serviceOptions} onChange={setService} label="Filter production by service" />
+          <AdminFilter value={client} options={clientOptions} onChange={setClient} label="Filter production by client" />
+        </AdminToolbar>
         <div className="heyy-production-list">
           {jobs.map((job) => (
             <ProductionRow
@@ -997,6 +1135,7 @@ function AdminToolbar({
   studio,
   setStudio,
   placeholder,
+  children,
 }: {
   search: string;
   setSearch: (value: string) => void;
@@ -1006,6 +1145,7 @@ function AdminToolbar({
   studio: string;
   setStudio: (value: string) => void;
   placeholder: string;
+  children?: ReactNode;
 }) {
   return (
     <div className="heyy-admin-toolbar">
@@ -1046,6 +1186,31 @@ function AdminToolbar({
           tone="admin"
         />
       </div>
+      {children}
+    </div>
+  );
+}
+
+function AdminFilter({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  label: string;
+}) {
+  return (
+    <div className="heyy-admin-filter">
+      <HeyySelect
+        value={value}
+        options={options}
+        onChange={onChange}
+        ariaLabel={label}
+        tone="admin"
+      />
     </div>
   );
 }
@@ -1338,6 +1503,24 @@ function studioIcon(id: string): LucideIcon {
   }
 }
 
+function uniqueOptions(values: unknown[], allLabel: string) {
+  const items = Array.from(
+    new Set(values.map((value) => String(value || "").trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
+  return [
+    { value: "all", label: allLabel },
+    ...items.map((value) => ({ value, label: value })),
+  ];
+}
+
+function isCurrentMonth(value: unknown) {
+  if (!value) return false;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return date.getUTCFullYear() === now.getUTCFullYear() && date.getUTCMonth() === now.getUTCMonth();
+}
+
 function toNumber(value: unknown): number {
   const number = Number(value || 0);
   return Number.isFinite(number) ? number : 0;
@@ -1600,7 +1783,9 @@ const ADMIN_STYLES = `
   .heyy-quick-link > span { width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; color: #6c00ff; background: #f2e9ff; }
   .heyy-quick-link strong { display: block; font-size: 11px; }
   .heyy-quick-link p { margin: 3px 0 0; color: #7b7482; font-size: 9px; }
-  .heyy-admin-toolbar { display: grid; grid-template-columns: minmax(280px,1fr) 220px 220px; gap: 10px; margin-bottom: 18px; }
+  .heyy-admin-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+  .heyy-admin-search { flex: 1 1 300px; }
+  .heyy-admin-filter { flex: 0 1 190px; min-width: 165px; }
   .heyy-admin-search { min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border: 1px solid #ded8e5; border-radius: 15px; background: #f9f8fb; }
   .heyy-admin-search:focus-within { border-color: #8b4bff; box-shadow: 0 0 0 4px rgba(108,0,255,.10); background: #fff; }
   .heyy-admin-search input { width: 100%; border: 0; outline: 0; color: #211c28; background: transparent; font-size: 12px; font-weight: 650; }

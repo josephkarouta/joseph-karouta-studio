@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { requireAdminApiAccess } from "@/lib/server/admin-api";
+import { requireAdminApiCapability } from "@/lib/server/admin-api";
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -10,8 +10,8 @@ const supabase = createClient(
 const DELETABLE_REVISION_STATUSES = ["Requested", "In Progress"];
 
 export async function POST(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   try {
     const formData = await request.formData();
@@ -151,8 +151,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   try {
     const body = await request.json();

@@ -1,0 +1,3 @@
+import AnnouncementsManager from "@/components/admin/platform/AnnouncementsManager";
+import CommunicationsManager from "@/components/admin/platform/CommunicationsManager";
+export default function CommunicationsPage(){return <><p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Communications</p><h2 className="mt-2 text-5xl font-black tracking-[-.06em]">Email templates & delivery.</h2><p className="mt-4 max-w-3xl text-sm font-semibold leading-7 text-slate-500">Manage Heyy Studio transactional email copy, send announcements and review delivery history without exposing infrastructure details.</p><div className="mt-8 grid gap-6"><AnnouncementsManager/><CommunicationsManager/></div></>}

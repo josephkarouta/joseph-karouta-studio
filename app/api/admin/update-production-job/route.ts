@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { Notifications } from "@/lib/notifications";
 import { createProductionMessage } from "@/lib/production/messages";
 
-import { requireAdminApiAccess } from "@/lib/server/admin-api";
+import { requireAdminApiCapability } from "@/lib/server/admin-api";
+import { recordAdminAudit } from "@/lib/admin/audit";
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -94,8 +95,8 @@ function canAppearInFinalHandoff(meta?: RevisionFileMeta) {
 
 
 export async function POST(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   try {
     const body = await request.json();
@@ -298,6 +299,19 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+
+    await recordAdminAudit({
+      actorUserId: access.user!.id,
+      action: publish_final_deliverables ? "production.deliverables_published" : statusChanged ? "production.status_updated" : "production.updated",
+      entityType: "production_job",
+      entityId: String(id),
+      summary: publish_final_deliverables
+        ? `Published final deliverables for ${job.project_name || job.service || "production job"}`
+        : statusChanged
+          ? `Changed production status to ${nextStatus}`
+          : `Updated production job ${job.project_name || job.service || id}`,
+      metadata: { previous_status: previousJob.status, next_status: nextStatus, priority: job.priority, assigned_studio: job.assigned_studio },
+    });
 
     return NextResponse.json({
       success: true,

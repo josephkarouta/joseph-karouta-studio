@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { requireAdminApiAccess } from "@/lib/server/admin-api";
+import { requireAdminApiCapability } from "@/lib/server/admin-api";
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -189,8 +189,8 @@ async function hydrateInteriorRequest(studioRequest: any) {
 }
 
 export async function GET(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   const id = request.nextUrl.searchParams.get("id");
 

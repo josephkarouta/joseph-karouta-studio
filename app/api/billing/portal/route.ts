@@ -31,9 +31,19 @@ export async function POST(request: Request) {
     // Do not let a stale NEXT_PUBLIC_SITE_URL (for example localhost in a
     // deployed environment) redirect customers away from the active site.
     const siteUrl = new URL(request.url).origin;
+    const portalConfiguration = String(process.env.STRIPE_PORTAL_CONFIGURATION_ID || "").trim();
+    const isPublicBeta = process.env.NEXT_PUBLIC_HEYY_PUBLIC_BETA === "true";
+    if (!isPublicBeta && !portalConfiguration) {
+      return NextResponse.json(
+        { success: false, error: "Billing management is not configured for the live site yet." },
+        { status: 503 },
+      );
+    }
+
     const session = await stripe.billingPortal.sessions.create({
       customer: customer.id,
       return_url: `${siteUrl}/billing?portal=returned`,
+      ...(portalConfiguration ? { configuration: portalConfiguration } : {}),
     });
 
     return NextResponse.json({ success: true, url: session.url });

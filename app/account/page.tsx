@@ -71,6 +71,18 @@ export default function AccountPage() {
   );
   const displayAvatarUrl = pendingAvatarUrl || (!removeAvatarPending ? avatarUrl : "");
   const currentDevice = useMemo(() => browserLabel(), []);
+  const authProviders = useMemo(() => {
+    const providers = new Set(
+      (user?.identities || [])
+        .map((identity) => String(identity.provider || "").toLowerCase())
+        .filter(Boolean),
+    );
+    const primary = String(user?.app_metadata?.provider || "").toLowerCase();
+    if (primary) providers.add(primary);
+    return providers;
+  }, [user]);
+  const hasPasswordLogin = authProviders.has("email");
+  const googleManagedEmail = authProviders.has("google") && !hasPasswordLogin;
 
   useEffect(() => {
     return () => {
@@ -128,12 +140,12 @@ export default function AccountPage() {
         },
       };
       const nextEmail = email.trim();
-      if (nextEmail && nextEmail !== user.email) updates.email = nextEmail;
+      const emailChanged =
+        !googleManagedEmail && Boolean(nextEmail) && nextEmail !== String(user.email || "");
+      if (emailChanged) updates.email = nextEmail;
 
       const { error: updateError } = await supabase.auth.updateUser(updates);
       if (updateError) throw updateError;
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) throw refreshError;
       await refreshUser();
 
       if (previousPath && previousPath !== nextAvatarPath) void removeStoredAvatar(previousPath);
@@ -144,8 +156,8 @@ export default function AccountPage() {
       if (fileRef.current) fileRef.current.value = "";
 
       setMessage(
-        nextEmail !== user.email
-          ? "Profile saved. Check your email if confirmation is required before the new address becomes active."
+        emailChanged
+          ? "Profile saved. Confirm the email change from the verification message before the new address becomes active."
           : "Profile updated.",
       );
     } catch (value) {
@@ -312,13 +324,17 @@ export default function AccountPage() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="heyy-input w-full"
+              readOnly={googleManagedEmail}
+              aria-readonly={googleManagedEmail}
+              className={`heyy-input w-full ${googleManagedEmail ? "cursor-not-allowed opacity-70" : ""}`}
               style={{ paddingLeft: "2.75rem" }}
               placeholder="you@example.com"
             />
           </div>
           <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-            Changing your email may require confirmation before the new address becomes active.
+            {googleManagedEmail
+              ? "This email is managed by your Google account."
+              : "Changing your email requires confirmation before the new address becomes active."}
           </p>
 
           <Button onClick={() => void saveProfile()} disabled={saving} className="mt-6">
@@ -348,10 +364,12 @@ export default function AccountPage() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <Button variant="secondary" onClick={() => void sendPasswordReset()}>
-              <KeyRound size={16} /> Password reset
-            </Button>
+          <div className={`mt-4 grid gap-2 ${hasPasswordLogin ? "sm:grid-cols-2" : ""}`}>
+            {hasPasswordLogin && (
+              <Button variant="secondary" onClick={() => void sendPasswordReset()}>
+                <KeyRound size={16} /> Password reset
+              </Button>
+            )}
             <Button
               variant="secondary"
               disabled={sessionBusy}
@@ -361,6 +379,11 @@ export default function AccountPage() {
               Sign out other devices
             </Button>
           </div>
+          {!hasPasswordLogin && authProviders.has("google") && (
+            <p className="mt-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">
+              Password access is managed through your Google account.
+            </p>
+          )}
 
           <p className="mt-5 text-xs font-semibold leading-5 text-[var(--text-muted)]">
             To sign out this browser, use Sign out from the account menu in the header.

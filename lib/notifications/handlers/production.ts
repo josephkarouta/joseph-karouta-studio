@@ -1,9 +1,10 @@
-import { resend } from "../resend";
-import { buildClientProjectHref } from "../content";
+import { buildClientProjectHref, buildNotificationKey } from "../content";
 import { NotificationPayload } from "../types";
 import { buildEmail, buildPlainTextEmail } from "../templates";
+import { sitePath } from "@/lib/site-url";
+import { productionTemplateKey, resolveCommunicationTemplate } from "@/lib/communications/templates";
+import { sendTrackedEmail } from "@/lib/communications/send-email";
 
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Heyy Studio <hello@heyystudio.com>";
 
 export async function handleProductionNotification(payload: NotificationPayload) {
   switch (payload.event) {
@@ -373,38 +374,104 @@ async function sendClientEmail(payload: NotificationPayload, options: EmailOptio
     if (isBilling && !delivery.billingEmail) return;
     if (!isBilling && !delivery.productionEmail) return;
   }
+
+  const key = productionTemplateKey(payload.event, "client");
+  const resolved = key
+    ? await resolveCommunicationTemplate({
+        templateKey: key,
+        fallback: {
+          subject: options.subject,
+          preheader: options.intro,
+          eyebrow: options.eyebrow,
+          title: options.title,
+          body: options.intro,
+          ctaLabel: options.ctaLabel,
+        },
+        variables: productionTemplateVariables(payload, options),
+      })
+    : null;
+  if (resolved && !resolved.enabled) return;
+
+  const finalOptions = resolved
+    ? { ...options, subject: resolved.subject, eyebrow: resolved.eyebrow, title: resolved.title, intro: resolved.body, ctaLabel: resolved.ctaLabel }
+    : options;
   const template = {
-    ...options,
+    ...finalOptions,
     recipient: "client" as const,
     studio: payload.studio,
     projectName: payload.projectName,
     service: payload.service,
+    preheader: resolved?.preheader || finalOptions.intro,
   };
-  await resend.emails.send({
-    from: FROM_EMAIL,
+  const notificationKey = buildNotificationKey(payload) || `${payload.event}:${payload.projectId || payload.projectName || "project"}`;
+  await sendTrackedEmail({
+    eventKey: `production-email:${notificationKey}:client`,
+    userId: payload.userId || null,
     to: payload.clientEmail,
-    subject: options.subject,
+    templateKey: key || `production.${payload.event}.client`,
+    subject: finalOptions.subject,
     html: buildEmail(template),
     text: buildPlainTextEmail(template),
+    relatedType: "production",
+    relatedId: stringValue(payload.metadata?.productionJobId || payload.metadata?.requestId || payload.projectId) || null,
+    metadata: { event: payload.event },
   });
 }
 
 async function sendAdminEmail(payload: NotificationPayload, options: EmailOptions) {
   if (!process.env.ADMIN_EMAIL) return;
+  const key = productionTemplateKey(payload.event, "admin");
+  const resolved = key
+    ? await resolveCommunicationTemplate({
+        templateKey: key,
+        fallback: {
+          subject: options.subject,
+          preheader: options.intro,
+          eyebrow: options.eyebrow,
+          title: options.title,
+          body: options.intro,
+          ctaLabel: options.ctaLabel,
+        },
+        variables: productionTemplateVariables(payload, options),
+      })
+    : null;
+  if (resolved && !resolved.enabled) return;
+
+  const finalOptions = resolved
+    ? { ...options, subject: resolved.subject, eyebrow: resolved.eyebrow, title: resolved.title, intro: resolved.body, ctaLabel: resolved.ctaLabel }
+    : options;
   const template = {
-    ...options,
+    ...finalOptions,
     recipient: "admin" as const,
     studio: payload.studio,
     projectName: payload.projectName,
     service: payload.service,
+    preheader: resolved?.preheader || finalOptions.intro,
   };
-  await resend.emails.send({
-    from: FROM_EMAIL,
+  const notificationKey = buildNotificationKey(payload) || `${payload.event}:${payload.projectId || payload.projectName || "project"}`;
+  await sendTrackedEmail({
+    eventKey: `production-email:${notificationKey}:admin`,
+    userId: null,
     to: process.env.ADMIN_EMAIL,
-    subject: options.subject,
+    templateKey: key || `production.${payload.event}.admin`,
+    subject: finalOptions.subject,
     html: buildEmail(template),
     text: buildPlainTextEmail(template),
+    relatedType: "production",
+    relatedId: stringValue(payload.metadata?.productionJobId || payload.metadata?.requestId || payload.projectId) || null,
+    metadata: { event: payload.event },
   });
+}
+
+function productionTemplateVariables(payload: NotificationPayload, options: EmailOptions) {
+  return {
+    project_name: payload.projectName || "your project",
+    service: payload.service || "production",
+    studio: payload.studio || "Heyy Studio",
+    client_name: payload.clientName || "Client",
+    amount: options.amount || "",
+    status: options.status || "",
+  };
 }
 
 function productionStatusContent(event: NotificationPayload["event"], status: string) {
@@ -455,10 +522,6 @@ function statusLabel(event: NotificationPayload["event"]) {
   return labels[event] || "Updated";
 }
 
-function sitePath(path: string) {
-  const base = String(process.env.NEXT_PUBLIC_SITE_URL || "https://heyystudio.com").replace(/\/+$/, "");
-  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
-}
 
 function stringValue(value: unknown) {
   return value === undefined || value === null ? "" : String(value).trim();

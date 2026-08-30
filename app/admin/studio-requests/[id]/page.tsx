@@ -19,6 +19,14 @@ type StudioRequest = {
   created_at: string;
 };
 
+type QuoteTemplate = {
+  id: string;
+  name: string;
+  studio?: string | null;
+  service_id?: string | null;
+  content: Record<string, unknown>;
+};
+
 type WorkspaceQuote = {
   id: string;
   title: string;
@@ -1701,9 +1709,42 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
   const [estimatedDays, setEstimatedDays] = useState("");
   const [includedRevisions, setIncludedRevisions] = useState("");
   const [extraRevisionFee, setExtraRevisionFee] = useState("");
+  const [quoteTemplates, setQuoteTemplates] = useState<QuoteTemplate[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [sending, setSending] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/admin/templates?kind=quote", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!active) return;
+        const studio = String(request.studio || "").toLowerCase();
+        const serviceId = String(request.metadata?.service_id || "").toLowerCase();
+        setQuoteTemplates((data.templates || []).filter((template: QuoteTemplate) => {
+          const templateStudio = String(template.studio || "").toLowerCase();
+          const templateService = String(template.service_id || "").toLowerCase();
+          return (!templateStudio || templateStudio === studio) && (!templateService || templateService === serviceId);
+        }));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [request.studio, request.metadata?.service_id]);
+
+  function applyTemplate(templateId: string) {
+    setSelectedTemplate(templateId);
+    const template = quoteTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    const content = template.content || {};
+    if (content.title) setTitle(String(content.title));
+    if (content.description) setDescription(String(content.description));
+    if (content.amount !== undefined && content.amount !== null) setAmount(String(content.amount));
+    if (content.estimated_days !== undefined && content.estimated_days !== null) setEstimatedDays(String(content.estimated_days));
+    if (content.included_revisions !== undefined && content.included_revisions !== null) setIncludedRevisions(String(content.included_revisions));
+    if (content.extra_revision_fee !== undefined && content.extra_revision_fee !== null) setExtraRevisionFee(String(content.extra_revision_fee));
+  }
 
   async function createQuote() {
     setErrorMessage("");
@@ -1785,6 +1826,23 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
 
   return (
     <div>
+      {quoteTemplates.length > 0 && (
+        <label className="heyy-field">
+          <span className="heyy-field-label">Start from a template</span>
+          <select
+            value={selectedTemplate}
+            onChange={(event) => applyTemplate(event.target.value)}
+            className="heyy-review-input"
+          >
+            <option value="">Choose a saved quote template</option>
+            {quoteTemplates.map((template) => (
+              <option key={template.id} value={template.id}>{template.name}</option>
+            ))}
+          </select>
+          <p className="mt-2 text-[10px] font-bold leading-5 text-slate-500">A template fills the starting values only. You can still edit every field before sending.</p>
+        </label>
+      )}
+
       <label className="heyy-field">
         <span className="heyy-field-label">Quote Title</span>
         <input

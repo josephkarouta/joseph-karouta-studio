@@ -1,3 +1,5 @@
+import { getSiteUrl } from "@/lib/site-url";
+
 type EmailDetail = {
   label: string;
   value?: string | number | null;
@@ -47,7 +49,7 @@ export function baseEmail({
   ctaLabel = "Open Heyy Studio",
   ctaUrl,
 }: BaseEmailProps) {
-  const siteUrl = cleanSiteUrl(process.env.NEXT_PUBLIC_SITE_URL || "https://heyystudio.com");
+  const siteUrl = getSiteUrl();
   const theme = studioThemes[normaliseStudio(studio)] || {
     accent: "#7c3aed",
     accentDark: "#5721b8",
@@ -55,7 +57,6 @@ export function baseEmail({
     label: "Heyy Studio",
   };
   const destination = ctaUrl || siteUrl;
-  const logoUrl = `${siteUrl}/brand/heyy/heyy-email-logo.png`;
   const allDetails: EmailDetail[] = [
     projectName ? { label: "Project", value: projectName } : null,
     service ? { label: "Service", value: service } : null,
@@ -86,7 +87,7 @@ export function baseEmail({
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="padding:26px 30px 20px;vertical-align:middle;">
-                      <img src="${escapeAttribute(logoUrl)}" width="126" alt="Heyy Studio" style="display:block;width:126px;height:auto;border:0;outline:none;text-decoration:none;" />
+                      <img src="cid:heyy-studio-logo" alt="Heyy Studio" width="148" style="display:block;width:148px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />
                     </td>
                     <td align="right" style="padding:26px 30px 20px;color:#ffffff;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;vertical-align:middle;">
                       ${escapeHtml(recipientLabel)}
@@ -196,9 +197,6 @@ function normaliseStudio(studio?: string | null) {
     .replace(/^_+|_+$/g, "");
 }
 
-function cleanSiteUrl(value: string) {
-  return value.replace(/\/+$/, "");
-}
 
 function escapeHtml(value: string) {
   return value

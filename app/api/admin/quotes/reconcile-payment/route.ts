@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { processQuotePayment } from "@/lib/payments/process-quote-payment";
 
-import { requireAdminApiAccess } from "@/lib/server/admin-api";
+import { requireAdminApiCapability } from "@/lib/server/admin-api";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const serviceSupabase = createClient(
@@ -41,8 +41,8 @@ async function getAuthenticatedUser() {
 }
 
 export async function POST(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   try {
     const user = await getAuthenticatedUser();

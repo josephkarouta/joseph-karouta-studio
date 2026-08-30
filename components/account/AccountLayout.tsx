@@ -7,6 +7,7 @@ import {
   Bell,
   CircleDollarSign,
   CreditCard,
+  ReceiptText,
   Settings,
   SlidersHorizontal,
   ShieldCheck,
@@ -22,6 +23,7 @@ const nav = [
   ["Preferences", "/account/preferences", SlidersHorizontal],
   ["Privacy & data", "/account/privacy", ShieldCheck],
   ["Billing & plan", "/billing", CreditCard],
+  ["Payment history", "/account/payments", ReceiptText],
   ["Credits", "/credits", CircleDollarSign],
   ["Notifications", "/notifications", Bell],
 ] as const;

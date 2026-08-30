@@ -154,8 +154,16 @@ export default function HomePage() {
         <div data-home-parallax="-0.06" className="home-motion-parallax absolute -right-52 top-4 -z-10 h-[620px] w-[620px] rounded-full bg-blue-400/12 blur-[130px]" />
         <div data-home-parallax="0.04" className="home-motion-parallax absolute bottom-[-18rem] left-[38%] -z-10 h-[520px] w-[520px] rounded-full bg-violet-500/12 blur-[120px]" />
 
-        <PageContainer className="grid min-h-[690px] items-center gap-14 py-16 lg:grid-cols-[1.02fr_0.98fr] lg:py-24">
-          <div data-home-reveal className="relative z-10 max-w-4xl">
+        <img
+          src="/heyy-home-hero.webp"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-cover object-center lg:block"
+        />
+        <div className="hero-image-overlay pointer-events-none absolute inset-0 z-[1] hidden lg:block" />
+
+        <PageContainer className="relative z-10 min-h-[690px] py-16 lg:flex lg:items-center lg:py-24">
+          <div data-home-reveal className="relative z-10 max-w-[650px]">
             <p className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-[var(--accent-strong)]">
               Create with AI. Build with Experts.
             </p>
@@ -419,6 +427,32 @@ export default function HomePage() {
         .home-motion-parallax {
           transform: translate3d(0, var(--home-parallax-y, 0px), 0);
           will-change: transform;
+        }
+
+        .hero-image-overlay {
+          background: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.97) 0%,
+            rgba(255, 255, 255, 0.88) 28%,
+            rgba(255, 255, 255, 0.48) 45%,
+            rgba(255, 255, 255, 0.08) 61%,
+            rgba(255, 255, 255, 0) 72%
+          );
+        }
+
+        [data-theme="dark"] .hero-image-overlay {
+          background: linear-gradient(
+            90deg,
+            rgba(18, 16, 24, 0.96) 0%,
+            rgba(18, 16, 24, 0.84) 30%,
+            rgba(18, 16, 24, 0.42) 47%,
+            rgba(18, 16, 24, 0.05) 64%,
+            rgba(18, 16, 24, 0) 76%
+          );
+        }
+
+        [data-theme="dark"] .home-hero > img {
+          filter: brightness(0.72) saturate(0.9);
         }
 
         .hero-static-wrap {
@@ -1306,35 +1340,14 @@ function HeroPlayground() {
   return (
     <div
       data-home-reveal
-      className="hero-static-wrap relative mx-auto h-[430px] w-full max-w-[620px] py-5 lg:h-[520px] lg:py-0"
+      className="relative mt-10 w-full overflow-hidden rounded-[1.8rem] border border-[var(--border)] shadow-[var(--shadow-card)] lg:hidden"
       aria-hidden="true"
     >
-      <div className="hero-static-frame">
-        <div className="hero-static-grid" />
-        <div className="hero-static-plane hero-static-plane-dark">
-          <span className="hero-static-line hero-static-line-one" />
-          <span className="hero-static-line hero-static-line-two" />
-        </div>
-        <div className="hero-static-plane hero-static-plane-light">
-          <span className="hero-static-block hero-static-block-violet" />
-          <span className="hero-static-block hero-static-block-pink" />
-          <span className="hero-static-block hero-static-block-blue" />
-          <span className="hero-static-block hero-static-block-orange" />
-        </div>
-        <div className="hero-static-outline" />
-        <div className="hero-static-bar">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="hero-static-caption">
-          <span>IDEA</span>
-          <i />
-          <span>DIRECTION</span>
-          <i />
-          <span>FINISH</span>
-        </div>
-      </div>
+      <img
+        src="/heyy-home-hero.webp"
+        alt=""
+        className="aspect-[1.25/1] h-auto w-full object-cover object-[72%_center]"
+      />
     </div>
   );
 }

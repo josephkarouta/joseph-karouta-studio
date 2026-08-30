@@ -275,7 +275,7 @@ export default function BillingPage() {
         <div>
           <h1 className="text-4xl font-black tracking-[-.055em] sm:text-5xl">Billing & plan</h1>
           <p className="mt-3 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-            Review your plan, credits, renewal details, invoices and payment settings.
+            Review your plan, credits, renewal details and payment settings.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={() => void loadBilling()} disabled={loading || refreshing}>
@@ -393,7 +393,7 @@ export default function BillingPage() {
                   <p className="mt-1 text-sm font-black">{loading && !billing ? "Loading billing status…" : billingLine}</p>
                   {!loading && !hasPaidSubscription && definition.id !== "free" && (
                     <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-                      This is currently test or manually assigned access. Manage Billing appears after a subscription is completed through Stripe Checkout.
+                      This is currently test or manually assigned access. Subscription management appears after a paid plan is activated.
                     </p>
                   )}
                   {billing?.cancelAtPeriodEnd && (
@@ -447,16 +447,21 @@ export default function BillingPage() {
             <ReceiptText size={22} className="text-[var(--accent-strong)]" />
             <h2 className="mt-5 text-xl font-black">Subscription & payments</h2>
             <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-              Update your payment method, view invoices or cancel your subscription securely. Plan changes are scheduled from Heyy Studio for your next renewal so credits and billing stay aligned.
+              Update your payment method or cancel your subscription securely. Your Heyy Studio invoices are kept separately in Payment history.
             </p>
             {billing?.canManage ? (
-              <Button type="button" variant="secondary" className="mt-6 w-full" onClick={openPortal} disabled={openingPortal}>
-                {openingPortal ? <LoaderCircle size={16} className="animate-spin" /> : <CreditCard size={16} />}
-                Manage subscription
-              </Button>
+              <div className="mt-6 grid gap-2">
+                <Button type="button" variant="secondary" className="w-full" onClick={openPortal} disabled={openingPortal}>
+                  {openingPortal ? <LoaderCircle size={16} className="animate-spin" /> : <CreditCard size={16} />}
+                  Manage subscription
+                </Button>
+                <ButtonLink href="/account/payments" variant="ghost" className="w-full">
+                  <ReceiptText size={16} /> Payment history
+                </ButtonLink>
+              </div>
             ) : (
               <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">
-                No paid subscription is connected yet. Choose Starter or Pro to enable invoices, payment-method updates and cancellation.
+                No paid subscription is connected yet. Choose Starter or Pro to enable payment-method updates and subscription management.
               </div>
             )}
           </GlassCard>

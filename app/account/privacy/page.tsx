@@ -42,8 +42,6 @@ export default function PrivacyDataPage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [accountDeleteOpen, setAccountDeleteOpen] = useState(false);
-  const [accountConfirmation, setAccountConfirmation] = useState("");
-  const [accountReason, setAccountReason] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -113,11 +111,12 @@ export default function PrivacyDataPage() {
     }
   }
 
-  async function requestAccountDeletion() {
+  async function deleteAccount() {
     setAccountDeleting(true);
     setMessage("");
     setError("");
     try {
+      const supabase = createSupabaseBrowserClient();
       const access = await token();
       const response = await fetch("/api/account/delete-request", {
         method: "POST",
@@ -125,16 +124,18 @@ export default function PrivacyDataPage() {
           Authorization: `Bearer ${access}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ confirmation: accountConfirmation, reason: accountReason }),
+        body: JSON.stringify({ confirm: true }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Account deletion could not be requested.");
-      setMessage(data.message || "Your account deletion request has been recorded.");
-      setAccountDeleteOpen(false);
-      setAccountConfirmation("");
-      setAccountReason("");
+      if (!response.ok) throw new Error(data.error || "Account deletion could not be completed.");
+
+      // The server has removed the account. Clear the browser session/cache and
+      // leave the authenticated workspace immediately.
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      window.location.replace("/login?accountDeleted=1");
     } catch (value) {
-      setError(value instanceof Error ? value.message : "Account deletion could not be requested.");
+      setError(value instanceof Error ? value.message : "Account deletion could not be completed.");
+      setAccountDeleteOpen(false);
     } finally {
       setAccountDeleting(false);
     }
@@ -146,7 +147,7 @@ export default function PrivacyDataPage() {
         <Eyebrow>Account</Eyebrow>
         <h1 className="mt-3 text-4xl font-black tracking-[-.055em] sm:text-5xl">Privacy & data</h1>
         <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-          Manage personal project deletion and account-deletion requests from one place.
+          Manage personal project deletion and account privacy controls from one place.
         </p>
       </div>
 
@@ -165,7 +166,7 @@ export default function PrivacyDataPage() {
         <ShieldCheck size={22} className="text-[var(--accent-strong)]" />
         <h2 className="mt-5 text-xl font-black">Your privacy controls</h2>
         <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-          You can remove eligible personal Studio projects below or request deletion of your Heyy Studio account. Some completed billing, production or security records may need to be retained where required for legitimate business or legal reasons.
+          You can remove eligible personal Studio projects below or permanently delete your Heyy Studio account. Some completed billing, production or security records may need to be retained where required for legitimate business or legal reasons.
         </p>
       </GlassCard>
 
@@ -258,10 +259,10 @@ export default function PrivacyDataPage() {
         <TriangleAlert size={22} className="text-red-500" />
         <h2 className="mt-5 text-xl font-black">Delete Heyy Studio account</h2>
         <p className="mt-3 max-w-3xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-          Submit an account-deletion request when you want your Heyy Studio identity and personal workspace data removed. Completed financial and production records may need to be retained or anonymised separately where required.
+          Permanently delete your Heyy Studio login and personal workspace data. Active subscriptions are stopped first. Completed financial and production records may still be retained where legally required.
         </p>
         <Button className="mt-6" variant="secondary" onClick={() => setAccountDeleteOpen(true)}>
-          <Trash2 size={16} /> Request account deletion
+          <Trash2 size={16} /> Delete account
         </Button>
       </GlassCard>
 
@@ -285,19 +286,15 @@ export default function PrivacyDataPage() {
 
       {accountDeleteOpen && (
         <Modal onClose={() => !accountDeleting && setAccountDeleteOpen(false)}>
-          <ShieldCheck size={24} className="text-red-500" />
-          <h3 className="mt-4 text-2xl font-black">Request account deletion</h3>
+          <TriangleAlert size={24} className="text-red-500" />
+          <h3 className="mt-4 text-2xl font-black">Delete your account?</h3>
           <p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            This records a formal deletion request for the signed-in account. We may contact you if additional verification is needed before the request is completed.
+            This permanently deletes your Heyy Studio login and personal workspace data and cannot be undone. Any active subscription will be stopped first. Completed payment or production records may be retained only where required for accounting, fraud prevention or legal obligations.
           </p>
-          <label className="mt-5 block text-xs font-black uppercase tracking-[.12em] text-[var(--text-muted)]">Optional reason</label>
-          <textarea className="heyy-input mt-2 min-h-24 w-full resize-y" value={accountReason} onChange={(event) => setAccountReason(event.target.value)} placeholder="Optional" />
-          <label className="mt-5 block text-xs font-black uppercase tracking-[.12em] text-[var(--text-muted)]">Type DELETE MY ACCOUNT</label>
-          <input className="heyy-input mt-2 w-full" value={accountConfirmation} onChange={(event) => setAccountConfirmation(event.target.value)} />
           <div className="mt-6 flex justify-end gap-2">
-            <Button variant="ghost" disabled={accountDeleting} onClick={() => setAccountDeleteOpen(false)}>Cancel</Button>
-            <Button variant="secondary" disabled={accountDeleting || accountConfirmation !== "DELETE MY ACCOUNT"} onClick={() => void requestAccountDeletion()}>
-              {accountDeleting ? <LoaderCircle size={16} className="animate-spin" /> : <Trash2 size={16} />} Submit deletion request
+            <Button variant="ghost" disabled={accountDeleting} onClick={() => setAccountDeleteOpen(false)}>Keep account</Button>
+            <Button variant="secondary" disabled={accountDeleting} onClick={() => void deleteAccount()}>
+              {accountDeleting ? <LoaderCircle size={16} className="animate-spin" /> : <Trash2 size={16} />} Delete my account
             </Button>
           </div>
         </Modal>

@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { Notifications } from "@/lib/notifications";
 import { resolveProductionService } from "@/lib/production/service-registry";
 
-import { requireAdminApiAccess } from "@/lib/server/admin-api";
+import { requireAdminApiCapability } from "@/lib/server/admin-api";
+import { recordAdminAudit } from "@/lib/admin/audit";
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -14,8 +15,8 @@ function isNonNegativeNumber(value: unknown): value is number {
 }
 
 export async function POST(request: NextRequest) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+  const access = await requireAdminApiCapability("operations");
+  if (access.response) return access.response;
 
   try {
     const body = await request.json();
@@ -178,6 +179,15 @@ export async function POST(request: NextRequest) {
       .eq("id", requestId);
 
     if (updateError) throw updateError;
+
+    await recordAdminAudit({
+      actorUserId: access.user!.id,
+      action: "quote.created",
+      entityType: "workspace_quote",
+      entityId: quote.id,
+      summary: `Created and sent quote: ${title}`,
+      metadata: { request_id: studioRequest.id, amount: quote.amount, currency: quote.currency, service_id: productionService.id },
+    });
 
     await Notifications.emit({
       event: "quote.ready",

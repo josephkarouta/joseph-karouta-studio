@@ -3,63 +3,72 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { hasAdminRole } from "@/lib/auth/admin-role";
+import {
+  hasAdminCapability,
+  hasAdminRole,
+  type AdminCapability,
+} from "@/lib/auth/admin-role";
+import type { User } from "@supabase/supabase-js";
 
-/**
- * Defence-in-depth protection for /api/admin route handlers.
- *
- * proxy.ts already blocks unauthorised requests before they reach these routes,
- * but every admin endpoint also verifies the Supabase cookie session itself so
- * the service-role client can never be used without an authenticated admin.
- */
-export async function requireAdminApiAccess(): Promise<NextResponse | null> {
+async function authenticatedUser(): Promise<{ user: User | null; response: NextResponse | null }> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json(
-      { success: false, error: "Authentication is temporarily unavailable." },
-      { status: 503 },
-    );
+    return {
+      user: null,
+      response: NextResponse.json(
+        { success: false, error: "Authentication is temporarily unavailable." },
+        { status: 503 },
+      ),
+    };
   }
 
   const cookieStore = await cookies();
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
+      getAll() { return cookieStore.getAll(); },
       setAll(cookiesToSet) {
         try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        } catch {
-          // The proxy normally refreshes auth cookies first. A read-only cookie
-          // context must not weaken the authorisation check below.
-        }
+          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+        } catch {}
       },
     },
   });
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
+  const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) {
-    return NextResponse.json(
-      { success: false, error: "Admin sign-in required." },
-      { status: 401 },
-    );
+    return { user: null, response: NextResponse.json({ success: false, error: "Admin sign-in required." }, { status: 401 }) };
   }
+  return { user, response: null };
+}
 
-  if (!hasAdminRole(user)) {
-    return NextResponse.json(
-      { success: false, error: "Admin access required." },
-      { status: 403 },
-    );
+/** Full technical/super-admin only. */
+export async function requireAdminApiUser(): Promise<{ user: User | null; response: NextResponse | null }> {
+  const result = await authenticatedUser();
+  if (result.response || !result.user) return result;
+  if (!hasAdminRole(result.user)) {
+    return { user: null, response: NextResponse.json({ success: false, error: "Admin access required." }, { status: 403 }) };
   }
+  return result;
+}
 
-  return null;
+export async function requireAdminApiAccess(): Promise<NextResponse | null> {
+  const result = await requireAdminApiUser();
+  return result.response;
+}
+
+/** Capability-aware access for operational/business-admin routes. */
+export async function requireAdminApiCapability(
+  capability: AdminCapability,
+): Promise<{ user: User | null; response: NextResponse | null }> {
+  const result = await authenticatedUser();
+  if (result.response || !result.user) return result;
+  if (!hasAdminCapability(result.user, capability)) {
+    return {
+      user: null,
+      response: NextResponse.json({ success: false, error: "You do not have permission for this Admin action." }, { status: 403 }),
+    };
+  }
+  return result;
 }

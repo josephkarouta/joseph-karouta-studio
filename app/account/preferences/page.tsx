@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import AccountLayout from "@/components/account/AccountLayout";
+import { useAuth } from "@/components/auth-provider";
 import { Button, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -35,6 +36,8 @@ const defaults: Preferences = {
   in_app_messages: true,
 };
 
+const preferenceCache = new Map<string, Preferences>();
+
 async function token() {
   const { data, error } = await createSupabaseBrowserClient().auth.getSession();
   const value = data.session?.access_token;
@@ -43,14 +46,16 @@ async function token() {
 }
 
 export default function AccountPreferencesPage() {
-  const [preferences, setPreferences] = useState<Preferences>(defaults);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const cached = user?.id ? preferenceCache.get(user.id) : null;
+  const [preferences, setPreferences] = useState<Preferences>(cached || defaults);
+  const [loading, setLoading] = useState(!cached);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  async function load() {
-    setLoading(true);
+  async function load(options: { silent?: boolean } = {}) {
+    if (!options.silent) setLoading(true);
     setError("");
     try {
       const access = await token();
@@ -60,17 +65,28 @@ export default function AccountPreferencesPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Preferences could not be loaded.");
-      setPreferences({ ...defaults, ...(data.preferences || {}) });
+      const next = { ...defaults, ...(data.preferences || {}) };
+      setPreferences(next);
+      if (user?.id) preferenceCache.set(user.id, next);
     } catch (value) {
       setError(value instanceof Error ? value.message : "Preferences could not be loaded.");
     } finally {
-      setLoading(false);
+      if (!options.silent) setLoading(false);
     }
   }
 
   useEffect(() => {
+    const nextCached = user?.id ? preferenceCache.get(user.id) : null;
+    if (nextCached) {
+      setPreferences(nextCached);
+      setLoading(false);
+      void load({ silent: true });
+      return;
+    }
     void load();
-  }, []);
+    // The signed-in user is stable while this page is mounted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   function update(key: keyof Preferences, value: boolean) {
     setPreferences((current) => ({ ...current, [key]: value }));
@@ -93,7 +109,9 @@ export default function AccountPreferencesPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Preferences could not be saved.");
-      setPreferences({ ...defaults, ...(data.preferences || {}) });
+      const next = { ...defaults, ...(data.preferences || {}) };
+      setPreferences(next);
+      if (user?.id) preferenceCache.set(user.id, next);
       setMessage("Preferences saved.");
     } catch (value) {
       setError(value instanceof Error ? value.message : "Preferences could not be saved.");

@@ -43,12 +43,15 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
   const [awaitingVerification, setAwaitingVerification] = useState(Boolean(requestedVerificationEmail));
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const accountDeleted = searchParams.get("accountDeleted") === "1";
   const [message, setMessage] = useState(
     requestedVerificationEmail
       ? "Enter the verification code from your email, or resend a new code."
-      : searchParams.get("authError") || "",
+      : accountDeleted
+        ? "Your Heyy Studio account has been deleted."
+        : searchParams.get("authError") || "",
   );
-  const [success, setSuccess] = useState(Boolean(requestedVerificationEmail));
+  const [success, setSuccess] = useState(Boolean(requestedVerificationEmail) || accountDeleted);
 
   const supabase = createSupabaseBrowserClient();
   const { resolvedTheme } = useTheme();
@@ -183,8 +186,17 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
         throw new Error("Your email could not be verified. Request a new code and try again.");
       }
 
-      // The verified session is now active. The shared credit server will grant
-      // the Free allowance on the first authenticated account/generation call.
+      // Send the one-time welcome email after verified signup. This is tracked
+      // server-side, so retries or a repeated callback cannot send it twice.
+      try {
+        await fetch("/api/account/welcome", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${data.session.access_token}` },
+        });
+      } catch {
+        // Welcome email is non-blocking; account verification has already succeeded.
+      }
+
       window.location.href = next;
     } catch (value) {
       setMessage(value instanceof Error ? value.message : "Verification failed.");

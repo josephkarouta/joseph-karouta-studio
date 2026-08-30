@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { sendWelcomeEmail } from "@/lib/communications/welcome";
 
 function safeNext(value: string | null): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
@@ -71,6 +72,21 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return loginErrorResponse(request, next, error.message);
+  }
+
+  // Only brand-new Google accounts receive the welcome email here. Existing
+  // customers signing in again must not suddenly receive a new-user message.
+  try {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (user) {
+      const ageMs = Date.now() - new Date(user.created_at).getTime();
+      if (ageMs >= 0 && ageMs <= 10 * 60 * 1000) {
+        await sendWelcomeEmail(user);
+      }
+    }
+  } catch (welcomeError) {
+    console.error("Welcome email after Google signup failed:", welcomeError);
   }
 
   return response;

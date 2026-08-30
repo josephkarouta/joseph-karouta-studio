@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { requireAdminApiAccess } from "@/lib/server/admin-api";
+import { requireAdminApiUser, requireAdminApiCapability } from "@/lib/server/admin-api";
+import { recordAdminAudit } from "@/lib/admin/audit";
+
 const map = {
   careers: { table: "career_positions", key: "id" },
   pages: { table: "public_pages", key: "slug" },
@@ -11,6 +13,8 @@ const map = {
   generations: { table: "generation_jobs", key: "id" },
 } as const;
 type Resource = keyof typeof map | "users";
+type AdminClient = ReturnType<typeof admin>;
+type UnknownRow = Record<string, unknown>;
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -92,12 +96,189 @@ function bodyText(resource: string, row: Record<string, unknown>) {
   return items.map(String).join("\n\n");
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ resource: string }> }) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
+function asRecord(value: unknown): UnknownRow {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRow : {};
+}
 
+function firstText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return "";
+}
+
+function firstNumber(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function findText(value: unknown, keys: string[], depth = 0): string {
+  if (depth > 2 || !value) return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const match = findText(item, keys, depth + 1);
+      if (match) return match;
+    }
+    return "";
+  }
+  if (typeof value !== "object") return "";
+  const row = value as UnknownRow;
+  for (const key of keys) {
+    const candidate = firstText(row[key]);
+    if (candidate) return candidate;
+  }
+  for (const nested of Object.values(row)) {
+    const match = findText(nested, keys, depth + 1);
+    if (match) return match;
+  }
+  return "";
+}
+
+function findNumber(value: unknown, keys: string[], depth = 0): number | null {
+  if (depth > 2 || !value) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const match = findNumber(item, keys, depth + 1);
+      if (match !== null) return match;
+    }
+    return null;
+  }
+  if (typeof value !== "object") return null;
+  const row = value as UnknownRow;
+  for (const key of keys) {
+    const candidate = firstNumber(row[key]);
+    if (candidate !== null) return candidate;
+  }
+  for (const nested of Object.values(row)) {
+    const match = findNumber(nested, keys, depth + 1);
+    if (match !== null) return match;
+  }
+  return null;
+}
+
+function studioFromTool(tool: unknown) {
+  const value = String(tool || "").toLowerCase();
+  if (value.startsWith("brand_")) return "Brand Studio";
+  if (value.startsWith("marketing_")) return "Marketing Studio";
+  if (value.startsWith("architecture_")) return "Architecture Studio";
+  if (value.startsWith("interior_")) return "Interior Design Studio";
+  return "";
+}
+
+function generationModel(row: UnknownRow) {
+  const keys = ["model", "model_name", "modelName", "image_model", "video_model", "text_model"];
+  return findText(row.input, keys) || findText(row.output, keys);
+}
+
+function generationCreditsReserved(row: UnknownRow) {
+  return findNumber(row.input, [
+    "credits_reserved",
+    "reserved_credits",
+    "credit_cost",
+    "creditCost",
+    "credits",
+    "cost_credits",
+    "costCredits",
+  ]);
+}
+
+function generationCreditsUsed(row: UnknownRow) {
+  return findNumber(row.output, [
+    "credits_used",
+    "credits_charged",
+    "charged_credits",
+    "credit_cost",
+    "creditCost",
+    "credits",
+  ]);
+}
+
+function generationAssetUrl(row: UnknownRow) {
+  return findText(row.output, [
+    "asset_url",
+    "assetUrl",
+    "download_url",
+    "downloadUrl",
+    "image_url",
+    "imageUrl",
+    "video_url",
+    "videoUrl",
+    "url",
+  ]);
+}
+
+function generationAssetId(row: UnknownRow) {
+  return findText(row.output, ["asset_id", "assetId", "generated_asset_id", "generatedAssetId"]);
+}
+
+function generationDurationMs(row: UnknownRow) {
+  const start = Date.parse(String(row.created_at || ""));
+  const endValue = row.completed_at || (["succeeded", "failed", "cancelled"].includes(String(row.status || "").toLowerCase()) ? row.updated_at : null);
+  const end = Date.parse(String(endValue || ""));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return end - start;
+}
+
+function generationFacets(rows: UnknownRow[]) {
+  const unique = (key: "tool" | "provider" | "status") => Array.from(new Set(rows.map((row) => firstText(row[key])).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  return {
+    tools: unique("tool"),
+    providers: unique("provider"),
+    statuses: unique("status"),
+  };
+}
+
+async function listAuthUsers(client: AdminClient) {
+  const { data, error } = await client.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) {
+    console.error("Generation monitoring could not load Auth users:", error.message);
+    return [];
+  }
+  return data.users;
+}
+
+async function loadProjectRows(client: AdminClient, ids?: string[]) {
+  let query = client.from("studio_projects").select("*");
+  if (ids?.length) query = query.in("id", ids);
+  else query = query.limit(2000);
+  const { data, error } = await query;
+  if (error) {
+    console.error("Generation monitoring could not load studio projects:", error.message);
+    return [] as UnknownRow[];
+  }
+  return (data || []) as UnknownRow[];
+}
+
+function projectSearchText(row: UnknownRow) {
+  return [row.id, row.name, row.title, row.project_name, row.studio, row.project_type]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+}
+
+function safeOrId(value: string) {
+  return /^[a-zA-Z0-9_-]+$/.test(value) ? value : "";
+}
+
+async function resourceAccess(resource: string) {
+  if (resource === "users" || resource === "generations") {
+    return requireAdminApiUser();
+  }
+  const capability = resource === "careers" || resource === "applications" ? "careers" : "content";
+  return requireAdminApiCapability(capability);
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ resource: string }> }) {
   try {
     const { resource } = await params;
+    const access = await resourceAccess(resource);
+    if (access.response) return access.response;
     const client = admin();
     if (resource === "users") {
       const { data, error } = await client.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -119,6 +300,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ res
             name: user.user_metadata?.full_name || user.user_metadata?.name || user.email,
             email: user.email,
             status: String(subscription?.status || "active"),
+            role: String(user.app_metadata?.role || (user.app_metadata?.is_admin === true ? "admin" : "customer")),
             summary: `${String(subscription?.plan || "free").toUpperCase()} · ${(wallet?.monthly_balance || 0) + (wallet?.purchased_balance || 0) - (wallet?.reserved_balance || 0)} credits`,
             created_at: user.created_at,
           };
@@ -127,6 +309,134 @@ export async function GET(_request: Request, { params }: { params: Promise<{ res
     }
     if (!(resource in map)) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });
     const config = map[resource as keyof typeof map];
+
+    if (resource === "generations") {
+      const searchParams = new URL(request.url).searchParams;
+      const parsedPage = Number.parseInt(searchParams.get("page") || "1", 10);
+      const parsedPageSize = Number.parseInt(searchParams.get("pageSize") || "25", 10);
+      const page = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
+      const pageSize = Number.isFinite(parsedPageSize) ? Math.min(100, Math.max(1, parsedPageSize)) : 25;
+      const rawSearch = (searchParams.get("q") || "").trim();
+      const search = rawSearch.replace(/[,%()]/g, " ").replace(/\s+/g, " ").trim();
+      const tool = (searchParams.get("tool") || "").trim();
+      const provider = (searchParams.get("provider") || "").trim();
+      const status = (searchParams.get("status") || "").trim();
+      const dateWindow = (searchParams.get("date") || "all").trim();
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const authUsers = await listAuthUsers(client);
+      let searchableProjects: UnknownRow[] = [];
+      if (search) searchableProjects = await loadProjectRows(client);
+
+      let generationQuery = client
+        .from(config.table)
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false });
+
+      if (tool) generationQuery = generationQuery.eq("tool", tool);
+      if (provider) generationQuery = generationQuery.eq("provider", provider);
+      if (status) generationQuery = generationQuery.eq("status", status);
+
+      const dateDays: Record<string, number> = { "24h": 1, "7d": 7, "30d": 30, "90d": 90 };
+      if (dateDays[dateWindow]) {
+        generationQuery = generationQuery.gte("created_at", new Date(Date.now() - dateDays[dateWindow] * 24 * 60 * 60 * 1000).toISOString());
+      }
+
+      if (search) {
+        const pattern = `%${search}%`;
+        const needle = search.toLowerCase();
+        const matchingUserIds = authUsers
+          .filter((user) => [user.email, user.user_metadata?.full_name, user.user_metadata?.name, user.id]
+            .some((value) => String(value || "").toLowerCase().includes(needle)))
+          .map((user) => user.id);
+        const matchingProjectIds = searchableProjects
+          .filter((row) => projectSearchText(row).includes(needle))
+          .map((row) => safeOrId(String(row.id || "")))
+          .filter(Boolean);
+        const conditions = [
+          `tool.ilike.${pattern}`,
+          `provider.ilike.${pattern}`,
+          `project_id.ilike.${pattern}`,
+          `provider_job_id.ilike.${pattern}`,
+          `status.ilike.${pattern}`,
+          `error.ilike.${pattern}`,
+          `request_key.ilike.${pattern}`,
+          `active_key.ilike.${pattern}`,
+        ];
+        if (matchingUserIds.length) conditions.push(`user_id.in.(${matchingUserIds.join(",")})`);
+        if (matchingProjectIds.length) conditions.push(`project_id.in.(${matchingProjectIds.join(",")})`);
+        generationQuery = generationQuery.or(conditions.join(","));
+      }
+
+      const [pageResult, facetResult] = await Promise.all([
+        generationQuery.range(from, to),
+        client.from(config.table).select("tool,provider,status").order("created_at", { ascending: false }).limit(2000),
+      ]);
+      if (pageResult.error) throw pageResult.error;
+      if (facetResult.error) console.error("Generation monitoring facets could not load:", facetResult.error.message);
+
+      const rows = (pageResult.data || []) as UnknownRow[];
+      const userMap = new Map<string, { id: string; name: string; email: string }>(authUsers.map((user) => [user.id, {
+        id: user.id,
+        name: firstText(user.user_metadata?.full_name, user.user_metadata?.name, user.email, user.id),
+        email: firstText(user.email),
+      }]));
+      const pageUserIds = Array.from(new Set(rows.map((row) => firstText(row.user_id)).filter(Boolean)));
+      const missingUserIds = pageUserIds.filter((id) => !userMap.has(id));
+      if (missingUserIds.length) {
+        const missingUsers = await Promise.all(missingUserIds.map((id) => client.auth.admin.getUserById(id)));
+        missingUsers.forEach((result) => {
+          const user = result.data.user;
+          if (!user) return;
+          userMap.set(user.id, {
+            id: user.id,
+            name: firstText(user.user_metadata?.full_name, user.user_metadata?.name, user.email, user.id),
+            email: firstText(user.email),
+          });
+        });
+      }
+
+      const pageProjectIds = Array.from(new Set(rows.map((row) => firstText(row.project_id)).filter(Boolean)));
+      let pageProjects = searchableProjects;
+      if (!searchableProjects.length && pageProjectIds.length) pageProjects = await loadProjectRows(client, pageProjectIds);
+      const projectMap = new Map(pageProjects.map((row) => [String(row.id || ""), row]));
+
+      const items = rows.map((row) => {
+        const input = asRecord(row.input);
+        const userId = firstText(row.user_id);
+        const projectId = firstText(row.project_id);
+        const user = userMap.get(userId);
+        const project = projectMap.get(projectId);
+        const projectName = firstText(project?.name, project?.title, project?.project_name, findText(input, ["project_name", "projectName"]));
+        const projectStudio = firstText(project?.studio, project?.project_type, findText(input, ["studio", "studio_name", "studioName"]), studioFromTool(row.tool));
+        return {
+          ...row,
+          user_name: user?.name || (userId ? "Unknown user" : "System / no user"),
+          user_email: user?.email || "",
+          project_name: projectName || (projectId ? "Project record unavailable" : "Quick Tool / no project"),
+          project_studio: projectStudio,
+          project_href: project ? `/projects/${encodeURIComponent(projectId)}` : "",
+          model_name: generationModel(row),
+          credits_reserved: generationCreditsReserved(row),
+          credits_used: generationCreditsUsed(row),
+          duration_ms: generationDurationMs(row),
+          asset_url: generationAssetUrl(row),
+          asset_id: generationAssetId(row),
+        };
+      });
+
+      const total = pageResult.count || 0;
+      return NextResponse.json({
+        items,
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        filters: generationFacets((facetResult.data || []) as UnknownRow[]),
+      });
+    }
+
     const { data, error } = await client.from(config.table).select("*").order("created_at", { ascending: false }).limit(500);
     if (error) throw error;
     const items = (data || []).map((row) => resource === "pages" || resource === "help" || resource === "careers" ? { ...row, body: bodyText(resource, row) } : row);
@@ -137,11 +447,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ res
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ resource: string }> }) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
-
   try {
     const { resource } = await params;
+    const access = await resourceAccess(resource);
+    if (access.response) return access.response;
     if (!(resource in map) || ["contact", "applications", "generations"].includes(resource)) {
       return NextResponse.json({ error: "Creation is not supported for this resource." }, { status: 400 });
     }
@@ -150,6 +459,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     const payload = { ...sanitize(resource, body), status: "draft" };
     const { data, error } = await admin().from(config.table).insert(payload).select("*").single();
     if (error) throw error;
+    await recordAdminAudit({ actorUserId: access.user?.id || null, action: `platform.${resource}.created`, entityType: resource, entityId: String((data as Record<string, unknown>)?.[config.key] || ""), summary: `Created ${resource} record: ${String((data as Record<string, unknown>)?.title || (data as Record<string, unknown>)?.name || (data as Record<string, unknown>)?.[config.key] || "record")}` });
     return NextResponse.json({ item: data });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to create resource." }, { status: 500 });
@@ -157,14 +467,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ resource: string }> }) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
-
   try {
     const { resource } = await params;
+    const access = await resourceAccess(resource);
+    if (access.response) return access.response;
+    if (resource === "generations") {
+      return NextResponse.json({ error: "Generation monitoring is read-only. Generation state is managed by the generation and credit workflows." }, { status: 405 });
+    }
+    const body = await request.json() as Record<string, unknown>;
+    if (resource === "users") {
+      const id = String(body.id || "").trim();
+      const role = String(body.role || "customer").trim().toLowerCase();
+      if (!id || !["customer", "business_admin", "admin"].includes(role)) {
+        return NextResponse.json({ error: "User and valid role are required." }, { status: 400 });
+      }
+      if (id === access.user?.id && role !== "admin") {
+        return NextResponse.json({ error: "You cannot remove your own full Admin access." }, { status: 409 });
+      }
+      const client = admin();
+      const { data: current, error: currentError } = await client.auth.admin.getUserById(id);
+      if (currentError || !current.user) throw currentError || new Error("User not found.");
+      const metadata = { ...(current.user.app_metadata || {}) } as Record<string, unknown>;
+      const existingRoles = Array.isArray(metadata.roles) ? metadata.roles.map(String).filter((value) => !["admin", "business_admin"].includes(value.toLowerCase())) : [];
+      delete metadata.role;
+      delete metadata.is_admin;
+      if (role === "admin") { metadata.role = "admin"; metadata.is_admin = true; metadata.roles = [...existingRoles, "admin"]; }
+      else if (role === "business_admin") { metadata.role = "business_admin"; metadata.roles = [...existingRoles, "business_admin"]; }
+      else { metadata.roles = existingRoles; }
+      const { data, error } = await client.auth.admin.updateUserById(id, { app_metadata: metadata });
+      if (error) throw error;
+      await recordAdminAudit({ actorUserId: access.user?.id || null, action: "admin_role.updated", entityType: "user", entityId: id, summary: `Changed Admin role for ${current.user.email || id} to ${role}`, metadata: { role } });
+      return NextResponse.json({ success: true, item: { id, role, email: data.user?.email || current.user.email } });
+    }
     if (!(resource in map)) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });
     const config = map[resource as keyof typeof map];
-    const body = await request.json() as Record<string, unknown>;
     const id = String(body.id || "");
     if (!id) return NextResponse.json({ error: "Missing record ID." }, { status: 400 });
     delete body.id;
@@ -173,6 +509,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
     if (update.status && update.status !== "published") update.published_at = null;
     const { data, error } = await admin().from(config.table).update(update).eq(config.key, id).select("*").single();
     if (error) throw error;
+    await recordAdminAudit({ actorUserId: access.user?.id || null, action: `platform.${resource}.updated`, entityType: resource, entityId: id, summary: `Updated ${resource} record: ${String((data as Record<string, unknown>)?.title || (data as Record<string, unknown>)?.name || id)}` });
     return NextResponse.json({ success: true, item: data });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to update resource." }, { status: 500 });
@@ -180,17 +517,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ resource: string }> }) {
-  const adminAccessError = await requireAdminApiAccess();
-  if (adminAccessError) return adminAccessError;
-
   try {
     const { resource } = await params;
+    const access = await resourceAccess(resource);
+    if (access.response) return access.response;
+    if (resource === "generations") {
+      return NextResponse.json({ error: "Generation monitoring is read-only." }, { status: 405 });
+    }
     if (!(resource in map)) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });
     const config = map[resource as keyof typeof map];
     const id = new URL(request.url).searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing record ID." }, { status: 400 });
     const { error } = await admin().from(config.table).delete().eq(config.key, id);
     if (error) throw error;
+    await recordAdminAudit({ actorUserId: access.user?.id || null, action: `platform.${resource}.deleted`, entityType: resource, entityId: id, summary: `Deleted ${resource} record: ${id}` });
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to delete resource." }, { status: 500 });

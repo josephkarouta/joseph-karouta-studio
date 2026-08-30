@@ -1,4 +1,5 @@
 import { baseEmail } from "./base-email";
+import { getSiteUrl } from "@/lib/site-url";
 
 type EmailDetail = {
   label: string;
@@ -43,7 +44,7 @@ export function buildPlainTextEmail(options: BuildEmailOptions) {
     ...details.flatMap((detail) => [`${detail.label}:`, String(detail.value), ""]),
     options.note || "",
     "",
-    `${options.ctaLabel || "Open Heyy Studio"}: ${options.ctaUrl || process.env.NEXT_PUBLIC_SITE_URL || "https://heyystudio.com"}`,
+    `${options.ctaLabel || "Open Heyy Studio"}: ${options.ctaUrl || getSiteUrl()}`,
     "",
     "Create with AI. Build with Experts.",
     "Heyy Studio",

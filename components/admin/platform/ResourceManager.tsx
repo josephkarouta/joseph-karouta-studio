@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, LoaderCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ExternalLink, Eye, LoaderCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Button, GlassCard, StatusPill } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 
@@ -13,6 +13,7 @@ type Row = Record<string, unknown> & {
   title?: string;
   name?: string;
   email?: string;
+  role?: string;
   created_at?: string;
 };
 type Field = { key: string; label: string; placeholder: string; multiline?: boolean };
@@ -22,6 +23,19 @@ type Config = {
   search: string;
   fields?: Field[];
   statuses?: string[];
+};
+type GenerationFacets = {
+  tools: string[];
+  providers: string[];
+  statuses: string[];
+};
+type LoadOptions = {
+  page?: number;
+  query?: string;
+  tool?: string;
+  provider?: string;
+  status?: string;
+  date?: string;
 };
 
 const configs: Record<Resource, Config> = {
@@ -84,11 +98,79 @@ const configs: Record<Resource, Config> = {
   },
   generations: {
     title: "Generation monitoring",
-    description: "Inspect provider jobs, statuses, credit reservations and failures.",
-    search: "Search generation jobs",
-    statuses: ["queued", "processing", "succeeded", "failed", "cancelled"],
+    description: "Trace AI jobs back to the user, project, provider, model, credit reservation and failure details.",
+    search: "Search user, email, project, tool or provider",
   },
 };
+
+function text(value: unknown) {
+  return String(value || "").trim();
+}
+
+function numberValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function humanize(value: unknown) {
+  return text(value)
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function providerLabel(value: unknown) {
+  const provider = text(value).toLowerCase();
+  if (provider === "openai") return "OpenAI";
+  if (provider === "gemini") return "Gemini";
+  if (provider === "google") return "Google";
+  if (provider === "topaz") return "Topaz";
+  if (provider === "fal" || provider === "fal.ai") return "fal.ai";
+  return humanize(value) || "Not recorded";
+}
+
+function formatDate(value: unknown) {
+  if (!value) return "Not recorded";
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("en-US");
+}
+
+function formatDuration(value: unknown) {
+  const milliseconds = numberValue(value);
+  if (milliseconds === null) return "Not recorded";
+  const seconds = Math.max(0, Math.round(milliseconds / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return `${minutes}m ${remaining}s`;
+}
+
+function formatCredits(row: Row) {
+  const used = numberValue(row.credits_used);
+  const reserved = numberValue(row.credits_reserved);
+  const value = used ?? reserved;
+  if (value === null) return "Not recorded";
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })} credit${value === 1 ? "" : "s"}`;
+}
+
+function statusTone(status: unknown) {
+  const value = text(status).toLowerCase();
+  if (["published", "succeeded", "hired", "completed", "paid"].includes(value)) return "success" as const;
+  if (["failed", "spam", "cancelled", "rejected"].includes(value)) return "warning" as const;
+  return "neutral" as const;
+}
+
+function GenerationDetail({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+      <p className="text-[.6rem] font-black uppercase tracking-[.14em] text-slate-400">{label}</p>
+      <p className="mt-2 break-words text-sm font-bold text-slate-700">{text(value) || "Not recorded"}</p>
+    </div>
+  );
+}
 
 export default function ResourceManager({ resource }: { resource: Resource }) {
   const config = configs[resource];
@@ -97,17 +179,58 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [generationFacets, setGenerationFacets] = useState<GenerationFacets>({ tools: [], providers: [], statuses: [] });
+  const [toolFilter, setToolFilter] = useState("all");
+  const [providerFilter, setProviderFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+  const [selectedGeneration, setSelectedGeneration] = useState<Row | null>(null);
+  const initialGenerationSearch = useRef(true);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
 
-  async function load() {
+  async function load(options?: LoadOptions) {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/admin/platform/${resource}`, { cache: "no-store" });
+      const targetPage = resource === "generations" ? Math.max(1, options?.page ?? page) : 1;
+      const targetQuery = resource === "generations" ? (options?.query ?? query).trim() : "";
+      const targetTool = options?.tool ?? toolFilter;
+      const targetProvider = options?.provider ?? providerFilter;
+      const targetStatus = options?.status ?? statusFilter;
+      const targetDate = options?.date ?? dateFilter;
+      const params = new URLSearchParams();
+      if (resource === "generations") {
+        params.set("page", String(targetPage));
+        params.set("pageSize", "25");
+        if (targetQuery) params.set("q", targetQuery);
+        if (targetTool !== "all") params.set("tool", targetTool);
+        if (targetProvider !== "all") params.set("provider", targetProvider);
+        if (targetStatus !== "all") params.set("status", targetStatus);
+        if (targetDate !== "all") params.set("date", targetDate);
+      }
+      const suffix = params.size ? `?${params.toString()}` : "";
+      const response = await fetch(`/api/admin/platform/${resource}${suffix}`, { cache: "no-store" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Unable to load records.");
       setRows(result.items || []);
+      if (resource === "generations") {
+        setPage(Number(result.page || targetPage));
+        setTotal(Number(result.total || 0));
+        setTotalPages(Math.max(1, Number(result.totalPages || 1)));
+        setGenerationFacets({
+          tools: Array.isArray(result.filters?.tools) ? result.filters.tools.map(String) : [],
+          providers: Array.isArray(result.filters?.providers) ? result.filters.providers.map(String) : [],
+          statuses: Array.isArray(result.filters?.statuses) ? result.filters.statuses.map(String) : [],
+        });
+      } else {
+        setPage(1);
+        setTotal(Number((result.items || []).length));
+        setTotalPages(1);
+      }
     } catch (value) {
       setError(value instanceof Error ? value.message : "Unable to load records.");
     } finally {
@@ -115,12 +238,33 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
     }
   }
 
-  useEffect(() => { void load(); }, [resource]);
+  useEffect(() => {
+    initialGenerationSearch.current = true;
+    setPage(1);
+    setQuery("");
+    setToolFilter("all");
+    setProviderFilter("all");
+    setStatusFilter("all");
+    setDateFilter("all");
+    setSelectedGeneration(null);
+    void load({ page: 1, query: "", tool: "all", provider: "all", status: "all", date: "all" });
+  }, [resource]);
+
+  useEffect(() => {
+    if (resource !== "generations") return;
+    if (initialGenerationSearch.current) {
+      initialGenerationSearch.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => { void load({ page: 1, query }); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query, resource]);
 
   const filtered = useMemo(() => {
+    if (resource === "generations") return rows;
     const needle = query.toLowerCase();
     return rows.filter((row) => JSON.stringify(row).toLowerCase().includes(needle));
-  }, [rows, query]);
+  }, [rows, query, resource]);
 
   function openEditor(row: Row | "new") {
     setEditing(row);
@@ -173,6 +317,20 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
     await load();
   }
 
+  async function updateRole(row: Row, role: string) {
+    const id = String(row.id || "");
+    const response = await fetch(`/api/admin/platform/${resource}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, role }),
+    });
+    if (!response.ok) {
+      setError((await response.json()).error || "Unable to update Admin role.");
+      return;
+    }
+    await load();
+  }
+
   async function remove(row: Row) {
     if (!confirm("Delete this record?")) return;
     const id = String(row.id || row.slug || "");
@@ -180,6 +338,17 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
     if (response.ok) await load();
     else setError((await response.json()).error || "Unable to delete.");
   }
+
+  const toolOptions = [{ value: "all", label: "All tools" }, ...generationFacets.tools.map((value) => ({ value, label: humanize(value) }))];
+  const providerOptions = [{ value: "all", label: "All providers" }, ...generationFacets.providers.map((value) => ({ value, label: providerLabel(value) }))];
+  const statusOptions = [{ value: "all", label: "All statuses" }, ...generationFacets.statuses.map((value) => ({ value, label: humanize(value) }))];
+  const dateOptions = [
+    { value: "all", label: "All time" },
+    { value: "24h", label: "Last 24 hours" },
+    { value: "7d", label: "Last 7 days" },
+    { value: "30d", label: "Last 30 days" },
+    { value: "90d", label: "Last 90 days" },
+  ];
 
   return (
     <>
@@ -199,35 +368,201 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
         <div className="flex items-center gap-3 border-b border-slate-100 p-4">
           <Search size={17} className="text-violet-600"/>
           <input className="w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400" placeholder={config.search} value={query} onChange={(event) => setQuery(event.target.value)}/>
-          <span className="text-xs font-black text-slate-400">{filtered.length}</span>
+          <span className="text-xs font-black text-slate-400">{resource === "generations" ? total : filtered.length}</span>
         </div>
+
+        {resource === "generations" && (
+          <div className="grid gap-3 border-b border-slate-100 bg-slate-50/55 p-4 sm:grid-cols-2 xl:grid-cols-4">
+            <label>
+              <span className="mb-2 block text-[.58rem] font-black uppercase tracking-[.13em] text-slate-400">Tool</span>
+              <HeyySelect
+                value={toolFilter}
+                tone="admin"
+                ariaLabel="Filter generations by tool"
+                options={toolOptions}
+                onChange={(value) => { setToolFilter(value); void load({ page: 1, tool: value }); }}
+              />
+            </label>
+            <label>
+              <span className="mb-2 block text-[.58rem] font-black uppercase tracking-[.13em] text-slate-400">Provider</span>
+              <HeyySelect
+                value={providerFilter}
+                tone="admin"
+                ariaLabel="Filter generations by provider"
+                options={providerOptions}
+                onChange={(value) => { setProviderFilter(value); void load({ page: 1, provider: value }); }}
+              />
+            </label>
+            <label>
+              <span className="mb-2 block text-[.58rem] font-black uppercase tracking-[.13em] text-slate-400">Status</span>
+              <HeyySelect
+                value={statusFilter}
+                tone="admin"
+                ariaLabel="Filter generations by status"
+                options={statusOptions}
+                onChange={(value) => { setStatusFilter(value); void load({ page: 1, status: value }); }}
+              />
+            </label>
+            <label>
+              <span className="mb-2 block text-[.58rem] font-black uppercase tracking-[.13em] text-slate-400">Date</span>
+              <HeyySelect
+                value={dateFilter}
+                tone="admin"
+                ariaLabel="Filter generations by date"
+                options={dateOptions}
+                onChange={(value) => { setDateFilter(value); void load({ page: 1, date: value }); }}
+              />
+            </label>
+          </div>
+        )}
+
         {error && <p className="border-b border-red-100 bg-red-50 p-4 text-xs font-bold text-red-600">{error}</p>}
         {loading ? (
           <div className="grid place-items-center p-16"><LoaderCircle className="animate-spin text-violet-600"/></div>
         ) : filtered.length === 0 ? (
           <p className="p-10 text-sm font-semibold text-slate-400">No records found.</p>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {filtered.map((row, index) => (
-              <div key={String(row.id || row.slug || index)} className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-black">{String(row.title || row.name || row.email || row.tool || row.slug || "Untitled")}</p>
-                    {row.status && <StatusPill tone={row.status === "published" || row.status === "succeeded" || row.status === "hired" ? "success" : row.status === "failed" || row.status === "spam" ? "warning" : "neutral"}>{row.status}</StatusPill>}
+          <>
+            <div className="divide-y divide-slate-100">
+              {filtered.map((row, index) => resource === "generations" ? (
+                <div key={String(row.id || index)} className="p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-black">{humanize(row.tool) || "Generation job"}</p>
+                        {row.status && <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill>}
+                      </div>
+                      <p className="mt-1 text-xs font-semibold text-slate-400">{formatDate(row.created_at)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGeneration(row)}
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50"
+                    >
+                      <Eye size={14}/>Details
+                    </button>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.summary || row.message || row.description || row.email || row.provider || row.slug || "")}</p>
-                  <p className="mt-2 text-[.65rem] font-bold text-slate-400">{row.created_at ? new Date(row.created_at).toLocaleString("en-US") : String(row.location || row.category || "")}</p>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl bg-slate-50/75 p-3">
+                      <p className="text-[.56rem] font-black uppercase tracking-[.12em] text-slate-400">User</p>
+                      <p className="mt-1 truncate text-xs font-black text-slate-700">{text(row.user_name) || "Unknown user"}</p>
+                      <p className="mt-1 truncate text-[.68rem] font-semibold text-slate-400">{text(row.user_email) || text(row.user_id) || "No user ID"}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50/75 p-3">
+                      <p className="text-[.56rem] font-black uppercase tracking-[.12em] text-slate-400">Project</p>
+                      <p className="mt-1 truncate text-xs font-black text-slate-700">{text(row.project_name) || "Quick Tool / no project"}</p>
+                      <p className="mt-1 truncate text-[.68rem] font-semibold text-slate-400">{text(row.project_studio) || text(row.project_id) || "No linked project"}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50/75 p-3">
+                      <p className="text-[.56rem] font-black uppercase tracking-[.12em] text-slate-400">Provider / model</p>
+                      <p className="mt-1 truncate text-xs font-black text-slate-700">{providerLabel(row.provider)}</p>
+                      <p className="mt-1 truncate text-[.68rem] font-semibold text-slate-400">{text(row.model_name) || "Model not recorded"}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50/75 p-3">
+                      <p className="text-[.56rem] font-black uppercase tracking-[.12em] text-slate-400">Credits / duration</p>
+                      <p className="mt-1 truncate text-xs font-black text-slate-700">{formatCredits(row)}</p>
+                      <p className="mt-1 truncate text-[.68rem] font-semibold text-slate-400">{formatDuration(row.duration_ms)}</p>
+                    </div>
+                  </div>
+
+                  {text(row.error) && (
+                    <p className="mt-3 line-clamp-2 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{text(row.error)}</p>
+                  )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {config.fields && <button onClick={() => openEditor(row)} className="grid h-9 w-9 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50" aria-label="Edit"><Pencil size={15}/></button>}
-                  {config.statuses && <div className="min-w-[160px]"><HeyySelect value={String(row.status || config.statuses[0])} tone="admin" ariaLabel="Record status" options={config.statuses} onChange={(value) => void updateStatus(row, value)} triggerClassName="!min-h-9 !rounded-full !px-3 !py-1.5 !text-xs" /></div>}
-                  {resource !== "users" && resource !== "generations" && <button onClick={() => void remove(row)} className="grid h-9 w-9 place-items-center rounded-full border border-red-100 text-red-500 hover:bg-red-50" aria-label="Delete"><Trash2 size={15}/></button>}
+              ) : (
+                <div key={String(row.id || row.slug || index)} className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-black">{String(row.title || row.name || row.email || row.tool || row.slug || "Untitled")}</p>
+                      {row.status && <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill>}
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.summary || row.message || row.description || row.email || row.provider || row.slug || "")}</p>
+                    {resource === "users" && <p className="mt-1 text-[.65rem] font-black uppercase tracking-[.12em] text-violet-500">{String(row.role || "customer").replace(/_/g, " ")}</p>}
+                    <p className="mt-2 text-[.65rem] font-bold text-slate-400">{row.created_at ? new Date(row.created_at).toLocaleString("en-US") : String(row.location || row.category || "")}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {resource === "users" && <div className="min-w-[170px]"><HeyySelect value={String(row.role || "customer")} tone="admin" ariaLabel="Admin role" options={[{value:"customer",label:"Customer"},{value:"business_admin",label:"Business admin"},{value:"admin",label:"Full admin"}]} onChange={(value) => void updateRole(row, value)} triggerClassName="!min-h-9 !rounded-full !px-3 !py-1.5 !text-xs" /></div>}
+                    {config.fields && <button onClick={() => openEditor(row)} className="grid h-9 w-9 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50" aria-label="Edit"><Pencil size={15}/></button>}
+                    {config.statuses && <div className="min-w-[160px]"><HeyySelect value={String(row.status || config.statuses[0])} tone="admin" ariaLabel="Record status" options={config.statuses} onChange={(value) => void updateStatus(row, value)} triggerClassName="!min-h-9 !rounded-full !px-3 !py-1.5 !text-xs" /></div>}
+                    {resource !== "users" && <button onClick={() => void remove(row)} className="grid h-9 w-9 place-items-center rounded-full border border-red-100 text-red-500 hover:bg-red-50" aria-label="Delete"><Trash2 size={15}/></button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {resource === "generations" && total > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 p-4">
+                <p className="text-xs font-bold text-slate-400">
+                  Showing {(page - 1) * 25 + 1}-{Math.min(page * 25, total)} of {total}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" disabled={loading || page <= 1} onClick={() => void load({ page: page - 1, query })}>Previous</Button>
+                  <span className="px-2 text-xs font-black text-slate-500">Page {page} of {totalPages}</span>
+                  <Button variant="secondary" disabled={loading || page >= totalPages} onClick={() => void load({ page: page + 1, query })}>Next</Button>
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </GlassCard>
+
+      {selectedGeneration && resource === "generations" && (
+        <div className="fixed inset-0 z-[125] grid place-items-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
+          <GlassCard className="my-8 w-full max-w-4xl bg-white p-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Generation details</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <h3 className="text-3xl font-black tracking-[-.05em]">{humanize(selectedGeneration.tool) || "Generation job"}</h3>
+                  {selectedGeneration.status && <StatusPill tone={statusTone(selectedGeneration.status)}>{selectedGeneration.status}</StatusPill>}
+                </div>
+              </div>
+              <button onClick={() => setSelectedGeneration(null)} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <GenerationDetail label="User" value={selectedGeneration.user_name}/>
+              <GenerationDetail label="User email" value={selectedGeneration.user_email}/>
+              <GenerationDetail label="User ID" value={selectedGeneration.user_id}/>
+              <GenerationDetail label="Project" value={selectedGeneration.project_name}/>
+              <GenerationDetail label="Studio" value={selectedGeneration.project_studio}/>
+              <GenerationDetail label="Project ID" value={selectedGeneration.project_id}/>
+              <GenerationDetail label="Provider" value={providerLabel(selectedGeneration.provider)}/>
+              <GenerationDetail label="Model" value={selectedGeneration.model_name}/>
+              <GenerationDetail label="Credits" value={formatCredits(selectedGeneration)}/>
+              <GenerationDetail label="Duration" value={formatDuration(selectedGeneration.duration_ms)}/>
+              <GenerationDetail label="Started" value={formatDate(selectedGeneration.created_at)}/>
+              <GenerationDetail label="Completed" value={formatDate(selectedGeneration.completed_at)}/>
+              <GenerationDetail label="Generation ID" value={selectedGeneration.id}/>
+              <GenerationDetail label="Credit reservation ID" value={selectedGeneration.credit_reservation_id}/>
+              <GenerationDetail label="Provider job ID" value={selectedGeneration.provider_job_id}/>
+              <GenerationDetail label="Request key" value={selectedGeneration.request_key}/>
+              <GenerationDetail label="Asset ID" value={selectedGeneration.asset_id}/>
+            </div>
+
+            {text(selectedGeneration.error) && (
+              <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-4">
+                <p className="text-[.6rem] font-black uppercase tracking-[.14em] text-red-400">Failure / provider error</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-red-700">{text(selectedGeneration.error)}</p>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              {text(selectedGeneration.project_href) && (
+                <a href={text(selectedGeneration.project_href)} className="inline-flex min-h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800">
+                  Open project <ExternalLink size={14}/>
+                </a>
+              )}
+              {text(selectedGeneration.asset_url) && (
+                <a href={text(selectedGeneration.asset_url)} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">
+                  View asset <ExternalLink size={14}/>
+                </a>
+              )}
+              <Button variant="ghost" onClick={() => setSelectedGeneration(null)}>Close</Button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
 
       {editing && config.fields && (
         <div className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
