@@ -8,6 +8,7 @@ import { sitePath } from "@/lib/site-url";
 import { resolveCommunicationTemplate } from "@/lib/communications/templates";
 import { sendTrackedEmail } from "@/lib/communications/send-email";
 import { buildHeyyInvoicePdf } from "./invoice-pdf";
+import { loadBillingProfile, type BillingProfile } from "@/lib/billing/profile";
 
 export type PaymentType = "subscription" | "credit_pack" | "production" | "other";
 
@@ -23,6 +24,8 @@ export type PaymentReceiptInput = {
   currency?: string | null;
   billingName?: string | null;
   billingEmail?: string | null;
+  billingAddress?: Stripe.Address | null;
+  billingTaxId?: string | null;
   relatedId?: string | null;
   paidAt?: string | null;
   metadata?: Record<string, unknown>;
@@ -42,6 +45,16 @@ type PaymentRecord = {
   invoice_number: string;
   billing_name: string | null;
   billing_email: string | null;
+  billing_customer_type: "personal" | "business" | null;
+  billing_company_name: string | null;
+  billing_company_number: string | null;
+  billing_tax_id: string | null;
+  billing_address_line1: string | null;
+  billing_address_line2: string | null;
+  billing_city: string | null;
+  billing_state_region: string | null;
+  billing_postal_code: string | null;
+  billing_country_code: string | null;
   related_id: string | null;
   paid_at: string;
   metadata: Record<string, unknown>;
@@ -71,11 +84,40 @@ function money(cents: number, currency: string) {
   }
 }
 
+async function receiptBillingProfile(admin: ReturnType<typeof adminClient>, userId?: string | null) {
+  if (!userId) return null;
+  try {
+    return await loadBillingProfile(admin, userId);
+  } catch (error) {
+    console.warn("Billing profile could not be loaded for payment receipt:", error);
+    return null;
+  }
+}
+
+function billingSnapshot(profile: BillingProfile | null, fallbackName: string | null | undefined, fallbackEmail: string | null | undefined, fallbackAddress?: Stripe.Address | null, fallbackTaxId?: string | null) {
+  return {
+    billing_name: profile?.legal_name || fallbackName || null,
+    billing_email: profile?.email || fallbackEmail?.trim().toLowerCase() || null,
+    billing_customer_type: profile?.customer_type || "personal",
+    billing_company_name: profile?.company_name || null,
+    billing_company_number: profile?.company_number || null,
+    billing_tax_id: profile?.tax_id || String(fallbackTaxId || "").trim() || null,
+    billing_address_line1: profile?.address_line1 || fallbackAddress?.line1 || null,
+    billing_address_line2: profile?.address_line2 || fallbackAddress?.line2 || null,
+    billing_city: profile?.city || fallbackAddress?.city || null,
+    billing_state_region: profile?.state_region || fallbackAddress?.state || null,
+    billing_postal_code: profile?.postal_code || fallbackAddress?.postal_code || null,
+    billing_country_code: profile?.country_code || fallbackAddress?.country || null,
+  };
+}
+
 export async function recordAndSendPaymentReceipt(input: PaymentReceiptInput) {
   const admin = adminClient();
   const paidAt = input.paidAt || new Date().toISOString();
   const currency = String(input.currency || "usd").toLowerCase();
   const taxAmount = Math.max(0, Number(input.taxAmount || 0));
+  const profile = await receiptBillingProfile(admin, input.userId);
+  const snapshot = billingSnapshot(profile, input.billingName, input.billingEmail, input.billingAddress, input.billingTaxId);
   const row = {
     payment_key: input.paymentKey,
     user_id: input.userId || null,
@@ -88,8 +130,7 @@ export async function recordAndSendPaymentReceipt(input: PaymentReceiptInput) {
     currency,
     status: "paid",
     invoice_number: invoiceNumber(input.paymentKey, paidAt),
-    billing_name: input.billingName || null,
-    billing_email: input.billingEmail?.trim().toLowerCase() || null,
+    ...snapshot,
     related_id: input.relatedId || null,
     paid_at: paidAt,
     metadata: input.metadata || {},
@@ -99,7 +140,7 @@ export async function recordAndSendPaymentReceipt(input: PaymentReceiptInput) {
   const { data, error } = await admin
     .from("payment_records")
     .upsert(row, { onConflict: "payment_key" })
-    .select("id,payment_key,user_id,payment_type,description,amount_total,tax_amount,currency,status,invoice_number,billing_name,billing_email,related_id,paid_at,metadata")
+    .select("id,payment_key,user_id,payment_type,description,amount_total,tax_amount,currency,status,invoice_number,billing_name,billing_email,billing_customer_type,billing_company_name,billing_company_number,billing_tax_id,billing_address_line1,billing_address_line2,billing_city,billing_state_region,billing_postal_code,billing_country_code,related_id,paid_at,metadata")
     .single();
   if (error) throw error;
 
@@ -146,8 +187,18 @@ export async function recordAndSendPaymentReceipt(input: PaymentReceiptInput) {
     amountTotal: record.amount_total,
     taxAmount: record.tax_amount,
     currency: record.currency,
+    billingCustomerType: record.billing_customer_type,
     billingName: record.billing_name,
     billingEmail: record.billing_email,
+    billingCompanyName: record.billing_company_name,
+    billingCompanyNumber: record.billing_company_number,
+    billingTaxId: record.billing_tax_id,
+    billingAddressLine1: record.billing_address_line1,
+    billingAddressLine2: record.billing_address_line2,
+    billingCity: record.billing_city,
+    billingStateRegion: record.billing_state_region,
+    billingPostalCode: record.billing_postal_code,
+    billingCountryCode: record.billing_country_code,
   });
 
   await sendTrackedEmail({
@@ -211,12 +262,20 @@ export async function recordSubscriptionInvoice({
     currency: invoice.currency,
     billingName: customerName,
     billingEmail: customerEmail,
+    billingAddress: (invoice as unknown as { customer_address?: Stripe.Address | null }).customer_address || null,
+    billingTaxId: ((invoice as unknown as { customer_tax_ids?: Array<{ value?: string | null }> }).customer_tax_ids || [])[0]?.value || null,
     relatedId: typeof (invoice as unknown as { subscription?: unknown }).subscription === "string"
       ? String((invoice as unknown as { subscription?: string }).subscription)
       : null,
     paidAt: new Date(Number(invoice.status_transitions?.paid_at || invoice.created) * 1000).toISOString(),
     metadata: { plan },
   });
+}
+
+
+function checkoutTaxId(session: Stripe.Checkout.Session) {
+  const details = session.customer_details as unknown as { tax_ids?: Array<{ value?: string | null }> } | null | undefined;
+  return details?.tax_ids?.[0]?.value || null;
 }
 
 export async function recordCheckoutPayment({
@@ -257,6 +316,8 @@ export async function recordCheckoutPayment({
     currency: session.currency,
     billingName: name,
     billingEmail: email,
+    billingAddress: session.customer_details?.address || null,
+    billingTaxId: checkoutTaxId(session),
     relatedId,
     paidAt: new Date(Number(session.created || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
     metadata,
@@ -329,6 +390,8 @@ export async function backfillPaymentHistory({
         currency: invoice.currency,
         billingName: String((invoice as unknown as { customer_name?: string | null }).customer_name || "") || null,
         billingEmail: invoice.customer_email || userEmail || null,
+        billingAddress: (invoice as unknown as { customer_address?: Stripe.Address | null }).customer_address || null,
+    billingTaxId: ((invoice as unknown as { customer_tax_ids?: Array<{ value?: string | null }> }).customer_tax_ids || [])[0]?.value || null,
         paidAt: new Date(Number(invoice.status_transitions?.paid_at || invoice.created) * 1000).toISOString(),
         sendEmail: false,
         metadata: { backfilled: true },
@@ -349,6 +412,8 @@ export async function backfillPaymentHistory({
         currency: session.currency,
         billingName: session.customer_details?.name || null,
         billingEmail: session.customer_details?.email || userEmail || null,
+        billingAddress: session.customer_details?.address || null,
+        billingTaxId: checkoutTaxId(session),
         relatedId: session.metadata?.pack_id || null,
         paidAt: new Date(Number(session.created || 0) * 1000).toISOString(),
         sendEmail: false,

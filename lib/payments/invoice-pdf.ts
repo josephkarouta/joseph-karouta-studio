@@ -11,8 +11,18 @@ export type HeyyInvoiceData = {
   amountTotal: number;
   taxAmount: number;
   currency: string;
+  billingCustomerType?: "personal" | "business" | null;
   billingName?: string | null;
   billingEmail?: string | null;
+  billingCompanyName?: string | null;
+  billingCompanyNumber?: string | null;
+  billingTaxId?: string | null;
+  billingAddressLine1?: string | null;
+  billingAddressLine2?: string | null;
+  billingCity?: string | null;
+  billingStateRegion?: string | null;
+  billingPostalCode?: string | null;
+  billingCountryCode?: string | null;
 };
 
 function money(cents: number, currency: string) {
@@ -36,6 +46,21 @@ export function invoiceBusinessDetails() {
   };
 }
 
+function customerLines(data: HeyyInvoiceData) {
+  const locality = [data.billingCity, data.billingStateRegion, data.billingPostalCode].filter(Boolean).join(" ");
+  return [
+    data.billingCustomerType === "business" ? data.billingCompanyName : data.billingName,
+    data.billingCustomerType === "business" && data.billingName && data.billingName !== data.billingCompanyName ? data.billingName : null,
+    data.billingCompanyNumber ? `Company no. ${data.billingCompanyNumber}` : null,
+    data.billingTaxId ? `${String(data.billingCountryCode || "").toUpperCase() === "AU" ? "ABN / Tax ID" : "Tax ID"} ${data.billingTaxId}` : null,
+    data.billingEmail || null,
+    data.billingAddressLine1 || null,
+    data.billingAddressLine2 || null,
+    locality || null,
+    data.billingCountryCode ? String(data.billingCountryCode).toUpperCase() : null,
+  ].filter(Boolean) as string[];
+}
+
 export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   const business = invoiceBusinessDetails();
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
@@ -46,9 +71,6 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   const muted = [103, 96, 114] as const;
   const subtotal = Math.max(0, data.amountTotal - data.taxAmount);
 
-  // Keep the invoice masthead intentionally light. The official primary
-  // black + purple wordmark remains readable in PDFs and does not depend on
-  // transparency/background behaviour from the source SVG.
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, width, 126, "F");
   doc.setFillColor(...accent);
@@ -56,30 +78,28 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
 
   const logo = await getHeyyEmailLogoPng();
   if (logo) {
-    const maxLogoWidth = 126;
-    const maxLogoHeight = 48;
+    const maxLogoWidth = 112;
+    const maxLogoHeight = 34;
     const scale = Math.min(maxLogoWidth / logo.width, maxLogoHeight / logo.height);
-    const logoWidth = logo.width * scale;
-    const logoHeight = logo.height * scale;
     doc.addImage(
       `data:image/png;base64,${logo.buffer.toString("base64")}`,
       "PNG",
       margin,
-      26,
-      logoWidth,
-      logoHeight,
+      28,
+      logo.width * scale,
+      logo.height * scale,
     );
   } else {
     doc.setTextColor(...dark);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(24);
-    doc.text("Heyy Studio", margin, 54);
+    doc.setFontSize(22);
+    doc.text("Heyy Studio", margin, 50);
   }
 
   doc.setTextColor(...muted);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text("Create with AI. Build with Experts.", margin, 91);
+  doc.text("Create with AI. Build with Experts.", margin, 87);
 
   doc.setTextColor(...dark);
   doc.setFont("helvetica", "bold");
@@ -110,12 +130,12 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
     business.email,
     getSiteUrl().replace(/^https?:\/\//, ""),
   ].filter(Boolean) as string[];
-  supplierLines.forEach((line, index) => doc.text(line, margin, y + index * 15));
+  supplierLines.forEach((line, index) => doc.text(doc.splitTextToSize(line, 220), margin, y + index * 15));
 
-  const customerLines = [data.billingName || "Customer", data.billingEmail || null].filter(Boolean) as string[];
-  customerLines.forEach((line, index) => doc.text(line, width / 2 + 14, y + index * 15));
+  const billToLines = customerLines(data);
+  billToLines.slice(0, 8).forEach((line, index) => doc.text(doc.splitTextToSize(line, 220), width / 2 + 14, y + index * 15));
 
-  y = 252;
+  y = Math.max(252, y + Math.max(supplierLines.length, Math.min(8, billToLines.length)) * 15 + 28);
   doc.setTextColor(...dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
@@ -128,7 +148,7 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   doc.text("Paid", margin + 175, y + 18);
   doc.text(data.currency.toUpperCase(), margin + 350, y + 18);
 
-  y = 318;
+  y += 66;
   doc.setFillColor(247, 245, 252);
   doc.roundedRect(margin, y, width - margin * 2, 42, 8, 8, "F");
   doc.setTextColor(...muted);
@@ -157,7 +177,8 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   doc.text("Subtotal", labelX, y);
   doc.text(money(subtotal, data.currency), totalX, y, { align: "right" });
   y += 20;
-  doc.text(business.gstRegistered ? "GST / tax" : "Tax", labelX, y);
+  const isAustralianBillTo = String(data.billingCountryCode || "").toUpperCase() === "AU";
+  doc.text(business.gstRegistered && isAustralianBillTo ? "GST" : "Tax", labelX, y);
   doc.text(money(data.taxAmount, data.currency), totalX, y, { align: "right" });
   y += 28;
   doc.setFont("helvetica", "bold");
@@ -171,7 +192,7 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   const footer = business.gstRegistered
-    ? "This document records a completed Heyy Studio payment. GST/tax shown reflects the amount charged for this transaction."
+    ? "This document records a completed Heyy Studio payment. Tax shown reflects the amount charged for this transaction."
     : "This document records a completed Heyy Studio payment.";
   doc.text(doc.splitTextToSize(footer, width - margin * 2), margin, 735);
   if (!business.abn && process.env.NEXT_PUBLIC_HEYY_PUBLIC_BETA === "true") {

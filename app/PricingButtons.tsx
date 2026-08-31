@@ -72,7 +72,7 @@ export default function PricingButtons() {
         price="$0"
         description="Explore Heyy Studio, save one active project and test the guided workflows."
         features={[
-          "10 monthly credits",
+          "30 one-time welcome credits",
           "1 active project",
           "Guided Studio workflows",
           "Saved project workspace",
@@ -84,10 +84,10 @@ export default function PricingButtons() {
       <PlanCard
         eyebrow="Most Popular"
         title="Starter"
-        price="$19"
+        price="$35"
         description="For creators and small businesses building real projects with regular AI generation."
         features={[
-          "60 monthly credits",
+          "1,500 monthly credits",
           "10 active projects",
           "Brand and Architecture workflows",
           "Standard image generations",
@@ -103,10 +103,10 @@ export default function PricingButtons() {
       <PlanCard
         eyebrow="Professional"
         title="Pro"
-        price="$49"
+        price="$99"
         description="For professionals who need deeper workflows, more projects and heavier generation usage."
         features={[
-          "250 monthly credits",
+          "5,000 monthly credits",
           "50 active projects",
           "Professional workflow controls",
           "High-quality generation access",

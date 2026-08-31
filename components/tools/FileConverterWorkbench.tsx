@@ -7,6 +7,7 @@ import HeyySelect from "@/components/ui/heyy-select";
 import UtilityUsageCard from "@/components/tools/UtilityUsageCard";
 import { createBrowserZip } from "@/lib/client/zip";
 import { useUtilityUsage } from "@/hooks/use-utility-usage";
+import { CREDIT_COSTS } from "@/lib/credits/config";
 import {
   CONVERTER_TARGETS,
   convertFile,
@@ -185,7 +186,7 @@ export default function FileConverterWorkbench() {
           prepared.push(...result.map((output) => ({ ...output, url: URL.createObjectURL(output.blob) })));
           if (authorization.chargeType === "subscriber") subscriberUsed += 1;
           else if (authorization.chargeType === "free") freeUsed += 1;
-          else creditsUsed += authorization.creditsReserved || 1;
+          else creditsUsed += authorization.creditsReserved || CREDIT_COSTS.fileConversion;
         } catch (conversionError) {
           const message = conversionError instanceof Error ? conversionError.message : "The file could not be converted.";
           if (authorization?.operationId) await fail(authorization.operationId, message, { refresh: false });

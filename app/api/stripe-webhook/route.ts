@@ -190,12 +190,21 @@ export async function POST(req: Request) {
       const userId = session.metadata?.user_id;
       const topUpType = session.metadata?.type;
       if (userId && topUpType === "credit_top_up") {
-        const credits = Number(session.metadata?.credits || 0);
+        const metadataCredits = Number(session.metadata?.credits || 0);
         const packId = String(session.metadata?.pack_id || "custom");
         const pack = getCreditPack(packId);
-        if (!pack || !Number.isFinite(credits) || credits !== pack.credits) {
+        const legacyCreditsByPack: Record<string, number> = { small: 100, medium: 300, large: 750 };
+        const validMetadataCredits = pack
+          ? metadataCredits === pack.credits || metadataCredits === legacyCreditsByPack[pack.id]
+          : false;
+        if (!pack || !Number.isFinite(metadataCredits) || !validMetadataCredits) {
           throw new Error("Invalid credit top-up metadata.");
         }
+        // Pack ID + current server catalog are authoritative. This deliberately
+        // upgrades a checkout session opened immediately before the denomination
+        // cutover (100/300/750 metadata) to 1,000/3,000/7,500 credits without
+        // changing what the customer paid.
+        const credits = pack.credits;
         if (session.payment_status !== "paid") {
           throw new Error("Credit top-up payment is not confirmed.");
         }

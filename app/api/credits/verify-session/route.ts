@@ -33,12 +33,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "The payment is not confirmed yet." }, { status: 409 });
     }
 
-    const credits = Number(session.metadata?.credits || 0);
+    const metadataCredits = Number(session.metadata?.credits || 0);
     const packId = String(session.metadata?.pack_id || "custom");
     const pack = getCreditPack(packId);
-    if (!pack || !Number.isFinite(credits) || credits !== pack.credits) {
+    const legacyCreditsByPack: Record<string, number> = { small: 100, medium: 300, large: 750 };
+    const validMetadataCredits = pack
+      ? metadataCredits === pack.credits || metadataCredits === legacyCreditsByPack[pack.id]
+      : false;
+    if (!pack || !Number.isFinite(metadataCredits) || !validMetadataCredits) {
       return NextResponse.json({ error: "Invalid credit amount." }, { status: 400 });
     }
+    const credits = pack.credits;
 
     const { error } = await admin.rpc("heyy_apply_credit_top_up", {
       p_user_id: user.id,

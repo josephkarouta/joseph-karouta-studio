@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ExternalLink, Eye, LoaderCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Eye, LoaderCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Button, GlassCard, StatusPill } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 
@@ -483,6 +483,17 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {resource === "users" && <div className="min-w-[170px]"><HeyySelect value={String(row.role || "customer")} tone="admin" ariaLabel="Admin role" options={[{value:"customer",label:"Customer"},{value:"business_admin",label:"Business admin"},{value:"admin",label:"Full admin"}]} onChange={(value) => void updateRole(row, value)} triggerClassName="!min-h-9 !rounded-full !px-3 !py-1.5 !text-xs" /></div>}
+                    {resource === "applications" && Boolean(row.resume_url) && (
+                      <a href={`/api/admin/careers/resume?applicationId=${encodeURIComponent(String(row.id || ""))}`} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50">
+                        <Download size={14}/> CV
+                      </a>
+                    )}
+                    {resource === "applications" && Boolean(row.portfolio_url) && (
+                      <a href={String(row.portfolio_url)} target="_blank" rel="noreferrer" className="grid h-9 w-9 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50" aria-label="Open portfolio"><ExternalLink size={14}/></a>
+                    )}
+                    {resource === "applications" && Boolean(row.linkedin_url) && (
+                      <a href={String(row.linkedin_url)} target="_blank" rel="noreferrer" className="grid h-9 w-9 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50" aria-label="Open LinkedIn"><ExternalLink size={14}/></a>
+                    )}
                     {config.fields && <button onClick={() => openEditor(row)} className="grid h-9 w-9 place-items-center rounded-full border border-violet-100 text-violet-600 hover:bg-violet-50" aria-label="Edit"><Pencil size={15}/></button>}
                     {config.statuses && <div className="min-w-[160px]"><HeyySelect value={String(row.status || config.statuses[0])} tone="admin" ariaLabel="Record status" options={config.statuses} onChange={(value) => void updateStatus(row, value)} triggerClassName="!min-h-9 !rounded-full !px-3 !py-1.5 !text-xs" /></div>}
                     {resource !== "users" && <button onClick={() => void remove(row)} className="grid h-9 w-9 place-items-center rounded-full border border-red-100 text-red-500 hover:bg-red-50" aria-label="Delete"><Trash2 size={15}/></button>}

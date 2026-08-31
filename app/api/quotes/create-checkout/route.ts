@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { buildProductionWorkspaceHref, resolveProductionService } from "@/lib/production/service-registry";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripe, resolveStripeCustomer } from "@/lib/billing/stripe";
+import { checkoutCollectionOptions } from "@/lib/billing/profile";
 
 function getReturnPath(quote: any, paymentState: "success" | "cancelled") {
   const service = resolveProductionService({
@@ -68,6 +67,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const stripe = getStripe();
+    const { customer } = await resolveStripeCustomer({ stripe, admin, user, createIfMissing: true });
+    if (!customer) {
+      return NextResponse.json({ success: false, error: "Unable to prepare secure checkout." }, { status: 500 });
+    }
+
     const productionService = resolveProductionService({
       serviceId: quote.service_id,
       service: quote.service,
@@ -80,6 +85,9 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
+      customer: customer.id,
+      client_reference_id: user.id,
+      ...checkoutCollectionOptions(true),
       line_items: [
         {
           quantity: 1,

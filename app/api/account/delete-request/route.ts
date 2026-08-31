@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import { getStripe, getSubscriptionRow } from "@/lib/billing/stripe";
+import { sendGoodbyeEmail } from "@/lib/communications/goodbye";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -93,6 +94,14 @@ export async function POST(request: Request) {
 
     const { error: deleteError } = await admin.auth.admin.deleteUser(user.id, false);
     if (deleteError) throw deleteError;
+
+    // The account is already deleted at this point. Email delivery is best-effort
+    // and must never block or roll back a successful deletion.
+    try {
+      await sendGoodbyeEmail(user);
+    } catch (goodbyeError) {
+      console.error("Account deletion goodbye email failed:", goodbyeError);
+    }
 
     // Database rows linked to auth.users are removed by their FK policies. User
     // files live outside those rows, so clean their storage prefixes separately.

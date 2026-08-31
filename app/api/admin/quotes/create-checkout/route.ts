@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { buildProductionWorkspaceHref, resolveProductionService } from "@/lib/production/service-registry";
+import { checkoutCollectionOptions } from "@/lib/billing/profile";
 
 import { requireAdminApiCapability } from "@/lib/server/admin-api";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
+      ...checkoutCollectionOptions(false),
       line_items: [
         {
           quantity: 1,

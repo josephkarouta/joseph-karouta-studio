@@ -20,6 +20,7 @@ type BuildEmailOptions = {
   details?: EmailDetail[];
   detailsTitle?: string;
   note?: string | null;
+  supportingCopy?: string;
   ctaLabel?: string;
   ctaUrl?: string;
 };

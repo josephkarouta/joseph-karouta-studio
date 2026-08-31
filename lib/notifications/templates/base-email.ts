@@ -19,6 +19,7 @@ type BaseEmailProps = {
   details?: EmailDetail[];
   detailsTitle?: string;
   note?: string | null;
+  supportingCopy?: string;
   ctaLabel?: string;
   ctaUrl?: string;
 };
@@ -48,6 +49,7 @@ export function baseEmail({
   details = [],
   detailsTitle = "Project details",
   note,
+  supportingCopy = "Manage your projects, messages, payments and account inside your Heyy Studio workspace.",
   ctaLabel = "Open Heyy Studio",
   ctaUrl,
 }: BaseEmailProps) {
@@ -164,7 +166,7 @@ export function baseEmail({
                   ${escapeHtml(ctaLabel)}
                 </a>
                 <p class="heyy-email-copy" style="margin:22px 0 0;color:#8a8394;font-size:12px;line-height:1.65;">
-                  Manage your projects, messages, payments and account inside your Heyy Studio workspace.
+                  ${escapeHtml(supportingCopy)}
                 </p>
               </td>
             </tr>

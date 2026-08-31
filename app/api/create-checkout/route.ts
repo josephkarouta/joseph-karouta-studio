@@ -9,6 +9,7 @@ import {
   resolveStripeCustomer,
   validateStripeSubscriptionCatalog,
 } from "@/lib/billing/stripe";
+import { checkoutCollectionOptions } from "@/lib/billing/profile";
 
 type SubscriptionPlan = "starter" | "pro";
 
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
       payment_method_types: ["card"],
       mode: "subscription",
       customer: customer.id,
+      ...checkoutCollectionOptions(true),
       client_reference_id: user.id,
       metadata: { user_id: user.id, plan: normalizedPlan },
       subscription_data: { metadata: { user_id: user.id, plan: normalizedPlan } },

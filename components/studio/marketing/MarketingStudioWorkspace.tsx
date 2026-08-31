@@ -759,7 +759,7 @@ function OnboardingWorkspace({
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-5">
           <Button type="button" variant="secondary" disabled={step === 0 || generating} onClick={onBack}><ArrowLeft size={15} /> Back</Button>
           {step === steps.length - 1 ? (
-            <Button type="button" disabled={generating} onClick={onGenerate}><Sparkles size={15} /> Generate {workMode === "professional" ? "professional campaign" : "campaign system"} · {workMode === "professional" ? config.professionalCreditCost || 12 : config.creditCost} credits</Button>
+            <Button type="button" disabled={generating} onClick={onGenerate}><Sparkles size={15} /> Generate {workMode === "professional" ? "professional campaign" : "campaign system"} · {workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.marketingCreativePack : config.creditCost} credits</Button>
           ) : (
             <Button type="button" disabled={generating} onClick={onContinue}>Continue <ArrowRight size={15} /></Button>
           )}

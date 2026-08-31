@@ -965,7 +965,7 @@ function OnboardingWorkspace({
 }) {
   const section = steps[step];
   const allFields = steps.flatMap((item) => item.fields);
-  const conceptCredits = workMode === "professional" ? config.professionalCreditCost || 16 : config.creditCost;
+  const conceptCredits = workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost;
 
   return (
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
@@ -1071,7 +1071,7 @@ function OverviewSection({
   const planCount = assets.filter((asset) => String(asset.asset_type || "").startsWith("interior_plan_")).length;
   const visualCount = assets.filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_")).length;
   const approvedCount = assets.filter(isApprovedAsset).length;
-  const conceptCredits = workMode === "professional" ? config.professionalCreditCost || 16 : config.creditCost;
+  const conceptCredits = workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost;
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,.6fr)]">
       <GlassCard className="p-6 sm:p-8">
@@ -1443,7 +1443,7 @@ function PlansSection({
             Generate the Furniture & Space Plan, approve it as the project source, then continue to the connected furniture plan, lighting plan and visuals. If you need dimensioned drawings, CAD or editable technical files, send the approved concept to Production.
           </p>
         </div>
-        <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per plan" />
+        <CreditPill credits={CREDIT_COSTS.interiorPlan} label="per plan" />
       </div>
 
       {spacePlanApproved && (
@@ -1965,7 +1965,7 @@ function InteriorWorkflowCard({
   const stageDependency = dependencyMessage;
   const isGenerating = generating?.viewType === viewType && generating.stage === "final";
   const disabled = Boolean(generating) || Boolean(stageDependency);
-  const cost = CREDIT_COSTS.interiorProfessionalFinal;
+  const cost = kind === "plan" ? CREDIT_COSTS.interiorPlan : CREDIT_COSTS.interiorProfessionalFinal;
 
   return (
     <article className={cx("overflow-hidden rounded-3xl border bg-[var(--surface)]", approvedAsset ? "border-emerald-400 shadow-[0_0_0_1px_rgba(16,185,129,.4)]" : "border-[var(--border)]")}>

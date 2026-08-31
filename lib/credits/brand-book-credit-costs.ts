@@ -1,12 +1,12 @@
 export const BRAND_BOOK_CREDIT_COSTS = {
-  textGuidelines: 1,
-  logoGeneration: 4,
-  moodboardGeneration: 6,
-  premiumWebsiteMockup: 8,
-  premiumPackagingMockup: 8,
-  premiumBillboardMockup: 8,
-  premiumVehicleMockup: 10,
-  fullPremiumMockupPack: 30,
+  textGuidelines: 10,
+  logoGeneration: 40,
+  moodboardGeneration: 60,
+  premiumWebsiteMockup: 80,
+  premiumPackagingMockup: 80,
+  premiumBillboardMockup: 80,
+  premiumVehicleMockup: 100,
+  fullPremiumMockupPack: 300,
 };
 
 export function getBrandBookCreditCost(key: keyof typeof BRAND_BOOK_CREDIT_COSTS) {

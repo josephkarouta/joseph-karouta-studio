@@ -15,6 +15,7 @@ import {
 import { Button, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import UtilityUsageCard from "@/components/tools/UtilityUsageCard";
 import { useUtilityUsage } from "@/hooks/use-utility-usage";
+import { CREDIT_COSTS } from "@/lib/credits/config";
 import {
   fileSizeLabel,
   processPdfOperation,
@@ -147,7 +148,7 @@ export default function PdfToolsWorkbench() {
         prepared.push(...result.map((output) => ({ ...output, url: URL.createObjectURL(output.blob) })));
         if (authorization.chargeType === "subscriber") subscriberUsed += 1;
         else if (authorization.chargeType === "free") freeUsed += 1;
-        else creditsUsed += authorization.creditsReserved || 1;
+        else creditsUsed += authorization.creditsReserved || CREDIT_COSTS.pdfUtility;
         return true;
       } catch (operationError) {
         const message = operationError instanceof Error ? operationError.message : "The PDF could not be processed.";

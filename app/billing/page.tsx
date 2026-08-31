@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import AccountLayout from "@/components/account/AccountLayout";
+import BillingInformationCard from "@/components/account/BillingInformationCard";
 import { useAuth } from "@/components/auth-provider";
 import {
   Button,
@@ -487,6 +488,8 @@ export default function BillingPage() {
           </GlassCard>
         </div>
       </div>
+
+      <BillingInformationCard />
     </AccountLayout>
   );
 }

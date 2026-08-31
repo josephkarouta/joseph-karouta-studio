@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import { getStripe, resolveStripeCustomer } from "@/lib/billing/stripe";
+import { checkoutCollectionOptions } from "@/lib/billing/profile";
 import { CreditError, ensureCreditWallet } from "@/lib/credits/server";
 import { getCreditPack } from "@/lib/platform/plans";
 
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       payment_method_types: ["card"],
       mode: "payment",
       customer: customer.id,
+      ...checkoutCollectionOptions(true),
       client_reference_id: user.id,
       metadata: {
         type: "credit_top_up",

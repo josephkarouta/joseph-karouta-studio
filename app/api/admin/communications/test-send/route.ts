@@ -108,7 +108,7 @@ export async function POST(request: Request) {
 }
 
 function testContext(templateKey: string): TestContext {
-  if (templateKey === "welcome" || templateKey === "announcement") return {};
+  if (templateKey === "welcome" || templateKey === "announcement" || templateKey === "account.goodbye") return {};
 
   if (templateKey === "payment.receipt") {
     return {

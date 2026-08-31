@@ -25,6 +25,18 @@ export const COMMUNICATION_TEMPLATE_CATALOG: CommunicationTemplateDefinition[] =
     defaultCtaLabel: "Start creating",
   },
   {
+    key: "account.goodbye",
+    name: "Account deletion goodbye",
+    category: "Onboarding",
+    description: "Sent after a customer successfully deletes their Heyy Studio account.",
+    defaultSubject: "Your Heyy Studio account has been deleted",
+    defaultPreheader: "Your Heyy Studio account deletion is complete.",
+    defaultEyebrow: "Account deleted",
+    defaultTitle: "Thanks for creating with us",
+    defaultBody: "Thanks for being part of Heyy Studio, {{first_name}}. Your account has been deleted and access to your workspace has ended. Limited payment or compliance records may be retained where required for billing, tax, fraud-prevention or legal obligations.",
+    defaultCtaLabel: "Visit Heyy Studio",
+  },
+  {
     key: "payment.receipt",
     name: "Payment confirmation + invoice",
     category: "Billing",

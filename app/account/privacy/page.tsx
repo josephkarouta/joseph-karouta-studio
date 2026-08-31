@@ -288,9 +288,11 @@ export default function PrivacyDataPage() {
         <Modal onClose={() => !accountDeleting && setAccountDeleteOpen(false)}>
           <TriangleAlert size={24} className="text-red-500" />
           <h3 className="mt-4 text-2xl font-black">Delete your account?</h3>
-          <p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            This permanently deletes your Heyy Studio login and personal workspace data and cannot be undone. Any active subscription will be stopped first. Completed payment or production records may be retained only where required for accounting, fraud prevention or legal obligations.
-          </p>
+          <div className="mt-3 space-y-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
+            <p><strong className="text-[var(--text-primary)]">Deleting your account is permanent.</strong> Your login, profile, personal Studio projects, generated assets and files, subscription credits, purchased credit balance and account preferences will be deleted. Any active subscription will be cancelled first.</p>
+            <p>If you create a Heyy Studio account again later with the same email address, it will be treated as a new account. Your deleted projects, files, credits and previous plan will not be restored, and the one-time introductory credit offer will not be granted again.</p>
+            <p>Completed payment, production or security records may be retained only where required for accounting, fraud prevention or legal obligations.</p>
+          </div>
           <div className="mt-6 flex justify-end gap-2">
             <Button variant="ghost" disabled={accountDeleting} onClick={() => setAccountDeleteOpen(false)}>Keep account</Button>
             <Button variant="secondary" disabled={accountDeleting} onClick={() => void deleteAccount()}>
