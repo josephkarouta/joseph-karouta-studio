@@ -1,9 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { toFile } from "openai";
 import sharp from "sharp";
-import { getOpenAI } from "@/lib/ai/openai-server";
+import { getOpenAI } from "@/lib/tools/background-worker-runtime";
 import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
-import { storeGeneratedAsset } from "@/lib/assets-server";
+import { storeGeneratedAsset } from "@/lib/tools/background-worker-runtime";
 import {
   ADAPTATION_FAMILY_LABELS,
   groupAdaptationFormats,
