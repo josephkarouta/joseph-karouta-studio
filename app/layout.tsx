@@ -3,6 +3,7 @@ import "./globals.css";
 import Providers from "@/components/providers";
 import HeyyAssistant from "@/components/assistant/HeyyAssistant";
 
+import ApiResponseSafety from "@/components/system/ApiResponseSafety";
 const isPublicBeta = process.env.NEXT_PUBLIC_HEYY_PUBLIC_BETA === "true";
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
+        <ApiResponseSafety />
         <Providers>
           {children}
           <HeyyAssistant />

@@ -458,11 +458,12 @@ export async function reserveCredits({
         503,
       );
     }
-    throw new CreditError(message || "Credits could not be reserved.");
+    console.error("Credit reservation failed:", message);
+    throw new CreditError("Credits could not be reserved. Please try again.", "CREDIT_OPERATION_FAILED", 500);
   }
 
   const reservationId = typeof data === "string" ? data : data?.id || data?.reservation_id;
-  if (!reservationId) throw new CreditError("Credit reservation returned no identifier.");
+  if (!reservationId) throw new CreditError("Credits could not be reserved. Please try again.", "CREDIT_OPERATION_FAILED", 500);
   return { id: String(reservationId), amount, action };
 }
 

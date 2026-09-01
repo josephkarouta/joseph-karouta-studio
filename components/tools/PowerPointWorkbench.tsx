@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronLeft, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Paperclip, Presentation, Sparkles, WandSparkles, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/components/auth-provider";
@@ -45,6 +45,8 @@ const MAX_ATTACHMENTS = 6;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_ATTACHMENT_TOTAL_BYTES = 5 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "jfif", "webp", "svg"]);
+const POLL_INTERVAL_MS = 4000;
+const MAX_POLL_ATTEMPTS = 225;
 
 
 export default function PowerPointWorkbench() {
@@ -63,6 +65,8 @@ export default function PowerPointWorkbench() {
   const [result, setResult] = useState<Result | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [jobId, setJobId] = useState("");
+  const [statusText, setStatusText] = useState("");
   const [error, setError] = useState("");
 
   const cost = getPowerPointCreditCost(slides);
@@ -113,6 +117,63 @@ export default function PowerPointWorkbench() {
     if (logoAttachmentName === file.name) setLogoAttachmentName("");
   }
 
+  useEffect(() => {
+    if (!jobId || !loading) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) throw new Error("Your session expired. Sign in again.");
+
+        for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS && !cancelled; attempt += 1) {
+          const response = await fetch(`/api/tools/powerpoint-generator/status?jobId=${encodeURIComponent(jobId)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          });
+          const payload = await readApiPayload(response);
+
+          if (!response.ok) {
+            throw new Error(publicApiMessage(payload, "Presentation status could not be loaded."));
+          }
+          if (payload?.status === "succeeded" && payload?.result) {
+            setResult(payload.result as Result);
+            setActiveSlide(0);
+            setLoading(false);
+            setJobId("");
+            setStatusText("");
+            await refreshAccount();
+            return;
+          }
+          if (payload?.status === "failed" || payload?.status === "cancelled") {
+            throw new Error(publicApiMessage(payload, "Presentation generation could not be completed. Your credits were returned."));
+          }
+
+          setStatusText(attempt < 3 ? "Starting your presentation…" : "Researching, designing and building your presentation…");
+          await sleep(POLL_INTERVAL_MS);
+        }
+
+        if (!cancelled) {
+          setLoading(false);
+          setStatusText("");
+          setError("Your presentation is still being prepared in the background. Check Generation Activity shortly for the result.");
+        }
+      } catch (generationError) {
+        if (cancelled) return;
+        setLoading(false);
+        setJobId("");
+        setStatusText("");
+        setError(generationError instanceof Error ? generationError.message : "Presentation generation could not be completed.");
+        await refreshAccount();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, loading, refreshAccount, supabase]);
+
   async function generate() {
     if (!title.trim() || !objective.trim() || (source.trim().length < 10 && attachments.length === 0)) {
       setError("Add a title, objective and either source notes or at least one attachment.");
@@ -122,6 +183,7 @@ export default function PowerPointWorkbench() {
     setLoading(true);
     setError("");
     setResult(null);
+    setStatusText("Preparing your presentation…");
 
     try {
       const { data } = await supabase.auth.getSession();
@@ -158,16 +220,22 @@ export default function PowerPointWorkbench() {
         scope: "powerpoint-generator",
         payload: requestPayload,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Presentation generation failed.");
+      const payload = await readApiPayload(response);
+      if (!response.ok) {
+        throw new Error(publicApiMessage(payload, "Presentation generation could not start. Please try again."));
+      }
 
-      setResult(payload);
-      setActiveSlide(0);
-      await refreshAccount();
+      const nextJobId = typeof payload?.jobId === "string" ? payload.jobId : "";
+      if (!nextJobId) throw new Error("Presentation generation could not start. Please try again.");
+
+      setJobId(nextJobId);
+      setStatusText(payload?.existing ? "This presentation is already being prepared…" : "Presentation queued. Building it in the background…");
     } catch (generationError) {
-      setError(generationError instanceof Error ? generationError.message : "Presentation generation failed.");
-    } finally {
       setLoading(false);
+      setJobId("");
+      setStatusText("");
+      setError(generationError instanceof Error ? generationError.message : "Presentation generation could not start.");
+      await refreshAccount();
     }
   }
 
@@ -373,7 +441,7 @@ export default function PowerPointWorkbench() {
 
         <Button className="mt-6 w-full" size="lg" onClick={() => void generate()} disabled={loading}>
           {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          {loading ? "Writing and designing slides…" : `Generate PowerPoint · ${cost} credits`}
+          {loading ? "Preparing in background…" : `Generate PowerPoint · ${cost} credits`}
         </Button>
       </GlassCard>
 
@@ -393,9 +461,9 @@ export default function PowerPointWorkbench() {
           <div className="grid min-h-[560px] place-items-center">
             <div className="text-center">
               <Loader2 size={34} className="mx-auto animate-spin text-[var(--accent-strong)]" />
-              <h3 className="mt-4 text-xl font-black">Researching and designing the deck</h3>
+              <h3 className="mt-4 text-xl font-black">{statusText || "Preparing your presentation"}</h3>
               <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">
-                Heyy Studio is developing the narrative, art-directing the visuals and building the editable PowerPoint. This can take a few minutes.
+                Your presentation is running in the background. You can leave this page and return later; Generation Activity will keep its status.
               </p>
             </div>
           </div>
@@ -435,6 +503,36 @@ export default function PowerPointWorkbench() {
       </GlassCard>
     </div>
   );
+}
+
+async function readApiPayload(response: Response): Promise<any> {
+  const text = await response.text();
+  if (!text.trim()) return {};
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("json")) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+function publicApiMessage(payload: any, fallback: string) {
+  const message = typeof payload?.error === "string" ? payload.error.trim() : "";
+  if (
+    message &&
+    message.length <= 240 &&
+    !/[{}<>`]/.test(message) &&
+    !/https?:\/\//i.test(message) &&
+    !/unexpected token|json|html|supabase|openai|netlify|credit_operation|stack|schema cache/i.test(message)
+  ) {
+    return message;
+  }
+  return fallback;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function attachmentExtension(file: File) {
