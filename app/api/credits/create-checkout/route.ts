@@ -3,7 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import { getStripe, resolveStripeCustomer } from "@/lib/billing/stripe";
-import { checkoutCollectionOptions } from "@/lib/billing/profile";
+import { checkoutCollectionOptions, stripeProductTaxCode } from "@/lib/billing/profile";
 import { CreditError, ensureCreditWallet } from "@/lib/credits/server";
 import { getCreditPack } from "@/lib/platform/plans";
 
@@ -56,9 +56,11 @@ export async function POST(request: Request) {
           price_data: {
             currency: "usd",
             unit_amount: Math.round(pack.priceUsd * 100),
+            tax_behavior: "exclusive",
             product_data: {
               name: `Heyy Studio — ${pack.name}`,
               description: pack.description,
+              ...(stripeProductTaxCode() ? { tax_code: stripeProductTaxCode() } : {}),
             },
           },
         },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, LoaderCircle, ReceiptText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, LoaderCircle, ReceiptText, RefreshCw } from "lucide-react";
 import AccountLayout from "@/components/account/AccountLayout";
 import { useAuth } from "@/components/auth-provider";
 import { Button, Eyebrow, GlassCard, StatusPill } from "@/components/ui/heyy";
@@ -17,6 +17,7 @@ type Payment = {
   status: string;
   invoice_number: string;
   paid_at: string;
+  billing_country_code?: string | null;
 };
 
 function money(cents: number, currency: string) {
@@ -29,6 +30,7 @@ function money(cents: number, currency: string) {
 
 export default function PaymentHistoryPage() {
   const { user } = useAuth();
+  const userId = user?.id || "";
   const [items, setItems] = useState<Payment[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -36,8 +38,8 @@ export default function PaymentHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    if (!user) return;
+  const load = useCallback(async (sync = false) => {
+    if (!userId) return;
     setLoading(true);
     setError("");
     try {
@@ -45,7 +47,7 @@ export default function PaymentHistoryPage() {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) return;
-      const response = await fetch(`/api/account/payments?page=${page}`, {
+      const response = await fetch(`/api/account/payments?page=${page}${sync ? "&sync=1" : ""}`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
@@ -59,9 +61,9 @@ export default function PaymentHistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, user]);
+  }, [page, userId]);
 
-  useEffect(() => void load(), [load]);
+  useEffect(() => void load(false), [load]);
 
   async function downloadInvoice(payment: Payment) {
     const supabase = createSupabaseBrowserClient();
@@ -96,12 +98,17 @@ export default function PaymentHistoryPage() {
       {error && <div className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-600">{error}</div>}
 
       <GlassCard className="mt-7 overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-[var(--border)] p-6">
-          <ReceiptText size={20} className="text-[var(--accent-strong)]" />
-          <div>
-            <h2 className="text-xl font-black">Purchases & invoices</h2>
-            <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">10 payments per page.</p>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] p-6">
+          <div className="flex items-center gap-3">
+            <ReceiptText size={20} className="text-[var(--accent-strong)]" />
+            <div>
+              <h2 className="text-xl font-black">Purchases & invoices</h2>
+              <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">10 payments per page.</p>
+            </div>
           </div>
+          <Button type="button" size="sm" variant="secondary" onClick={() => void load(true)} disabled={loading}>
+            {loading ? <LoaderCircle size={14} className="animate-spin" /> : <RefreshCw size={14} />} Refresh
+          </Button>
         </div>
 
         {loading ? (
@@ -123,7 +130,14 @@ export default function PaymentHistoryPage() {
                   <p className="mt-1 text-[.68rem] font-black uppercase tracking-[.11em] text-[var(--text-muted)]">{payment.payment_type.replaceAll("_", " ")}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <p className="text-base font-black">{money(payment.amount_total, payment.currency)}</p>
+                  <div className="text-right">
+                    <p className="text-base font-black">{money(payment.amount_total, payment.currency)}</p>
+                    {payment.tax_amount > 0 && (
+                      <p className="mt-1 text-[.68rem] font-black uppercase tracking-[.09em] text-[var(--text-muted)]">
+                        {String(payment.billing_country_code || "").toUpperCase() === "AU" ? "GST" : "Tax"} {money(payment.tax_amount, payment.currency)}
+                      </p>
+                    )}
+                  </div>
                   <Button type="button" size="sm" variant="secondary" onClick={() => void downloadInvoice(payment)}>
                     <Download size={14} /> Download invoice
                   </Button>

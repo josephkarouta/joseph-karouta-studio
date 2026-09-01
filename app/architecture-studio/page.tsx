@@ -573,7 +573,7 @@ export default function ArchitectureStudioPage() {
                         ? "Simple language and smart recommendations"
                         : "Areas, structure, schedules and technical controls"}
                     </span>
-                    <CreditPill credits={CREDIT_COSTS.architectureDirection} />
+                    <CreditPill credits={CREDIT_COSTS.architectureConcept} />
                   </div>
                 </div>
               </div>

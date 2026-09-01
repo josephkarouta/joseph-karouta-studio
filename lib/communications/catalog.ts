@@ -1,7 +1,7 @@
 export type CommunicationTemplateDefinition = {
   key: string;
   name: string;
-  category: "Onboarding" | "Billing" | "Production" | "Announcements";
+  category: "Onboarding" | "Billing" | "Production" | "Careers" | "Announcements";
   description: string;
   defaultSubject?: string;
   defaultPreheader?: string;
@@ -35,6 +35,30 @@ export const COMMUNICATION_TEMPLATE_CATALOG: CommunicationTemplateDefinition[] =
     defaultTitle: "Thanks for creating with us",
     defaultBody: "Thanks for being part of Heyy Studio, {{first_name}}. Your account has been deleted and access to your workspace has ended. Limited payment or compliance records may be retained where required for billing, tax, fraud-prevention or legal obligations.",
     defaultCtaLabel: "Visit Heyy Studio",
+  },
+  {
+    key: "career.application.received.client",
+    name: "Career application received — applicant",
+    category: "Careers",
+    description: "Sent automatically after a candidate successfully submits a Careers application.",
+    defaultSubject: "Application received — {{role_title}}",
+    defaultPreheader: "We’ve received your application to Heyy Studio.",
+    defaultEyebrow: "Application received",
+    defaultTitle: "Thanks for applying to Heyy Studio",
+    defaultBody: "Thank you for applying for {{role_title}}, {{first_name}}. We’ve received your application. Our team will review it and we’ll contact you if you’re shortlisted for the next stage.",
+    defaultCtaLabel: "View careers",
+  },
+  {
+    key: "career.application.received.admin",
+    name: "Career application received — admin",
+    category: "Careers",
+    description: "Operational notification sent to ADMIN_EMAIL when a new Careers application is received.",
+    defaultSubject: "New career application — {{role_title}}",
+    defaultPreheader: "A new candidate application is ready for review.",
+    defaultEyebrow: "New career application",
+    defaultTitle: "A new candidate is ready for review",
+    defaultBody: "{{applicant_name}} submitted an application for {{role_title}}. Review the application, CV and candidate links in Admin.",
+    defaultCtaLabel: "Review application",
   },
   {
     key: "payment.receipt",

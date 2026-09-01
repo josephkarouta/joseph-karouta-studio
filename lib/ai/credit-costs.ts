@@ -5,6 +5,7 @@ import { CREDIT_COSTS } from "@/lib/credits/config";
  * the same central credit ledger before provider calls.
  */
 export const ARCHITECTURE_CREDIT_COSTS = {
+  conceptText: CREDIT_COSTS.architectureConcept,
   directionPreview: CREDIT_COSTS.architectureDirection,
   conceptPreview: CREDIT_COSTS.architectureDirection,
   visualPreview: CREDIT_COSTS.architectureVisual,

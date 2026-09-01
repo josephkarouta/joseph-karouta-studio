@@ -310,6 +310,44 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
     if (!(resource in map)) return NextResponse.json({ error: "Unknown resource." }, { status: 404 });
     const config = map[resource as keyof typeof map];
 
+    if (resource === "applications") {
+      const { data, error } = await client
+        .from("career_applications")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+
+      const rows = (data || []) as UnknownRow[];
+      const positionIds = Array.from(
+        new Set(rows.map((row) => firstText(row.position_id)).filter(Boolean)),
+      );
+      let positionRows: UnknownRow[] = [];
+      if (positionIds.length) {
+        const { data: positions, error: positionError } = await client
+          .from("career_positions")
+          .select("id,title,department,location")
+          .in("id", positionIds);
+        if (positionError) throw positionError;
+        positionRows = (positions || []) as UnknownRow[];
+      }
+
+      const positionMap = new Map(
+        positionRows.map((row) => [firstText(row.id), row]),
+      );
+      const items = rows.map((row) => {
+        const position = positionMap.get(firstText(row.position_id));
+        return {
+          ...row,
+          position_title: firstText(position?.title) || "Role unavailable",
+          position_department: firstText(position?.department),
+          position_location: firstText(position?.location),
+        };
+      });
+
+      return NextResponse.json({ items });
+    }
+
     if (resource === "generations") {
       const searchParams = new URL(request.url).searchParams;
       const parsedPage = Number.parseInt(searchParams.get("page") || "1", 10);
@@ -505,8 +543,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ re
     if (!id) return NextResponse.json({ error: "Missing record ID." }, { status: 400 });
     delete body.id;
     const update = sanitize(resource, body);
-    if (update.status === "published") update.published_at = new Date().toISOString();
-    if (update.status && update.status !== "published") update.published_at = null;
+    // Only publishable content tables have a published_at column. Career
+    // applications and contact submissions use workflow statuses but do not.
+    if (["careers", "pages", "help"].includes(resource)) {
+      if (update.status === "published") update.published_at = new Date().toISOString();
+      if (update.status && update.status !== "published") update.published_at = null;
+    }
     const { data, error } = await admin().from(config.table).update(update).eq(config.key, id).select("*").single();
     if (error) throw error;
     await recordAdminAudit({ actorUserId: access.user?.id || null, action: `platform.${resource}.updated`, entityType: resource, entityId: id, summary: `Updated ${resource} record: ${String((data as Record<string, unknown>)?.title || (data as Record<string, unknown>)?.name || id)}` });

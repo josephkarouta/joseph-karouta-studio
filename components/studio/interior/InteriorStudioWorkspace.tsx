@@ -53,8 +53,10 @@ import HeyySelect from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
 import { generationFetch } from "@/lib/client/generation-request";
+import { downloadInteriorDesignPack } from "@/lib/interior/design-pack-export";
 
 const config = GUIDED_STUDIOS.interior;
+const INTERIOR_AI_CONCEPT_NOTICE = "AI-generated plans and visuals are for concept exploration and early design direction only. They are not construction-ready or professionally verified. For accurate plans, technical drawings or production-ready design, continue with Heyy Studio expert production. Create with AI. Build with Experts.";
 
 type FormState = Record<string, string | string[]>;
 type ResultData = Record<string, unknown> & {
@@ -286,6 +288,7 @@ function InteriorExperience() {
   const [generatingRoomKeys, setGeneratingRoomKeys] = useState<string[]>([]);
   const [savingMappingAssetId, setSavingMappingAssetId] = useState<string | null>(null);
   const [approvingAssetId, setApprovingAssetId] = useState<string | null>(null);
+  const [exportingDesignPack, setExportingDesignPack] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxImage>(null);
   const [sourcePlanFiles, setSourcePlanFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
@@ -669,33 +672,28 @@ function InteriorExperience() {
     window.history.replaceState({}, "", url);
   }
 
-  function downloadDesignPack() {
+  async function downloadDesignPack() {
     if (!result) return;
-    const payload = {
-      project: project?.project_name || form.projectName || "Interior project",
-      workMode,
-      generatedAt: new Date().toISOString(),
-      brief: form,
-      concept: result,
-      professionalPackage: result.professionalPackage || null,
-      plans: assets
-        .filter((asset) => {
-          const type = String(asset.asset_type || "");
-          return type.startsWith("interior_plan_") || type.startsWith("interior_source_");
-        })
-        .map((asset) => ({ title: asset.title, url: asset.file_url, type: asset.metadata?.view_type, stage: asset.metadata?.stage, approved: asset.metadata?.approved })),
-      visuals: assets
-        .filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_") && (form.projectStartMode !== "existing" || Boolean(asset.metadata?.room_key)))
-        .map((asset) => ({ title: asset.title, url: asset.file_url, type: asset.metadata?.view_type, stage: asset.metadata?.stage, approved: asset.metadata?.approved, room: asset.metadata?.room_name, floor: asset.metadata?.floor_label })),
-      disclaimer: config.disclaimer,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${slugify(String(form.projectName || "interior-project"))}-design-pack.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    setExportingDesignPack(true);
+    setError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Your session expired. Sign in again.");
+      await downloadInteriorDesignPack({
+        projectName: String(project?.project_name || form.projectName || "Interior project"),
+        workMode,
+        accessToken,
+        brief: form,
+        concept: result,
+        assets,
+        disclaimer: config.disclaimer,
+      });
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "The Interior Design Pack could not be prepared.");
+    } finally {
+      setExportingDesignPack(false);
+    }
   }
 
   const loading = generatingConcept;
@@ -806,7 +804,7 @@ function InteriorExperience() {
             )}
             {activeTab === "professional-pack" && <ProfessionalPackageSection value={result.professionalPackage} />}
             {activeTab === "design-pack" && (
-              <DesignPackSection result={result} assets={assets} workMode={workMode} existingDesign={existingDesign} onDownload={downloadDesignPack} />
+              <DesignPackSection result={result} assets={assets} workMode={workMode} existingDesign={existingDesign} exporting={exportingDesignPack} onDownload={() => void downloadDesignPack()} />
             )}
             {activeTab === "production" && (
               <ProductionPanel
@@ -1446,6 +1444,10 @@ function PlansSection({
         <CreditPill credits={CREDIT_COSTS.interiorPlan} label="per plan" />
       </div>
 
+      <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+        {INTERIOR_AI_CONCEPT_NOTICE}
+      </div>
+
       {spacePlanApproved && (
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] p-4">
           <div>
@@ -1540,6 +1542,10 @@ function VisualsSection({
           </p>
         </div>
         <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per visual" />
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+        {INTERIOR_AI_CONCEPT_NOTICE}
       </div>
 
       {!spacePlanReady && (
@@ -1770,7 +1776,7 @@ function ExistingDesignRoomVisualsSection({
           <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per concept view" />
         </div>
         <div className="mt-5 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">
-          Plan-guided visuals use the mapped room and selected uploaded plan as the primary spatial reference. They are concept imagery, not guaranteed exact 3D reconstructions.
+          Plan-guided visuals use the mapped room and uploaded plan as the primary spatial reference, but AI interpretation can still vary. {INTERIOR_AI_CONCEPT_NOTICE}
         </div>
         <div className="mt-5 flex flex-wrap gap-3">
           <Button type="button" variant="secondary" onClick={onOpenPlans}><FileText size={15} /> Uploaded plans</Button>
@@ -2092,7 +2098,7 @@ function ProfessionalPackageSection({ value }: { value: unknown }) {
   );
 }
 
-function DesignPackSection({ result, assets, workMode, existingDesign, onDownload }: { result: ResultData; assets: ProjectAsset[]; workMode: WorkMode; existingDesign: boolean; onDownload: () => void }) {
+function DesignPackSection({ result, assets, workMode, existingDesign, exporting, onDownload }: { result: ResultData; assets: ProjectAsset[]; workMode: WorkMode; existingDesign: boolean; exporting: boolean; onDownload: () => void }) {
   const uploadedSourcePlans = getUploadedSourcePlanAssets(assets);
   const approvedPlans = PLAN_VIEWS.filter((plan) => isAnyStageApproved(assets, plan.id)).length;
   const mappedRooms = existingDesign ? getMappedRoomContexts(assets) : [];
@@ -2112,8 +2118,8 @@ function DesignPackSection({ result, assets, workMode, existingDesign, onDownloa
           <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Compile the project into one connected package</h2>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">The pack includes the brief, layout, products, approved plans and visuals{workMode === "professional" ? ", procurement registers, quantities, dimensions, programme and close-out plan" : ""}.</p>
         </div>
-        <Button onClick={onDownload}>
-          <Download size={15} /> Download project data
+        <Button onClick={onDownload} disabled={exporting}>
+          {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} {exporting ? "Preparing ZIP…" : "Download design pack (.zip)"}
         </Button>
       </div>
       <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -2126,7 +2132,7 @@ function DesignPackSection({ result, assets, workMode, existingDesign, onDownloa
         <PackStatus label={existingDesign ? `Approved room concepts ${approvedVisuals}/${visualTarget}` : `Approved visuals ${approvedVisuals}/${visualTarget}`} ready={visualTarget > 0 && approvedVisuals === visualTarget} />
         <PackStatus label="Professional package" ready={workMode !== "professional" || Boolean(result.professionalPackage)} />
       </div>
-      <div className="mt-5 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">{config.disclaimer}</div>
+      <div className="mt-5 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">{INTERIOR_AI_CONCEPT_NOTICE}</div>
     </GlassCard>
   );
 }

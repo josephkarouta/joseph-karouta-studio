@@ -826,7 +826,8 @@ function OverviewPanel({
             <QuickLink href="/admin/platform/clients" icon={Users} title="Client history" note="Projects, quotes and revenue" />
             <QuickLink href="/admin/platform/users" icon={Users} title="Users" note="Accounts and plans" />
             <QuickLink href="/admin/platform/contact" icon={Mail} title="Contact" note="Website enquiries" />
-            <QuickLink href="/admin/platform/careers" icon={BriefcaseBusiness} title="Careers" note="Positions and applicants" />
+            <QuickLink href="/admin/platform/careers" icon={BriefcaseBusiness} title="Careers" note="Open positions" />
+            <QuickLink href="/admin/platform/applications" icon={BriefcaseBusiness} title="Applications" note="Candidates and CVs" />
             <QuickLink href="/admin/platform/pages" icon={Palette} title="Public pages" note="Policies and content" />
             <QuickLink href="/admin/platform/help" icon={BellRing} title="Help centre" note="Support articles" />
             <QuickLink href="/admin/platform/generations" icon={WandSparkles} title="Generations" note="AI job monitoring" />
@@ -1101,7 +1102,7 @@ function InboxPanel({
         eyebrow="People"
         title="Career applications"
         description="Review genuine applications from the public Careers page."
-        action={<Link href="/admin/platform/careers">Manage careers <ArrowRight size={14} /></Link>}
+        action={<Link href="/admin/platform/applications">View applications <ArrowRight size={14} /></Link>}
       >
         <div className="heyy-submission-grid">
           {applications.slice(0, 8).map((item) => (
@@ -1112,7 +1113,7 @@ function InboxPanel({
               description={item.location || item.portfolio_url || "Candidate application"}
               status={item.status || "New"}
               date={item.created_at}
-              href="/admin/platform/careers"
+              href={`/admin/platform/applications?application=${encodeURIComponent(String(item.id || ""))}`}
             />
           ))}
           {!applications.length && (

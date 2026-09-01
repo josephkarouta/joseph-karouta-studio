@@ -93,7 +93,7 @@ export default function BillingInformationCard() {
         <div>
           <p className="text-xs font-black uppercase tracking-[.16em] text-[var(--accent-strong)]">Invoice details</p>
           <h2 className="mt-2 text-2xl font-black">Billing information</h2>
-          <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Saved details are used for future Heyy Studio invoices. Secure checkout will still collect the payment address and tax ID where applicable.</p>
+          <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Saved details are used for future Heyy Studio invoices. Tax is calculated at secure checkout from the transaction location and applicable tax rules.</p>
         </div>
         {saved && <span className="inline-flex items-center gap-2 text-xs font-black text-emerald-600"><CheckCircle2 size={15}/> Saved</span>}
       </div>
@@ -107,8 +107,9 @@ export default function BillingInformationCard() {
           <Field label={profile.customer_type === "business" ? "Contact / legal name *" : "Legal name *"} value={profile.legal_name} onChange={(value) => setProfile({ ...profile, legal_name: value })}/>
           <Field label="Billing email *" type="email" value={profile.email} onChange={(value) => setProfile({ ...profile, email: value })}/>
           {profile.customer_type === "business" && <><Field label="Company / legal business name *" value={profile.company_name} onChange={(value) => setProfile({ ...profile, company_name: value })}/><Field label="Company registration number (optional)" value={profile.company_number} onChange={(value) => setProfile({ ...profile, company_number: value })}/></>}
-          <Field label={profile.country_code === "AU" ? "ABN / tax ID (optional)" : "VAT / tax ID (optional)"} value={profile.tax_id} onChange={(value) => setProfile({ ...profile, tax_id: value })}/>
+          {profile.customer_type === "business" && <Field label={profile.country_code === "AU" ? "ABN (optional)" : "VAT / tax ID (optional)"} value={profile.tax_id} onChange={(value) => setProfile({ ...profile, tax_id: value })}/>}
           <Field label="Country code *" placeholder="AU" maxLength={2} value={profile.country_code} onChange={(value) => setProfile({ ...profile, country_code: value.toUpperCase() })}/>
+          {profile.customer_type === "business" && profile.country_code === "AU" && <p className="text-xs font-semibold leading-5 text-[var(--text-muted)] sm:col-span-2">For Australian businesses, the ABN can be saved to the Stripe customer record. You do not need to declare whether your business is GST registered here; GST on a taxable Australian sale is determined by the supplier's tax obligations and the transaction.</p>}
           <Field className="sm:col-span-2" label="Address line 1 *" value={profile.address_line1} onChange={(value) => setProfile({ ...profile, address_line1: value })}/>
           <Field className="sm:col-span-2" label="Address line 2 (optional)" value={profile.address_line2} onChange={(value) => setProfile({ ...profile, address_line2: value })}/>
           <Field label="City *" value={profile.city} onChange={(value) => setProfile({ ...profile, city: value })}/>

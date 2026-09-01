@@ -95,19 +95,22 @@ async function receiptBillingProfile(admin: ReturnType<typeof adminClient>, user
 }
 
 function billingSnapshot(profile: BillingProfile | null, fallbackName: string | null | undefined, fallbackEmail: string | null | undefined, fallbackAddress?: Stripe.Address | null, fallbackTaxId?: string | null) {
+  // Stripe transaction details are authoritative for the paid invoice. The
+  // saved Heyy billing profile remains the fallback and supplies fields that
+  // Checkout does not collect, such as company registration number.
   return {
-    billing_name: profile?.legal_name || fallbackName || null,
-    billing_email: profile?.email || fallbackEmail?.trim().toLowerCase() || null,
-    billing_customer_type: profile?.customer_type || "personal",
+    billing_name: fallbackName || profile?.legal_name || null,
+    billing_email: fallbackEmail?.trim().toLowerCase() || profile?.email || null,
+    billing_customer_type: profile?.customer_type || (fallbackTaxId ? "business" : "personal"),
     billing_company_name: profile?.company_name || null,
     billing_company_number: profile?.company_number || null,
-    billing_tax_id: profile?.tax_id || String(fallbackTaxId || "").trim() || null,
-    billing_address_line1: profile?.address_line1 || fallbackAddress?.line1 || null,
-    billing_address_line2: profile?.address_line2 || fallbackAddress?.line2 || null,
-    billing_city: profile?.city || fallbackAddress?.city || null,
-    billing_state_region: profile?.state_region || fallbackAddress?.state || null,
-    billing_postal_code: profile?.postal_code || fallbackAddress?.postal_code || null,
-    billing_country_code: profile?.country_code || fallbackAddress?.country || null,
+    billing_tax_id: String(fallbackTaxId || "").trim() || profile?.tax_id || null,
+    billing_address_line1: fallbackAddress?.line1 || profile?.address_line1 || null,
+    billing_address_line2: fallbackAddress?.line2 || profile?.address_line2 || null,
+    billing_city: fallbackAddress?.city || profile?.city || null,
+    billing_state_region: fallbackAddress?.state || profile?.state_region || null,
+    billing_postal_code: fallbackAddress?.postal_code || profile?.postal_code || null,
+    billing_country_code: fallbackAddress?.country || profile?.country_code || null,
   };
 }
 
@@ -175,6 +178,12 @@ export async function recordAndSendPaymentReceipt(input: PaymentReceiptInput) {
     details: [
       { label: "Invoice", value: record.invoice_number },
       { label: "Payment status", value: "Paid" },
+      ...(record.tax_amount > 0
+        ? [{
+            label: process.env.HEYY_INVOICE_GST_REGISTERED === "true" && String(record.billing_country_code || "").toUpperCase() === "AU" ? "GST" : "Tax",
+            value: money(record.tax_amount, record.currency),
+          }]
+        : []),
     ],
     ctaLabel: resolved.ctaLabel,
     ctaUrl: sitePath("/account/payments"),
@@ -362,10 +371,12 @@ export async function backfillPaymentHistory({
   userId,
   userEmail,
   stripeCustomerId,
+  sendLatestSubscriptionEmail = false,
 }: {
   userId: string;
   userEmail?: string | null;
   stripeCustomerId?: string | null;
+  sendLatestSubscriptionEmail?: boolean;
 }) {
   const admin = adminClient();
   if (stripeCustomerId) {
@@ -375,6 +386,7 @@ export async function backfillPaymentHistory({
       stripe.checkout.sessions.list({ customer: stripeCustomerId, limit: 100 }),
     ]);
 
+    let latestSubscriptionReceiptHandled = false;
     for (const invoice of invoices.data) {
       if (Number(invoice.amount_paid || 0) <= 0) continue;
       const taxAmount = (invoice.total_taxes || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -393,9 +405,16 @@ export async function backfillPaymentHistory({
         billingAddress: (invoice as unknown as { customer_address?: Stripe.Address | null }).customer_address || null,
     billingTaxId: ((invoice as unknown as { customer_tax_ids?: Array<{ value?: string | null }> }).customer_tax_ids || [])[0]?.value || null,
         paidAt: new Date(Number(invoice.status_transitions?.paid_at || invoice.created) * 1000).toISOString(),
-        sendEmail: false,
-        metadata: { backfilled: true },
+        // Recovery is intentionally limited to the newest paid subscription invoice.
+        // sendTrackedEmail uses the invoice payment key as an exactly-once event key,
+        // so this can safely repair a missed webhook email without duplicating one
+        // that was already delivered. Older historical invoices are backfilled silently.
+        sendEmail: sendLatestSubscriptionEmail && !latestSubscriptionReceiptHandled,
+        metadata: { backfilled: true, subscription_receipt_recovery: sendLatestSubscriptionEmail && !latestSubscriptionReceiptHandled },
       });
+      if (sendLatestSubscriptionEmail && !latestSubscriptionReceiptHandled) {
+        latestSubscriptionReceiptHandled = true;
+      }
     }
 
     for (const session of sessions.data) {

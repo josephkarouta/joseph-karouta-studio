@@ -39,6 +39,11 @@ export function billingAddressLines(profile: Partial<BillingProfile>) {
   return [profile.address_line1, profile.address_line2, locality || null, profile.country_code || null].filter(Boolean) as string[];
 }
 
+export function stripeProductTaxCode() {
+  const value = String(process.env.HEYY_STRIPE_TAX_CODE || "").trim();
+  return value || undefined;
+}
+
 export function checkoutCollectionOptions(hasCustomer: boolean): Pick<
   Stripe.Checkout.SessionCreateParams,
   "billing_address_collection" | "tax_id_collection" | "automatic_tax" | "customer_update"

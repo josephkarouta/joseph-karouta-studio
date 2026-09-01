@@ -48,12 +48,17 @@ export async function PUT(request: Request) {
     const stateRegion = clean(body.state_region, 120);
     const postalCode = clean(body.postal_code, 40);
     const countryCode = clean(body.country_code, 2).toUpperCase();
+    const rawTaxId = customerType === "business" ? clean(body.tax_id, 100) : "";
+    const taxId = countryCode === "AU" ? rawTaxId.replace(/[^0-9]/g, "") : rawTaxId;
 
     if (!legalName || !email.includes("@") || !addressLine1 || !city || !postalCode || countryCode.length !== 2) {
       return NextResponse.json({ error: "Complete the required billing name, email and address fields." }, { status: 400 });
     }
     if (customerType === "business" && !companyName) {
       return NextResponse.json({ error: "Add the company or legal business name." }, { status: 400 });
+    }
+    if (customerType === "business" && countryCode === "AU" && taxId && !/^\d{11}$/.test(taxId)) {
+      return NextResponse.json({ error: "An Australian ABN must contain 11 digits." }, { status: 400 });
     }
 
     const row = {
@@ -62,7 +67,7 @@ export async function PUT(request: Request) {
       legal_name: legalName,
       company_name: customerType === "business" ? companyName : null,
       company_number: customerType === "business" ? clean(body.company_number, 100) || null : null,
-      tax_id: clean(body.tax_id, 100) || null,
+      tax_id: taxId || null,
       email,
       address_line1: addressLine1,
       address_line2: clean(body.address_line2, 220) || null,
@@ -97,6 +102,23 @@ export async function PUT(request: Request) {
             country: countryCode,
           },
         });
+
+        // Australian ABNs are a first-class Stripe customer tax ID. Keep the
+        // saved Heyy billing profile and Stripe customer aligned so Checkout,
+        // Stripe Tax and future subscription invoices use the same business ID.
+        const existingTaxIds = await stripe.customers.listTaxIds(customer.id, { limit: 100 });
+        const existingAustralianAbns = existingTaxIds.data.filter((item) => item.type === "au_abn");
+        const shouldKeepAustralianAbn = customerType === "business" && countryCode === "AU" && Boolean(taxId);
+
+        for (const item of existingAustralianAbns) {
+          if (!shouldKeepAustralianAbn || item.value.replace(/[^0-9]/g, "") !== taxId) {
+            await stripe.customers.deleteTaxId(customer.id, item.id);
+          }
+        }
+
+        if (shouldKeepAustralianAbn && !existingAustralianAbns.some((item) => item.value.replace(/[^0-9]/g, "") === taxId)) {
+          await stripe.customers.createTaxId(customer.id, { type: "au_abn", value: taxId });
+        }
       }
     } catch (stripeError) {
       console.warn("Saved Heyy billing profile but could not sync Stripe customer:", stripeError);

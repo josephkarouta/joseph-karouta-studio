@@ -42,6 +42,7 @@ export function invoiceBusinessDetails() {
     abn: String(process.env.HEYY_INVOICE_ABN || "").trim(),
     address: String(process.env.HEYY_INVOICE_ADDRESS || "").trim(),
     email: process.env.HEYY_INVOICE_EMAIL || "hello@heyystudio.com",
+    website: String(process.env.HEYY_INVOICE_WEBSITE || getSiteUrl()).trim(),
     gstRegistered: process.env.HEYY_INVOICE_GST_REGISTERED === "true",
   };
 }
@@ -128,7 +129,7 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
     business.abn ? `ABN ${business.abn}` : null,
     business.address || null,
     business.email,
-    getSiteUrl().replace(/^https?:\/\//, ""),
+    business.website.replace(/^https?:\/\//, ""),
   ].filter(Boolean) as string[];
   supplierLines.forEach((line, index) => doc.text(doc.splitTextToSize(line, 220), margin, y + index * 15));
 

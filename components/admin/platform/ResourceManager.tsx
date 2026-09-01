@@ -188,7 +188,9 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [selectedGeneration, setSelectedGeneration] = useState<Row | null>(null);
+  const [selectedApplication, setSelectedApplication] = useState<Row | null>(null);
   const initialGenerationSearch = useRef(true);
+  const applicationDeepLinkHandled = useRef(false);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
 
@@ -240,6 +242,7 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
 
   useEffect(() => {
     initialGenerationSearch.current = true;
+    applicationDeepLinkHandled.current = false;
     setPage(1);
     setQuery("");
     setToolFilter("all");
@@ -247,8 +250,21 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
     setStatusFilter("all");
     setDateFilter("all");
     setSelectedGeneration(null);
+    setSelectedApplication(null);
     void load({ page: 1, query: "", tool: "all", provider: "all", status: "all", date: "all" });
   }, [resource]);
+
+  useEffect(() => {
+    if (resource !== "applications" || applicationDeepLinkHandled.current || rows.length === 0) return;
+    const applicationId = new URLSearchParams(window.location.search).get("application");
+    if (!applicationId) {
+      applicationDeepLinkHandled.current = true;
+      return;
+    }
+    const matchingApplication = rows.find((row) => String(row.id || "") === applicationId);
+    if (matchingApplication) setSelectedApplication(matchingApplication);
+    applicationDeepLinkHandled.current = true;
+  }, [resource, rows]);
 
   useEffect(() => {
     if (resource !== "generations") return;
@@ -477,12 +493,25 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                       <p className="truncate text-sm font-black">{String(row.title || row.name || row.email || row.tool || row.slug || "Untitled")}</p>
                       {row.status && <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill>}
                     </div>
-                    <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.summary || row.message || row.description || row.email || row.provider || row.slug || "")}</p>
+                    {resource === "applications" ? (
+                      <>
+                        <p className="mt-2 text-xs font-black text-violet-600">{String(row.position_title || "Role unavailable")}</p>
+                        <p className="mt-1 truncate text-xs font-semibold text-slate-500">{String(row.email || "")}{row.location ? ` · ${String(row.location)}` : ""}</p>
+                        <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.message || "")}</p>
+                      </>
+                    ) : (
+                      <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.summary || row.message || row.description || row.email || row.provider || row.slug || "")}</p>
+                    )}
                     {resource === "users" && <p className="mt-1 text-[.65rem] font-black uppercase tracking-[.12em] text-violet-500">{String(row.role || "customer").replace(/_/g, " ")}</p>}
                     <p className="mt-2 text-[.65rem] font-bold text-slate-400">{row.created_at ? new Date(row.created_at).toLocaleString("en-US") : String(row.location || row.category || "")}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {resource === "users" && <div className="min-w-[170px]"><HeyySelect value={String(row.role || "customer")} tone="admin" ariaLabel="Admin role" options={[{value:"customer",label:"Customer"},{value:"business_admin",label:"Business admin"},{value:"admin",label:"Full admin"}]} onChange={(value) => void updateRole(row, value)} triggerClassName="!min-h-9 !rounded-full !px-3 !py-1.5 !text-xs" /></div>}
+                    {resource === "applications" && (
+                      <button type="button" onClick={() => setSelectedApplication(row)} className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50">
+                        <Eye size={14}/>Review
+                      </button>
+                    )}
                     {resource === "applications" && Boolean(row.resume_url) && (
                       <a href={`/api/admin/careers/resume?applicationId=${encodeURIComponent(String(row.id || ""))}`} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50">
                         <Download size={14}/> CV
@@ -570,6 +599,59 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                 </a>
               )}
               <Button variant="ghost" onClick={() => setSelectedGeneration(null)}>Close</Button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {selectedApplication && resource === "applications" && (
+        <div className="fixed inset-0 z-[125] grid place-items-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
+          <GlassCard className="my-8 w-full max-w-3xl bg-white p-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Career application</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <h3 className="text-3xl font-black tracking-[-.05em]">{String(selectedApplication.name || "Applicant")}</h3>
+                  {selectedApplication.status && <StatusPill tone={statusTone(selectedApplication.status)}>{selectedApplication.status}</StatusPill>}
+                </div>
+                <p className="mt-2 text-sm font-black text-violet-600">{String(selectedApplication.position_title || "Role unavailable")}</p>
+              </div>
+              <button onClick={() => setSelectedApplication(null)} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <GenerationDetail label="Role" value={selectedApplication.position_title}/>
+              <GenerationDetail label="Department" value={selectedApplication.position_department}/>
+              <GenerationDetail label="Applicant" value={selectedApplication.name}/>
+              <GenerationDetail label="Email" value={selectedApplication.email}/>
+              <GenerationDetail label="Current location" value={selectedApplication.location}/>
+              <GenerationDetail label="Role location" value={selectedApplication.position_location}/>
+              <GenerationDetail label="Submitted" value={formatDate(selectedApplication.created_at)}/>
+              <GenerationDetail label="Application ID" value={selectedApplication.id}/>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+              <p className="text-[.6rem] font-black uppercase tracking-[.14em] text-slate-400">Candidate message</p>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-700">{text(selectedApplication.message) || "No message provided."}</p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              {Boolean(selectedApplication.resume_url) && (
+                <a href={`/api/admin/careers/resume?applicationId=${encodeURIComponent(String(selectedApplication.id || ""))}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800">
+                  <Download size={14}/>Download CV
+                </a>
+              )}
+              {Boolean(selectedApplication.portfolio_url) && (
+                <a href={String(selectedApplication.portfolio_url)} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">
+                  Portfolio <ExternalLink size={14}/>
+                </a>
+              )}
+              {Boolean(selectedApplication.linkedin_url) && (
+                <a href={String(selectedApplication.linkedin_url)} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">
+                  LinkedIn <ExternalLink size={14}/>
+                </a>
+              )}
+              <Button variant="ghost" onClick={() => setSelectedApplication(null)}>Close</Button>
             </div>
           </GlassCard>
         </div>

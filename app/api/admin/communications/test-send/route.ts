@@ -19,11 +19,15 @@ type TestContext = {
   status?: string | null;
   amount?: string | null;
   details?: EmailDetail[];
+  detailsTitle?: string;
   note?: string | null;
+  supportingCopy?: string;
 };
 
 const SAMPLE_VARIABLES = {
   first_name: "Joseph",
+  role_title: "Senior Brand Designer",
+  applicant_name: "Taylor Morgan",
   description: "Heyy Studio Pro",
   amount: "$249.00",
   invoice_number: "HS-TEST-0001",
@@ -61,6 +65,7 @@ export async function POST(request: Request) {
     });
 
     const context = testContext(templateKey);
+    const ctaPath = testCtaPath(templateKey);
     const template = {
       eyebrow: resolved.eyebrow,
       title: resolved.title,
@@ -73,11 +78,13 @@ export async function POST(request: Request) {
       status: context.status,
       amount: context.amount,
       details: context.details,
+      detailsTitle: context.detailsTitle,
       note: context.note,
+      supportingCopy: context.supportingCopy,
       ctaLabel: resolved.ctaLabel,
       // Test messages deliberately use a safe destination. Live transactional
       // messages keep the real project/quote/production URL supplied by the event.
-      ctaUrl: sitePath("/dashboard"),
+      ctaUrl: sitePath(ctaPath),
     };
 
     await sendTrackedEmail({
@@ -89,7 +96,7 @@ export async function POST(request: Request) {
       text: buildPlainTextEmail(template),
       relatedType: "admin_test",
       relatedId: templateKey,
-      metadata: { test: true, safe_cta: "/dashboard" },
+      metadata: { test: true, safe_cta: ctaPath },
     });
 
     await recordAdminAudit({
@@ -100,15 +107,51 @@ export async function POST(request: Request) {
       summary: `Sent a test of ${templateKey} to ${to}`,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ctaPath });
   } catch (error) {
     console.error("Test communication send error:", error);
     return NextResponse.json({ success: false, error: "Test email could not be sent." }, { status: 500 });
   }
 }
 
+function testCtaPath(templateKey: string) {
+  if (templateKey === "career.application.received.client") return "/careers";
+  if (templateKey === "career.application.received.admin") return "/admin/platform/applications";
+  return "/dashboard";
+}
+
 function testContext(templateKey: string): TestContext {
   if (templateKey === "welcome" || templateKey === "announcement" || templateKey === "account.goodbye") return {};
+
+  if (templateKey === "career.application.received.client") {
+    return {
+      status: "Application received",
+      detailsTitle: "Application details",
+      details: [
+        { label: "Role", value: "Senior Brand Designer" },
+        { label: "Department", value: "Creative" },
+        { label: "Role location", value: "Remote / Worldwide" },
+      ],
+      supportingCopy: "You do not need to submit the same application again. We’ll contact you only if you’re shortlisted for the next stage.",
+    };
+  }
+
+  if (templateKey === "career.application.received.admin") {
+    return {
+      recipient: "admin",
+      status: "New",
+      detailsTitle: "Candidate details",
+      details: [
+        { label: "Role", value: "Senior Brand Designer" },
+        { label: "Applicant", value: "Taylor Morgan" },
+        { label: "Email", value: "candidate@example.com" },
+        { label: "Current location", value: "Melbourne, Australia" },
+        { label: "Application ID", value: "APP-TEST-1001" },
+      ],
+      note: "Live CVs remain private and are available only through the authenticated Admin download route.",
+      supportingCopy: "Review the application from Admin and update its status as the candidate progresses.",
+    };
+  }
 
   if (templateKey === "payment.receipt") {
     return {

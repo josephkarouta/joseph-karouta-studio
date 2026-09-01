@@ -26,6 +26,8 @@ import {
   getArchitecturePaintApplications,
 } from "@/lib/architecture/project-templates";
 
+const ARCHITECTURE_AI_CONCEPT_NOTICE = "AI-generated plans and visuals are intended for concept exploration and early design direction only. They are not construction-ready or professionally verified documents. For accurate plans, technical drawings or production-ready design, continue with Heyy Studio Expert Development. Create with AI. Build with Experts.";
+
 type SourceBrief = {
   workflow_mode?: string | null;
   source_type?: string | null;
@@ -3981,14 +3983,14 @@ function DirectionsTab({
           {generatingDirection === "all"
             ? "Writing three directions..."
             : directions.length > 0
-              ? `Regenerate Three Text Directions · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`
-              : `Generate Three Text Directions · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+              ? `Regenerate Three Text Directions · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`
+              : `Generate Three Text Directions · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
         </button>
         </div>
       </div>
 
       {generatingDirection !== null && (
-        <StageGenerationLoading title="Generating Architecture Directions" detail={generatingDirection === "all" ? `Writing three project-type-specific strategies. ${ARCHITECTURE_CREDIT_COSTS.textGeneration} text-generation credits are reserved.` : `Rewriting the selected strategy and preparing its future image prompt. ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits are reserved.`} />
+        <StageGenerationLoading title="Generating Architecture Directions" detail={generatingDirection === "all" ? `Writing three project-type-specific strategies. ${ARCHITECTURE_CREDIT_COSTS.conceptText} concept credits are reserved.` : `Rewriting the selected strategy and preparing its future image prompt. ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits are reserved.`} />
       )}
 
       <div className="direction-readiness-grid">
@@ -4205,7 +4207,7 @@ function DirectionsTab({
                     >
                       {isGenerating
                         ? "Regenerating Direction..."
-                        : `Regenerate Direction ${directionLetter} Text · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+                        : `Regenerate Direction ${directionLetter} Text · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
                     </button>
 
                     <button
@@ -4373,7 +4375,7 @@ function ConceptTab({
           </div>
         </div>
         <button type="button" className="primary-action" disabled={generating} onClick={onGenerate}>
-          {generating ? "Preparing Concept..." : `Prepare Architecture Concept · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+          {generating ? "Preparing Concept..." : `Prepare Architecture Concept · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
         </button>
         {generating && <StageGenerationLoading title="Preparing Concept Strategy" detail="Building the concept narrative, zoning, circulation and concept-board prompt from the selected direction." />}
       </section>
@@ -4405,7 +4407,7 @@ function ConceptTab({
           <span className="stage-source-chip">{concept.generation_mode === "live" ? "AI prepared" : "Demo prepared"} · Saved to project</span>
         </div>
         <button type="button" className="secondary-action" disabled={generating} onClick={onGenerate}>
-          {generating ? "Refreshing..." : `Refresh Concept Strategy · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+          {generating ? "Refreshing..." : `Refresh Concept Strategy · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
         </button>
       </div>
 
@@ -4710,11 +4712,8 @@ function PlansTab({
       </div>
 
       <div className="direction-disclaimer">
-        <strong>Not construction or permit drawings.</strong>
-        <span>
-          These diagrams are concept communication only. Do not use them for pricing,
-          approval, construction, engineering or site work.
-        </span>
+        <strong>Concept plans.</strong>
+        <span>{ARCHITECTURE_AI_CONCEPT_NOTICE}</span>
       </div>
     </section>
   );
@@ -5311,9 +5310,7 @@ function VisualsTab({
 
       <div className="direction-disclaimer">
         <strong>AI concept imagery.</strong>
-        <span>
-          These images interpret the approved Plan Foundation and selected Design Direction. Major project features should remain recognizable, but minor architectural differences can occur. Exact coordinated renders, elevations and construction documentation require Expert Development.
-        </span>
+        <span>These images interpret the approved Plan Foundation and selected Design Direction, but minor architectural differences can occur. {ARCHITECTURE_AI_CONCEPT_NOTICE}</span>
       </div>
     </section>
   );
@@ -5506,6 +5503,7 @@ function DesignPackTab({
             Before any design, pricing, approval or construction decision, the project must be reviewed and developed by appropriately
             registered local architects, planners, engineers, surveyors and other required consultants.
           </p>
+          <p>Create with AI. Build with Experts.</p>
           <div className="pack-logo final">HEYY<span>STUDIO</span></div>
         </section>
       </article>

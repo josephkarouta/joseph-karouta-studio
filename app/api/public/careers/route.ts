@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { sendCareerApplicationEmails } from "@/lib/communications/careers";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
     const admin = createClient(url, key, { auth: { persistSession: false } });
     const { data: position, error: positionError } = await admin
       .from("career_positions")
-      .select("id,status,closes_at")
+      .select("id,title,department,location,status,closes_at")
       .eq("id", positionId)
       .eq("status", "published")
       .maybeSingle();
@@ -147,6 +148,25 @@ export async function POST(request: Request) {
       .single();
 
     if (error) throw error;
+
+    // The application itself is the source of truth. Email delivery is awaited
+    // so serverless execution is not cut off, but a provider issue must never
+    // turn a successfully stored application into a failed public submission.
+    await sendCareerApplicationEmails({
+      applicationId: data.id,
+      name,
+      email,
+      location,
+      portfolioUrl,
+      linkedinUrl,
+      position: {
+        id: position.id,
+        title: position.title,
+        department: position.department,
+        location: position.location,
+      },
+    });
+
     return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     if (uploadedResumePath && cleanupUploadedResume) {

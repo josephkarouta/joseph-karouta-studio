@@ -192,7 +192,7 @@ export async function POST(request: Request) {
       projectId,
       tool: "architecture_direction",
       provider: mode === "demo" ? "demo" : "openai",
-      action: mode === "demo" ? undefined : "architectureText",
+      action: mode === "demo" ? undefined : "architectureConcept",
       input: {
         projectId,
         directionNumber: directionNumber || null,

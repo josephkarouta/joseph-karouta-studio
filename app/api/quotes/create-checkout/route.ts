@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildProductionWorkspaceHref, resolveProductionService } from "@/lib/production/service-registry";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import { getStripe, resolveStripeCustomer } from "@/lib/billing/stripe";
-import { checkoutCollectionOptions } from "@/lib/billing/profile";
+import { checkoutCollectionOptions, stripeProductTaxCode } from "@/lib/billing/profile";
 
 function getReturnPath(quote: any, paymentState: "success" | "cancelled") {
   const service = resolveProductionService({
@@ -94,9 +94,11 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: String(quote.currency || "USD").toLowerCase(),
             unit_amount: Math.round(Number(quote.amount) * 100),
+            tax_behavior: "exclusive",
             product_data: {
               name: quote.title || "Heyy Studio Quote",
               description: quote.description || "Heyy Studio service quote",
+              ...(stripeProductTaxCode() ? { tax_code: stripeProductTaxCode() } : {}),
             },
           },
         },

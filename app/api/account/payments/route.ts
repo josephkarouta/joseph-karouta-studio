@@ -16,28 +16,68 @@ export async function GET(request: Request) {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const existingCount = await admin
-      .from("payment_records")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id);
+    const syncRequested = url.searchParams.get("sync") === "1";
+    const [existingCount, subscriptionRow, latestSubscriptionPayment] = await Promise.all([
+      admin
+        .from("payment_records")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id),
+      getSubscriptionRow(admin, user.id),
+      admin
+        .from("payment_records")
+        .select("id,paid_at")
+        .eq("user_id", user.id)
+        .eq("payment_type", "subscription")
+        .order("paid_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-    if (!existingCount.error && Number(existingCount.count || 0) === 0) {
+    const stripeCustomerId = String(subscriptionRow?.stripe_customer_id || "").trim() || null;
+    const plan = String(subscriptionRow?.plan || "free").toLowerCase();
+    const status = String(subscriptionRow?.status || "").toLowerCase();
+    const hasPaidPlan = Boolean(
+      stripeCustomerId &&
+      plan !== "free" &&
+      !["cancelled", "canceled", "inactive", "unpaid", "incomplete_expired"].includes(status),
+    );
+    const periodStartMs = subscriptionRow?.current_period_start
+      ? new Date(String(subscriptionRow.current_period_start)).getTime()
+      : Number.NaN;
+    const latestSubscriptionPaidAtMs = latestSubscriptionPayment.data?.paid_at
+      ? new Date(String(latestSubscriptionPayment.data.paid_at)).getTime()
+      : Number.NaN;
+
+    // Only contact the payment provider when the local records indicate that
+    // something is actually missing (or the user explicitly presses Refresh).
+    // This avoids focus-based/background usage while still self-healing a paid
+    // subscription invoice that was missed by webhook delivery.
+    const currentSubscriptionPaymentMissing = hasPaidPlan && (
+      !latestSubscriptionPayment.data ||
+      (Number.isFinite(periodStartMs) &&
+        (!Number.isFinite(latestSubscriptionPaidAtMs) || latestSubscriptionPaidAtMs + 5 * 60 * 1000 < periodStartMs))
+    );
+    const noLocalPaymentHistory = !existingCount.error && Number(existingCount.count || 0) === 0;
+
+    if (syncRequested || noLocalPaymentHistory || currentSubscriptionPaymentMissing) {
       try {
-        const subscriptionRow = await getSubscriptionRow(admin, user.id);
         await backfillPaymentHistory({
           userId: user.id,
           userEmail: user.email,
-          stripeCustomerId: String(subscriptionRow?.stripe_customer_id || "").trim() || null,
+          stripeCustomerId,
+          // A missed current subscription should also repair the confirmation
+          // email. The communication layer prevents duplicate sends.
+          sendLatestSubscriptionEmail: currentSubscriptionPaymentMissing || syncRequested,
         });
       } catch (backfillError) {
-        console.warn("Payment history backfill skipped:", backfillError);
+        console.warn("Payment history reconciliation skipped:", backfillError);
       }
     }
 
     const { data, error, count } = await admin
       .from("payment_records")
       .select(
-        "id,payment_type,description,amount_total,tax_amount,currency,status,invoice_number,paid_at,related_id",
+        "id,payment_type,description,amount_total,tax_amount,currency,status,invoice_number,paid_at,related_id,billing_country_code",
         { count: "exact" },
       )
       .eq("user_id", user.id)
