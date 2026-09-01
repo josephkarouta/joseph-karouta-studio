@@ -4,6 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import { requireApiUser, ApiAuthError } from "@/lib/server/auth";
 import { CreditError } from "@/lib/credits/server";
+import type { CreditAction } from "@/lib/credits/config";
 import { failGenerationJob } from "@/lib/credits/lifecycle";
 import {
   cleanupGenerationStart,
@@ -17,6 +18,8 @@ export const maxDuration = 180;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 type AspectRatio = "16:9" | "9:16";
+type VideoMode = "fast" | "quality";
+type VideoResolution = "720p" | "1080p";
 
 export async function POST(request: Request) {
   let admin: Awaited<ReturnType<typeof requireApiUser>>["admin"] | null = null;
@@ -34,6 +37,8 @@ export async function POST(request: Request) {
       : "image/jpeg";
     const prompt = String(body?.prompt || "").trim();
     const aspect: AspectRatio = body?.aspect === "9:16" ? "9:16" : "16:9";
+    const mode: VideoMode = body?.mode === "quality" ? "quality" : "fast";
+    const resolution: VideoResolution = body?.resolution === "720p" ? "720p" : "1080p";
     const projectId = String(body?.projectId || "").trim() || null;
 
     if (!imageBase64 || !prompt) {
@@ -53,23 +58,27 @@ export async function POST(request: Request) {
 
     const sourceHash = createHash("sha256").update(imageBytes).digest("hex");
     const provider = "google_veo_3_1";
-    const requestedModel = process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview";
-    const resolution = "1080p";
+    const requestedModel =
+      mode === "quality"
+        ? process.env.GEMINI_VIDEO_MODEL_QUALITY || "veo-3.1-generate-preview"
+        : process.env.GEMINI_VIDEO_MODEL_FAST || "veo-3.1-fast-generate-preview";
     const durationSeconds = 8;
+    const action: CreditAction = getVideoCreditAction(mode, resolution);
 
     startedJob = await startGenerationJob({
       admin,
       userId: auth.user.id,
       request,
       scope: "image-to-video",
-      dedupe: { sourceHash, prompt, aspect, projectId, resolution, durationSeconds },
-      action: "imageToVideoHigh",
+      dedupe: { sourceHash, prompt, aspect, projectId, mode, resolution, durationSeconds },
+      action,
       projectId,
       tool: "image_to_video",
       provider,
       input: {
         prompt,
         aspect,
+        mode,
         mimeType,
         projectId,
         model: requestedModel,
@@ -77,7 +86,14 @@ export async function POST(request: Request) {
         duration_seconds: durationSeconds,
         sourceHash,
       },
-      metadata: { tool: "image_to_video", aspect, project_id: projectId, resolution, duration_seconds: durationSeconds },
+      metadata: {
+        tool: "image_to_video",
+        aspect,
+        mode,
+        project_id: projectId,
+        resolution,
+        duration_seconds: durationSeconds,
+      },
     });
 
     if (startedJob.status !== "queued") {
@@ -85,6 +101,7 @@ export async function POST(request: Request) {
         success: true,
         jobId: startedJob.jobId,
         status: startedJob.status === "finalizing" ? "processing" : startedJob.status,
+        mode,
         resolution,
         creditsReserved: startedJob.creditsReserved,
       });
@@ -103,13 +120,22 @@ export async function POST(request: Request) {
         success: true,
         jobId: startedJob.jobId,
         status: "processing",
+        mode,
         resolution,
         creditsReserved: startedJob.creditsReserved,
       });
     }
     providerClaimed = true;
 
-    const started = await startVeoVideo({ imageBase64, mimeType, prompt, aspect, model: requestedModel });
+    const started = await startVeoVideo({
+      imageBase64,
+      mimeType,
+      prompt,
+      aspect,
+      mode,
+      model: requestedModel,
+      resolution,
+    });
 
     const { data: job, error: jobError } = await admin
       .from("generation_jobs")
@@ -132,6 +158,7 @@ export async function POST(request: Request) {
       success: true,
       jobId: job.id,
       status: "processing",
+      mode,
       resolution: started.resolution,
       creditsReserved: startedJob.creditsReserved,
     });
@@ -183,18 +210,29 @@ export async function POST(request: Request) {
   }
 }
 
+function getVideoCreditAction(mode: VideoMode, resolution: VideoResolution): CreditAction {
+  if (mode === "quality") {
+    return resolution === "720p" ? "imageToVideoQuality720" : "imageToVideoQuality1080";
+  }
+  return resolution === "720p" ? "imageToVideoFast720" : "imageToVideoFast1080";
+}
+
 async function startVeoVideo({
   imageBase64,
   mimeType,
   prompt,
   aspect,
+  mode,
   model,
+  resolution,
 }: {
   imageBase64: string;
   mimeType: string;
   prompt: string;
   aspect: AspectRatio;
+  mode: VideoMode;
   model: string;
+  resolution: VideoResolution;
 }) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
   const generationPrompt = `${prompt}\n\nProfessional cinematic render. Preserve the supplied image as the opening frame and keep identity, architecture, products, typography and key geometry stable. Prioritize believable physics, polished camera motion, natural environmental movement and coherent detail.`;
@@ -212,7 +250,7 @@ async function startVeoVideo({
       numberOfVideos: 1,
       aspectRatio: aspect,
       durationSeconds: 8,
-      resolution: "1080p",
+      resolution,
     },
   });
 
@@ -223,10 +261,9 @@ async function startVeoVideo({
     provider: "google_veo_3_1",
     providerJobId: operationName,
     model,
-    resolution: "1080p",
+    mode,
+    resolution,
     durationSeconds: 8,
-    output: { operation_name: operationName, model },
+    output: { operation_name: operationName, model, mode, resolution },
   };
 }
-
-
