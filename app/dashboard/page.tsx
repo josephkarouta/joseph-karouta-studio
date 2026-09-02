@@ -55,6 +55,7 @@ type AssetItem = {
   thumbnail_url?: string;
   asset_type?: string;
   created_at?: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 type NotificationItem = {
@@ -75,7 +76,7 @@ type DashboardCache = {
   updatedAt: number;
 };
 
-const DASHBOARD_CACHE_PREFIX = "heyy-dashboard:";
+const DASHBOARD_CACHE_PREFIX = "heyy-dashboard:v2:";
 const dashboardMemoryCache = new Map<string, DashboardCache>();
 
 function readDashboardCache(userId: string): DashboardCache | null {
@@ -218,13 +219,15 @@ export default function DashboardPage() {
       if (!cached) setActivityLoading(true);
       const [production, assetRows, notificationRows] = await Promise.allSettled([
         supabase.from("production_jobs").select("*").eq("user_id", accountId).order("created_at", { ascending: false }).limit(10),
-        supabase.from("project_assets").select("*").eq("user_id", accountId).order("created_at", { ascending: false }).limit(8),
+        supabase.from("project_assets").select("id,title,file_url,thumbnail_url,asset_type,created_at,metadata").eq("user_id", accountId).order("created_at", { ascending: false }).limit(32),
         supabase.from("notifications").select("*").eq("user_id", accountId).order("created_at", { ascending: false }).limit(8),
       ]);
 
       if (!active) return;
       const nextJobs = settledRows<ProductionJob>(production);
-      const nextAssets = settledRows<AssetItem>(assetRows);
+      const nextAssets = settledRows<AssetItem>(assetRows)
+        .filter(isDashboardFileAsset)
+        .slice(0, 8);
       const nextNotifications = settledRows<NotificationItem>(notificationRows);
       setJobs(nextJobs);
       setAssets(nextAssets);
@@ -419,8 +422,49 @@ function ProductionRow({ job }: { job: ProductionJob }) {
 }
 
 function AssetCard({ asset }: { asset: AssetItem }) {
-  const src = asset.thumbnail_url || asset.file_url;
-  return <a href={asset.file_url || "#"} target={asset.file_url ? "_blank" : undefined} rel="noreferrer" className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] transition hover:border-[var(--accent-border)]"><div className="grid aspect-[4/3] place-items-center overflow-hidden bg-[linear-gradient(135deg,var(--accent-soft),rgba(46,124,246,.1))]">{src ? <img src={src} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105"/> : <FileImage size={24} className="text-[var(--accent-strong)]"/>}</div><div className="p-3"><p className="truncate text-xs font-black">{asset.title || "Saved asset"}</p><p className="mt-1 text-[.6rem] font-bold uppercase tracking-[.1em] text-[var(--text-muted)]">{asset.asset_type || "Asset"}</p></div></a>;
+  const preview = dashboardAssetPreview(asset);
+  const href = asset.file_url || "/dashboard/assets";
+  return <a href={href} target={asset.file_url ? "_blank" : undefined} rel="noreferrer" className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] transition hover:border-[var(--accent-border)]"><div className="grid aspect-[4/3] place-items-center overflow-hidden bg-[linear-gradient(135deg,var(--accent-soft),rgba(46,124,246,.1))]">{preview ? <img src={preview} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105"/> : <FileImage size={24} className="text-[var(--accent-strong)]"/>}</div><div className="p-3"><p className="truncate text-xs font-black">{asset.title || "Saved asset"}</p><p className="mt-1 text-[.6rem] font-bold uppercase tracking-[.1em] text-[var(--text-muted)]">{asset.asset_type || "Asset"}</p></div></a>;
+}
+
+function isDashboardFileAsset(asset: AssetItem) {
+  const metadata = asset.metadata && typeof asset.metadata === "object" ? asset.metadata : {};
+  const haystack = [
+    asset.asset_type,
+    asset.title,
+    (metadata as Record<string, unknown>).category,
+    (metadata as Record<string, unknown>).kind,
+    (metadata as Record<string, unknown>).source,
+  ]
+    .map((value) => String(value || "").toLowerCase().replaceAll("-", "_").replace(/\s+/g, "_"))
+    .join(" ");
+
+  const supportOnly = /custom_material|source_custom_material|material_swatch|colou?r_swatch|paint_swatch|palette_swatch/.test(haystack);
+  return !supportOnly && Boolean(asset.file_url || asset.thumbnail_url);
+}
+
+function dashboardAssetPreview(asset: AssetItem) {
+  if (isImageAssetUrl(asset.thumbnail_url)) return asset.thumbnail_url || null;
+  if (isImageAssetUrl(asset.file_url)) return asset.file_url || null;
+
+  const metadata = asset.metadata && typeof asset.metadata === "object" ? asset.metadata as Record<string, unknown> : {};
+  const type = String(asset.asset_type || "").toLowerCase().replaceAll("-", "_");
+  const contentType = String(metadata.content_type || metadata.mime_type || "").toLowerCase();
+
+  if (type.includes("powerpoint") || type.includes("presentation") || contentType.includes("presentationml.presentation") || contentType.includes("ms-powerpoint")) {
+    return "/images/powerpoint-asset-preview.png";
+  }
+  if (type.includes("video") || contentType.startsWith("video/")) {
+    return "/images/video-asset-preview.png";
+  }
+  if (type.includes("guideline")) {
+    return "/images/guidelines-asset-preview.png";
+  }
+  return null;
+}
+
+function isImageAssetUrl(value?: string) {
+  return Boolean(value && /\.(png|jpe?g|webp|gif|svg)(?:\?|$)/i.test(value));
 }
 
 function EmptyState({ title, description, href, action, compact = false }: { title: string; description: string; href: string; action: string; compact?: boolean }) {

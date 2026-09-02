@@ -97,8 +97,77 @@ function projectHref(studio: string, projectId: string | null) {
   return null;
 }
 
+const IMAGE_EXTENSION = /\.(png|jpe?g|webp|gif|svg)(\?|$)/i;
+const POWERPOINT_PREVIEW = "/images/powerpoint-asset-preview.png";
+const VIDEO_PREVIEW = "/images/video-asset-preview.png";
+const GUIDELINES_PREVIEW = "/images/guidelines-asset-preview.png";
+
+function isSupportOnlyVersion(row: any) {
+  const snapshot = objectValue(row?.snapshot);
+  const metadata = objectValue(snapshot.metadata);
+  const haystack = [
+    row?.source_kind,
+    row?.asset_type,
+    row?.title,
+    row?.family_key,
+    snapshot.category,
+    snapshot.asset_type,
+    snapshot.assetType,
+    snapshot.title,
+    snapshot.filename,
+    metadata.source,
+    metadata.category,
+    metadata.kind,
+  ]
+    .map((value) => String(value || "").toLowerCase().replaceAll("-", "_").replace(/\s+/g, "_"))
+    .join(" ");
+
+  return (
+    haystack.includes("custom_material") ||
+    haystack.includes("source_custom_material") ||
+    haystack.includes("material_swatch") ||
+    haystack.includes("color_swatch") ||
+    haystack.includes("colour_swatch") ||
+    haystack.includes("paint_swatch") ||
+    haystack.includes("palette_swatch")
+  );
+}
+
+function fallbackPreviewForProjectAsset(
+  assetType: string,
+  url: string | null,
+  metadata: Record<string, any>,
+) {
+  if (url && IMAGE_EXTENSION.test(url)) {
+    return { url, mime: stringValue(metadata.content_type, metadata.mime_type) || "image/*" };
+  }
+
+  const type = assetType.toLowerCase().replaceAll("-", "_");
+  const contentType = stringValue(metadata.content_type, metadata.mime_type).toLowerCase();
+
+  if (
+    type.includes("powerpoint") ||
+    type.includes("presentation") ||
+    contentType.includes("presentationml.presentation") ||
+    contentType.includes("ms-powerpoint")
+  ) {
+    return { url: POWERPOINT_PREVIEW, mime: "image/png" };
+  }
+
+  if (type.includes("video") || contentType.startsWith("video/")) {
+    return { url: VIDEO_PREVIEW, mime: "image/png" };
+  }
+
+  if (type.includes("guideline")) {
+    return { url: GUIDELINES_PREVIEW, mime: "image/png" };
+  }
+
+  return { url, mime: stringValue(metadata.content_type, metadata.mime_type) || null };
+}
+
 function previewForVersion(
   sourceKind: string,
+  assetType: string,
   snapshot: Record<string, any>,
   architectureUrls: Map<string, string>,
   productionUrls: Map<string, string>,
@@ -106,8 +175,8 @@ function previewForVersion(
   const metadata = objectValue(snapshot.metadata);
   const payload = objectValue(snapshot.payload);
   if (sourceKind === "project_asset") {
-    const url = stringValue(snapshot.thumbnail_url, snapshot.file_url, payload.imageUrl, payload.image_url, payload.url);
-    return { url: url || null, mime: stringValue(metadata.content_type, metadata.mime_type) || null };
+    const url = stringValue(snapshot.thumbnail_url, snapshot.file_url, payload.imageUrl, payload.image_url, payload.url) || null;
+    return fallbackPreviewForProjectAsset(assetType, url, metadata);
   }
   if (sourceKind === "architecture_visual") {
     const path = stringValue(snapshot.storage_path);
@@ -146,7 +215,7 @@ export async function loadVersionHistory(admin: SupabaseClient, userId: string) 
     projectNames.set(`${studio}:${row.id}`, stringValue(row.project_name) || `${humanize(studio)} project`);
   }
 
-  const historyRows = historyRes.data || [];
+  const historyRows = (historyRes.data || []).filter((row: any) => !isSupportOnlyVersion(row));
   const architecturePaths: string[] = [];
   const productionPaths: string[] = [];
   for (const row of historyRows) {
@@ -173,7 +242,12 @@ export async function loadVersionHistory(admin: SupabaseClient, userId: string) 
     const studio = normalizedStudio(row.studio);
     const projectId = row.project_id ? String(row.project_id) : null;
     const snapshot = objectValue(row.snapshot);
-    const preview = previewForVersion(String(row.source_kind), snapshot, architectureUrls, productionUrls);
+    const sourceKind = String(row.source_kind || "");
+    const preview = previewForVersion(sourceKind, String(row.asset_type || "asset"), snapshot, architectureUrls, productionUrls);
+
+    // Do not track an Architecture visual row that never produced a visual.
+    if (sourceKind === "architecture_visual" && !preview.url) continue;
+
     items.push({
       id: String(row.id),
       studio,

@@ -188,6 +188,79 @@ function mimeFromUrl(url: string | null, fallback?: unknown) {
   return null;
 }
 
+const POWERPOINT_PREVIEW = "/images/powerpoint-asset-preview.png";
+const VIDEO_PREVIEW = "/images/video-asset-preview.png";
+const GUIDELINES_PREVIEW = "/images/guidelines-asset-preview.png";
+
+function isImageUrl(url: string | null) {
+  return Boolean(url && IMAGE_EXTENSIONS.test(url));
+}
+
+function displayPreviewForAsset(assetType: string, rawUrl: string | null, metadata: Record<string, any>) {
+  if (isImageUrl(rawUrl)) return { url: rawUrl, mime: mimeFromUrl(rawUrl, metadata.mime_type || metadata.content_type) };
+
+  const type = assetType.toLowerCase().replaceAll("-", "_");
+  const contentType = stringValue(metadata.content_type, metadata.mime_type).toLowerCase();
+
+  if (
+    type.includes("powerpoint") ||
+    type.includes("presentation") ||
+    contentType.includes("presentationml.presentation") ||
+    contentType.includes("ms-powerpoint")
+  ) {
+    return { url: POWERPOINT_PREVIEW, mime: "image/png" };
+  }
+
+  if (type.includes("video") || contentType.startsWith("video/")) {
+    return { url: VIDEO_PREVIEW, mime: "image/png" };
+  }
+
+  if (type.includes("guideline")) {
+    return { url: GUIDELINES_PREVIEW, mime: "image/png" };
+  }
+
+  return { url: rawUrl, mime: mimeFromUrl(rawUrl, metadata.mime_type || metadata.content_type) };
+}
+
+function isSupportOnlyMaterialAsset({
+  sourceKind,
+  assetType,
+  title,
+  category,
+  metadata,
+}: {
+  sourceKind?: unknown;
+  assetType?: unknown;
+  title?: unknown;
+  category?: unknown;
+  metadata?: unknown;
+}) {
+  const meta = asObject(metadata);
+  const haystack = [
+    sourceKind,
+    assetType,
+    title,
+    category,
+    meta.source,
+    meta.category,
+    meta.asset_type,
+    meta.assetType,
+    meta.kind,
+  ]
+    .map((value) => String(value || "").toLowerCase().replaceAll("-", "_").replace(/\s+/g, "_"))
+    .join(" ");
+
+  return (
+    haystack.includes("custom_material") ||
+    haystack.includes("source_custom_material") ||
+    haystack.includes("material_swatch") ||
+    haystack.includes("color_swatch") ||
+    haystack.includes("colour_swatch") ||
+    haystack.includes("paint_swatch") ||
+    haystack.includes("palette_swatch")
+  );
+}
+
 function applyOverride(item: AssetLibraryItem, override?: OverrideRow) {
   if (!override) return item;
   return {
@@ -255,7 +328,19 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
     const metadata = asObject(row.metadata);
     const assetType = String(row.asset_type || "asset");
     const sourceKey = `project_asset:${row.id}`;
-    const previewUrl = inferPreviewFromPayload(row);
+    const rawAssetUrl = inferPreviewFromPayload(row);
+
+    // Assets is a customer file library. Structured project state that has no
+    // actual file/image URL belongs in the project workspace, not here.
+    if (!rawAssetUrl) continue;
+    if (isSupportOnlyMaterialAsset({
+      sourceKind: "project_asset",
+      assetType,
+      title: row.title,
+      metadata,
+    })) continue;
+
+    const displayPreview = displayPreviewForAsset(assetType, rawAssetUrl, metadata);
     const status = inferStatus(assetType, metadata);
     const item = applyOverride({
       sourceKey,
@@ -275,11 +360,15 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
       archived: false,
       createdAt: row.created_at || null,
       updatedAt: row.updated_at || row.created_at || null,
-      previewUrl,
-      mimeType: mimeFromUrl(previewUrl, metadata.mime_type),
+      previewUrl: displayPreview.url,
+      mimeType: displayPreview.mime,
       locked: false,
-      reusable: Boolean(previewUrl),
-      metadata,
+      reusable: Boolean(rawAssetUrl),
+      metadata: {
+        ...metadata,
+        libraryFileUrl: rawAssetUrl,
+        libraryFileMimeType: stringValue(metadata.content_type, metadata.mime_type) || null,
+      },
     }, overrideMap.get(sourceKey));
     if (!item.metadata.libraryHidden) items.push(item);
   }
@@ -288,6 +377,9 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
     const projectId = String(row.project_id || "");
     const storagePath = stringValue(row.storage_path);
     const previewUrl = storagePath ? architectureSignedUrls.get(storagePath) || stringValue(row.image_url) || null : stringValue(row.image_url) || null;
+    // Architecture rows are sometimes created before an image is generated.
+    // Those placeholders belong in the project workflow, not in Assets.
+    if (!previewUrl) continue;
     const metadata = asObject(row.metadata);
     const assetType = `architecture_${String(row.visual_type || "visual")}`;
     const sourceKey = `architecture_visual:${row.id}`;
@@ -345,11 +437,18 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
     if (!path) continue;
     const previewUrl = architectureSignedUrls.get(path) || null;
     const sourceKey = `architecture_document:${row.id}`;
+    const architectureDocumentAssetType = `architecture_source_${String(row.category || "document")}`;
+    if (isSupportOnlyMaterialAsset({
+      sourceKind: "architecture_document",
+      assetType: architectureDocumentAssetType,
+      title: row.filename,
+      category: row.category,
+    })) continue;
     const item = applyOverride({
       sourceKey, sourceKind: "architecture_document", sourceId: String(row.id), studio: "architecture", projectId,
       projectName: maps.architecture.get(projectId) || "Architecture project", projectHref: projectHref("architecture", projectId),
       title: stringValue(row.filename) || humanize(row.category || "Source drawing"), originalTitle: stringValue(row.filename) || humanize(row.category || "Source drawing"),
-      assetType: `architecture_source_${String(row.category || "document")}`, assetTypeLabel: humanize(row.category || "Source Drawing"), status: "Source",
+      assetType: architectureDocumentAssetType, assetTypeLabel: humanize(row.category || "Source Drawing"), status: "Source",
       version: 1, productionReady: true, archived: false, createdAt: row.created_at || null, updatedAt: row.created_at || null,
       previewUrl, mimeType: stringValue(row.mime_type) || mimeFromUrl(previewUrl), locked: false, reusable: Boolean(previewUrl), metadata: { storagePath: path },
     }, overrideMap.get(sourceKey));

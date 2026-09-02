@@ -26,7 +26,7 @@ type BuildEmailOptions = {
 };
 
 export function buildEmail(options: BuildEmailOptions) {
-  return baseEmail(options);
+  return ensurePublicEmailLogo(baseEmail(options));
 }
 
 export function buildPlainTextEmail(options: BuildEmailOptions) {
@@ -51,4 +51,22 @@ export function buildPlainTextEmail(options: BuildEmailOptions) {
     "Create with AI. Build with Experts.",
     "Heyy Studio",
   ].filter((line, index, array) => line || array[index - 1] !== "").join("\n").trim();
+}
+
+function ensurePublicEmailLogo(html: string) {
+  const logoUrl = `${getSiteUrl().replace(/\/+$/, "")}/icon.png`;
+  const replaceSrc = (tag: string) => {
+    if (/\bsrc\s*=\s*["'][^"']*["']/i.test(tag)) {
+      return tag.replace(/\bsrc\s*=\s*["'][^"']*["']/i, `src="${logoUrl}"`);
+    }
+    return tag.replace(/<img\b/i, `<img src="${logoUrl}"`);
+  };
+
+  // Prefer the Heyy/logo image when the template identifies it explicitly.
+  const brandedImage = /<img\b[^>]*(?:alt\s*=\s*["'][^"']*heyy[^"']*["']|src\s*=\s*["'][^"']*(?:heyy|logo)[^"']*["'])[^>]*>/i;
+  if (brandedImage.test(html)) return html.replace(brandedImage, replaceSrc);
+
+  // The shared shell currently places its brand image first. This fallback keeps
+  // the template intact while ensuring Gmail/Outlook receive a public HTTPS URL.
+  return html.replace(/<img\b[^>]*>/i, replaceSrc);
 }
