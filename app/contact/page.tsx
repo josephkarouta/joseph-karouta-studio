@@ -6,9 +6,9 @@ export const metadata = { title: "Contact Heyy Studio" };
 export default function ContactPage() {
   return (
     <PublicPage
-      eyebrow="Contact"
-      title="What can we help with?"
-      summary="Ask about your account, credits, a project, expert production, a partnership or anything that is getting in the way."
+      eyebrow="Contact Heyy Studio"
+      title="How can we help?"
+      summary="Tell us what you need and we’ll route your request to the right Heyy Studio team — from expert production and project support to billing, partnerships and general questions."
     >
       <ContactForm />
     </PublicPage>

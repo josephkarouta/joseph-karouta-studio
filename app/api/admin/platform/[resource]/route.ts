@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 import { requireAdminApiUser, requireAdminApiCapability } from "@/lib/server/admin-api";
 import { recordAdminAudit } from "@/lib/admin/audit";
+import { buildEmail, buildPlainTextEmail } from "@/lib/notifications/templates";
+import { sitePath } from "@/lib/site-url";
 
 const map = {
   careers: { table: "career_positions", key: "id" },
@@ -15,6 +17,8 @@ const map = {
 type Resource = keyof typeof map | "users";
 type AdminClient = ReturnType<typeof admin>;
 type UnknownRow = Record<string, unknown>;
+
+const CONTACT_ATTACHMENTS_BUCKET = "contact-attachments";
 
 function admin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -256,6 +260,119 @@ async function loadProjectRows(client: AdminClient, ids?: string[]) {
   return (data || []) as UnknownRow[];
 }
 
+
+function contactAttachmentRecords(row: UnknownRow) {
+  const metadata = asRecord(row.metadata);
+  const stored = Array.isArray(metadata.attachments)
+    ? metadata.attachments.map(asRecord)
+    : [];
+  if (stored.length) return stored;
+
+  const names = Array.isArray(metadata.attachment_names) ? metadata.attachment_names : [];
+  const sizes = Array.isArray(metadata.attachment_sizes) ? metadata.attachment_sizes : [];
+  return names.map((name, index) => ({
+    name: String(name || "Attachment"),
+    size: firstNumber(sizes[index]) || 0,
+    storage_path: "",
+    content_type: "",
+  }));
+}
+
+async function hydrateContactRows(client: AdminClient, rows: UnknownRow[]) {
+  return Promise.all(rows.map(async (row) => {
+    const metadata = asRecord(row.metadata);
+    const attachments = await Promise.all(contactAttachmentRecords(row).map(async (attachment) => {
+      const storagePath = firstText(attachment.storage_path);
+      let url = "";
+      if (storagePath) {
+        const { data, error } = await client.storage
+          .from(CONTACT_ATTACHMENTS_BUCKET)
+          .createSignedUrl(storagePath, 60 * 60);
+        if (!error) url = data?.signedUrl || "";
+      }
+      return {
+        name: firstText(attachment.name) || "Attachment",
+        size: firstNumber(attachment.size) || 0,
+        content_type: firstText(attachment.content_type),
+        storage_path: storagePath,
+        url,
+      };
+    }));
+
+    const replies = Array.isArray(metadata.admin_replies)
+      ? metadata.admin_replies.map(asRecord).map((reply) => ({
+          message: firstText(reply.message),
+          sent_at: firstText(reply.sent_at),
+          actor_user_id: firstText(reply.actor_user_id),
+        })).filter((reply) => reply.message)
+      : [];
+
+    return {
+      ...row,
+      contact_subject: firstText(metadata.subject),
+      contact_company: firstText(metadata.company),
+      contact_topic_key: firstText(metadata.topic_key),
+      contact_attachments: attachments,
+      contact_admin_replies: replies,
+    };
+  }));
+}
+
+async function sendContactAdminReply(row: UnknownRow, message: string) {
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  if (!apiKey) throw new Error("Email delivery is not configured.");
+
+  const email = firstText(row.email);
+  if (!email) throw new Error("This contact submission has no reply email address.");
+
+  const metadata = asRecord(row.metadata);
+  const subject = firstText(metadata.subject, row.topic, "Heyy Studio request");
+  const name = firstText(row.name, "there");
+  const firstName = name.split(/\s+/)[0] || "there";
+  const adminEmail = String(process.env.ADMIN_EMAIL || "hello@heyystudio.com").trim();
+  const configuredFrom = String(process.env.RESEND_FROM_EMAIL || "hello@heyystudio.com").trim();
+  const from = configuredFrom.includes("<") ? configuredFrom : `Heyy Studio <${configuredFrom}>`;
+
+  const template = {
+    eyebrow: "Heyy Studio reply",
+    title: "A reply from the Heyy Studio team",
+    intro: `Hi ${firstName}, here is our reply to your request.`,
+    preheader: `Re: ${subject}`,
+    status: "Reply",
+    details: [
+      { label: "Reply", value: message },
+      { label: "Original subject", value: subject },
+      { label: "Reference", value: firstText(row.id).slice(0, 8).toUpperCase() },
+      { label: "Continue the conversation", value: "Reply directly to this email" },
+    ],
+    detailsTitle: "Reply",
+    ctaLabel: "Reply to Heyy Studio",
+    ctaUrl: `mailto:${adminEmail}?subject=${encodeURIComponent(`Re: ${subject}`)}`,
+  };
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      reply_to: adminEmail,
+      subject: `Re: ${subject}`,
+      html: buildEmail(template),
+      text: buildPlainTextEmail(template),
+    }),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text().catch(() => "");
+    console.error("Contact Admin reply email failed:", response.status, responseText.slice(0, 300));
+    throw new Error("The reply email could not be sent.");
+  }
+}
+
 function projectSearchText(row: UnknownRow) {
   return [row.id, row.name, row.title, row.project_name, row.studio, row.project_type]
     .map((value) => String(value || "").toLowerCase())
@@ -477,7 +594,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
     const { data, error } = await client.from(config.table).select("*").order("created_at", { ascending: false }).limit(500);
     if (error) throw error;
-    const items = (data || []).map((row) => resource === "pages" || resource === "help" || resource === "careers" ? { ...row, body: bodyText(resource, row) } : row);
+    const baseItems = (data || []).map((row) => resource === "pages" || resource === "help" || resource === "careers" ? { ...row, body: bodyText(resource, row) } : row);
+    const items = resource === "contact"
+      ? await hydrateContactRows(client, baseItems as UnknownRow[])
+      : baseItems;
     return NextResponse.json({ items });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load resource." }, { status: 500 });
@@ -489,7 +609,64 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     const { resource } = await params;
     const access = await resourceAccess(resource);
     if (access.response) return access.response;
-    if (!(resource in map) || ["contact", "applications", "generations"].includes(resource)) {
+
+    if (resource === "contact") {
+      const body = await request.json() as Record<string, unknown>;
+      const action = String(body.action || "").trim().toLowerCase();
+      const id = String(body.id || "").trim();
+      const message = String(body.message || "").replace(/\r\n/g, "\n").trim().slice(0, 5000);
+      if (action !== "reply" || !id || message.length < 2) {
+        return NextResponse.json({ error: "Contact submission and reply message are required." }, { status: 400 });
+      }
+
+      const client = admin();
+      const { data: row, error: rowError } = await client
+        .from("contact_submissions")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (rowError) throw rowError;
+      if (!row) return NextResponse.json({ error: "Contact submission not found." }, { status: 404 });
+
+      await sendContactAdminReply(row as UnknownRow, message);
+
+      const metadata = asRecord((row as UnknownRow).metadata);
+      const existingReplies = Array.isArray(metadata.admin_replies)
+        ? metadata.admin_replies.map(asRecord)
+        : [];
+      const adminReplies = [
+        ...existingReplies,
+        {
+          message,
+          sent_at: new Date().toISOString(),
+          actor_user_id: access.user?.id || null,
+        },
+      ].slice(-20);
+
+      const { data: updated, error: updateError } = await client
+        .from("contact_submissions")
+        .update({
+          status: "replied",
+          metadata: { ...metadata, admin_replies: adminReplies },
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
+      if (updateError) throw updateError;
+
+      await recordAdminAudit({
+        actorUserId: access.user?.id || null,
+        action: "platform.contact.replied",
+        entityType: "contact",
+        entityId: id,
+        summary: `Replied to contact submission from ${firstText((row as UnknownRow).email, id)}`,
+      });
+
+      const hydrated = await hydrateContactRows(client, [updated as UnknownRow]);
+      return NextResponse.json({ success: true, item: hydrated[0] });
+    }
+
+    if (!(resource in map) || ["applications", "generations"].includes(resource)) {
       return NextResponse.json({ error: "Creation is not supported for this resource." }, { status: 400 });
     }
     const config = map[resource as keyof typeof map];
@@ -570,7 +747,24 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ r
     const config = map[resource as keyof typeof map];
     const id = new URL(request.url).searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing record ID." }, { status: 400 });
-    const { error } = await admin().from(config.table).delete().eq(config.key, id);
+    const client = admin();
+
+    if (resource === "contact") {
+      const { data: row } = await client
+        .from("contact_submissions")
+        .select("metadata")
+        .eq("id", id)
+        .maybeSingle();
+      const paths = row
+        ? contactAttachmentRecords(row as UnknownRow).map((attachment) => firstText(attachment.storage_path)).filter(Boolean)
+        : [];
+      if (paths.length) {
+        const { error: storageError } = await client.storage.from(CONTACT_ATTACHMENTS_BUCKET).remove(paths);
+        if (storageError) console.error("Contact attachment cleanup failed:", storageError.message);
+      }
+    }
+
+    const { error } = await client.from(config.table).delete().eq(config.key, id);
     if (error) throw error;
     await recordAdminAudit({ actorUserId: access.user?.id || null, action: `platform.${resource}.deleted`, entityType: resource, entityId: id, summary: `Deleted ${resource} record: ${id}` });
     return NextResponse.json({ success: true });

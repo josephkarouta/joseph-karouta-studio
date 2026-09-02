@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, ExternalLink, Eye, LoaderCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Eye, LoaderCircle, Mail, Paperclip, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Button, GlassCard, StatusPill } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 
@@ -138,6 +138,24 @@ function formatDate(value: unknown) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("en-US");
 }
 
+function formatFileSize(value: unknown) {
+  const bytes = numberValue(value);
+  if (bytes === null || bytes <= 0) return "Size not recorded";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function contactAttachments(row: Row) {
+  const value = row.contact_attachments;
+  return Array.isArray(value) ? value.map((item) => item && typeof item === "object" ? item as Record<string, unknown> : {}) : [];
+}
+
+function contactReplies(row: Row) {
+  const value = row.contact_admin_replies;
+  return Array.isArray(value) ? value.map((item) => item && typeof item === "object" ? item as Record<string, unknown> : {}) : [];
+}
+
 function formatDuration(value: unknown) {
   const milliseconds = numberValue(value);
   if (milliseconds === null) return "Not recorded";
@@ -189,8 +207,13 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
   const [dateFilter, setDateFilter] = useState("all");
   const [selectedGeneration, setSelectedGeneration] = useState<Row | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<Row | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Row | null>(null);
+  const [contactReply, setContactReply] = useState("");
+  const [contactReplyStatus, setContactReplyStatus] = useState("");
+  const [sendingContactReply, setSendingContactReply] = useState(false);
   const initialGenerationSearch = useRef(true);
   const applicationDeepLinkHandled = useRef(false);
+  const contactDeepLinkHandled = useRef(false);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
 
@@ -243,6 +266,7 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
   useEffect(() => {
     initialGenerationSearch.current = true;
     applicationDeepLinkHandled.current = false;
+    contactDeepLinkHandled.current = false;
     setPage(1);
     setQuery("");
     setToolFilter("all");
@@ -251,6 +275,9 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
     setDateFilter("all");
     setSelectedGeneration(null);
     setSelectedApplication(null);
+    setSelectedContact(null);
+    setContactReply("");
+    setContactReplyStatus("");
     void load({ page: 1, query: "", tool: "all", provider: "all", status: "all", date: "all" });
   }, [resource]);
 
@@ -264,6 +291,18 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
     const matchingApplication = rows.find((row) => String(row.id || "") === applicationId);
     if (matchingApplication) setSelectedApplication(matchingApplication);
     applicationDeepLinkHandled.current = true;
+  }, [resource, rows]);
+
+  useEffect(() => {
+    if (resource !== "contact" || contactDeepLinkHandled.current || rows.length === 0) return;
+    const contactId = new URLSearchParams(window.location.search).get("contact");
+    if (!contactId) {
+      contactDeepLinkHandled.current = true;
+      return;
+    }
+    const matchingContact = rows.find((row) => String(row.id || "") === contactId);
+    if (matchingContact) setSelectedContact(matchingContact);
+    contactDeepLinkHandled.current = true;
   }, [resource, rows]);
 
   useEffect(() => {
@@ -331,6 +370,35 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
       return;
     }
     await load();
+  }
+
+  async function sendContactReply() {
+    if (!selectedContact) return;
+    const message = contactReply.trim();
+    if (message.length < 2) {
+      setContactReplyStatus("Write a reply before sending.");
+      return;
+    }
+
+    setSendingContactReply(true);
+    setContactReplyStatus("");
+    try {
+      const response = await fetch("/api/admin/platform/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reply", id: String(selectedContact.id || ""), message }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Reply could not be sent.");
+      setSelectedContact(result.item || { ...selectedContact, status: "replied" });
+      setContactReply("");
+      setContactReplyStatus("Reply sent to the customer.");
+      await load();
+    } catch (value) {
+      setContactReplyStatus(value instanceof Error ? value.message : "Reply could not be sent.");
+    } finally {
+      setSendingContactReply(false);
+    }
   }
 
   async function updateRole(row: Row, role: string) {
@@ -499,6 +567,12 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                         <p className="mt-1 truncate text-xs font-semibold text-slate-500">{String(row.email || "")}{row.location ? ` · ${String(row.location)}` : ""}</p>
                         <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.message || "")}</p>
                       </>
+                    ) : resource === "contact" ? (
+                      <>
+                        <p className="mt-2 text-xs font-black text-violet-600">{String(row.topic || "Contact request")}</p>
+                        <p className="mt-1 truncate text-xs font-semibold text-slate-500">{String(row.email || "")}{row.contact_subject ? ` · ${String(row.contact_subject)}` : ""}</p>
+                        <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.message || "")}</p>
+                      </>
                     ) : (
                       <p className="mt-2 line-clamp-2 text-xs font-semibold leading-5 text-slate-500">{String(row.summary || row.message || row.description || row.email || row.provider || row.slug || "")}</p>
                     )}
@@ -507,6 +581,11 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {resource === "users" && <div className="min-w-[170px]"><HeyySelect value={String(row.role || "customer")} tone="admin" ariaLabel="Admin role" options={[{value:"customer",label:"Customer"},{value:"business_admin",label:"Business admin"},{value:"admin",label:"Full admin"}]} onChange={(value) => void updateRole(row, value)} triggerClassName="!min-h-9 !rounded-full !px-3 !py-1.5 !text-xs" /></div>}
+                    {resource === "contact" && (
+                      <button type="button" onClick={() => { setSelectedContact(row); setContactReply(""); setContactReplyStatus(""); }} className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50">
+                        <Eye size={14}/>Review
+                      </button>
+                    )}
                     {resource === "applications" && (
                       <button type="button" onClick={() => setSelectedApplication(row)} className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50">
                         <Eye size={14}/>Review
@@ -599,6 +678,112 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                 </a>
               )}
               <Button variant="ghost" onClick={() => setSelectedGeneration(null)}>Close</Button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {selectedContact && resource === "contact" && (
+        <div className="fixed inset-0 z-[125] grid place-items-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
+          <GlassCard className="my-8 w-full max-w-4xl bg-white p-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Contact request</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <h3 className="text-3xl font-black tracking-[-.05em]">{String(selectedContact.name || "Contact")}</h3>
+                  {selectedContact.status && <StatusPill tone={statusTone(selectedContact.status)}>{selectedContact.status}</StatusPill>}
+                </div>
+                <p className="mt-2 text-sm font-black text-violet-600">{String(selectedContact.topic || "Contact request")}</p>
+              </div>
+              <button onClick={() => { setSelectedContact(null); setContactReply(""); setContactReplyStatus(""); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <GenerationDetail label="Name" value={selectedContact.name}/>
+              <GenerationDetail label="Email" value={selectedContact.email}/>
+              <GenerationDetail label="Company" value={selectedContact.contact_company}/>
+              <GenerationDetail label="Inquiry type" value={selectedContact.topic}/>
+              <GenerationDetail label="Subject" value={selectedContact.contact_subject}/>
+              <GenerationDetail label="Submitted" value={formatDate(selectedContact.created_at)}/>
+              <GenerationDetail label="Reference" value={text(selectedContact.id).slice(0, 8).toUpperCase()}/>
+              <GenerationDetail label="Submission ID" value={selectedContact.id}/>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+              <p className="text-[.6rem] font-black uppercase tracking-[.14em] text-slate-400">Message</p>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-700">{text(selectedContact.message) || "No message provided."}</p>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-4">
+              <div className="flex items-center gap-2">
+                <Paperclip size={15} className="text-violet-600"/>
+                <p className="text-[.6rem] font-black uppercase tracking-[.14em] text-slate-400">Attachments</p>
+              </div>
+              {contactAttachments(selectedContact).length ? (
+                <div className="mt-3 grid gap-2">
+                  {contactAttachments(selectedContact).map((attachment, index) => {
+                    const url = text(attachment.url);
+                    return url ? (
+                      <a key={`${text(attachment.name)}-${index}`} href={url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/45 px-3 py-2.5 text-xs font-black text-violet-700 transition hover:bg-violet-50">
+                        <span className="min-w-0 truncate">{text(attachment.name) || `Attachment ${index + 1}`}</span>
+                        <span className="flex shrink-0 items-center gap-2 text-[.65rem] text-violet-500">{formatFileSize(attachment.size)} <Download size={13}/></span>
+                      </a>
+                    ) : (
+                      <div key={`${text(attachment.name)}-${index}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs font-semibold text-slate-500">
+                        <span className="font-black text-slate-700">{text(attachment.name) || `Attachment ${index + 1}`}</span>
+                        <span className="ml-2">This older submission was received before private Admin attachment storage was enabled.</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs font-semibold text-slate-500">No attachments were submitted.</p>
+              )}
+            </div>
+
+            {contactReplies(selectedContact).length > 0 && (
+              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/45 p-4">
+                <p className="text-[.6rem] font-black uppercase tracking-[.14em] text-emerald-600">Previous Admin replies</p>
+                <div className="mt-3 grid gap-3">
+                  {contactReplies(selectedContact).map((reply, index) => (
+                    <div key={`${text(reply.sent_at)}-${index}`} className="rounded-xl bg-white/80 p-3">
+                      <p className="whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-700">{text(reply.message)}</p>
+                      <p className="mt-2 text-[.65rem] font-bold text-slate-400">{formatDate(reply.sent_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 rounded-2xl border border-violet-100 bg-violet-50/35 p-4">
+              <div className="flex items-center gap-2">
+                <Mail size={15} className="text-violet-600"/>
+                <p className="text-[.62rem] font-black uppercase tracking-[.14em] text-violet-600">Reply to customer</p>
+              </div>
+              <textarea
+                value={contactReply}
+                onChange={(event) => { setContactReply(event.target.value); setContactReplyStatus(""); }}
+                rows={5}
+                className="heyy-input mt-3 w-full resize-y"
+                placeholder="Write your reply. It will be sent to the customer using the Heyy Studio email template."
+              />
+              {contactReplyStatus && (
+                <p className={`mt-2 text-xs font-bold ${contactReplyStatus.startsWith("Reply sent") ? "text-emerald-600" : "text-red-500"}`}>{contactReplyStatus}</p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button onClick={() => void sendContactReply()} disabled={sendingContactReply || contactReply.trim().length < 2}>
+                  {sendingContactReply ? <LoaderCircle size={15} className="animate-spin"/> : <Mail size={15}/>}Send reply
+                </Button>
+                {text(selectedContact.email) && (
+                  <a href={`mailto:${text(selectedContact.email)}?subject=${encodeURIComponent(`Re: ${text(selectedContact.contact_subject) || "Heyy Studio request"}`)}`} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">
+                    Open in email <ExternalLink size={13}/>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => { setSelectedContact(null); setContactReply(""); setContactReplyStatus(""); }}>Close</Button>
             </div>
           </GlassCard>
         </div>

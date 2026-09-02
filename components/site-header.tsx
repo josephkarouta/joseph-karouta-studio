@@ -14,6 +14,7 @@ import {
   Menu,
   Settings,
   Sparkles,
+  UserRound,
   X,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
@@ -100,6 +101,13 @@ export default function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/contact?topic=expert"
+            className="hidden min-h-10 items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-xs font-black text-white shadow-[0_10px_24px_rgba(109,40,217,.24)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(109,40,217,.32)] lg:inline-flex"
+          >
+            <UserRound size={15} /> Contact an Expert
+          </Link>
+
           <ThemeToggle compact />
 
           {!loading && user && (
@@ -220,6 +228,14 @@ export default function SiteHeader() {
             ))}
           </nav>
 
+          <Link
+            href="/contact?topic=expert"
+            onClick={() => setMobileOpen(false)}
+            className="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-sm font-black text-white shadow-lg"
+          >
+            <UserRound size={16} /> Contact an Expert
+          </Link>
+
           {user ? (
             <div className="mt-3 grid gap-1 border-t border-[var(--border)] pt-3">
               <div className="mb-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 p-4 text-white">
@@ -250,7 +266,6 @@ export default function SiteHeader() {
     </header>
   );
 }
-
 
 function MenuLink({ href, icon, label }: { href: string; icon: ReactNode; label: string }) {
   return (
