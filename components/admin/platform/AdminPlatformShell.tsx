@@ -1,44 +1,12 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  BookOpen,
-  BriefcaseBusiness,
-  FileText,
-  Gauge,
-  Inbox,
-  Mail,
-  ShieldCheck,
-  Sparkles,
-  UserRoundSearch,
-  Users,
-  WandSparkles,
-  ClipboardList,
-} from "lucide-react";
+import AdminPlatformNav from "@/components/admin/platform/AdminPlatformNav";
+import { ArrowLeft } from "lucide-react";
 import { PageContainer } from "@/components/ui/heyy";
 import { requireAdminPageAccess } from "@/lib/server/admin-page";
 
-const sharedNav = [
-  ["Overview", "/admin/platform", Gauge],
-  ["Clients", "/admin/platform/clients", UserRoundSearch],
-  ["Communications", "/admin/platform/communications", Mail],
-  ["Templates", "/admin/platform/templates", ClipboardList],
-  ["Careers", "/admin/platform/careers", BriefcaseBusiness],
-  ["Applications", "/admin/platform/applications", FileText],
-  ["Public pages", "/admin/platform/pages", BookOpen],
-  ["Help center", "/admin/platform/help", Sparkles],
-  ["Contact", "/admin/platform/contact", Inbox],
-] as const;
-
-const superAdminNav = [
-  ["Audit log", "/admin/platform/audit", ShieldCheck],
-  ["Users", "/admin/platform/users", Users],
-  ["Generations", "/admin/platform/generations", WandSparkles],
-] as const;
-
 export default async function AdminPlatformShell({ children }: { children: ReactNode }) {
   const { role } = await requireAdminPageAccess();
-  const nav = role === "admin" ? [...sharedNav, ...superAdminNav] : sharedNav;
 
   return (
     <main className="min-h-screen bg-[#f7f6fb] text-slate-950">
@@ -57,11 +25,7 @@ export default async function AdminPlatformShell({ children }: { children: React
       </header>
       <PageContainer className="grid gap-6 py-7 xl:grid-cols-[230px_minmax(0,1fr)]">
         <aside className="h-fit rounded-3xl border border-violet-100 bg-white p-3 shadow-sm">
-          <nav className="grid gap-1">
-            {nav.map(([label, href, Icon]) => (
-              <Link key={href} href={href} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-extrabold text-slate-600 transition hover:bg-violet-50 hover:text-violet-700"><Icon size={16}/>{label}</Link>
-            ))}
-          </nav>
+          <AdminPlatformNav role={role} />
         </aside>
         <section className="min-w-0">{children}</section>
       </PageContainer>

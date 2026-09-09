@@ -22,6 +22,7 @@ export const DEFAULT_ACCOUNT_PREFERENCES: AccountPreferences = {
 
 const BILLING_EVENTS = new Set<NotificationEvent>([
   "quote.ready",
+  "quote.updated",
   "quote.replied",
   "payment.received",
 ]);

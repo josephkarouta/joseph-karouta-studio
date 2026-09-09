@@ -24,7 +24,7 @@ const INQUIRY_TYPES = [
   { value: "general", label: "General Inquiry" },
   { value: "billing", label: "Billing & Payments" },
   { value: "technical", label: "Technical Support" },
-  { value: "careers", label: "Careers" },
+  { value: "careers", label: "Expert Network" },
   { value: "partnership", label: "Partnership / Business" },
   { value: "other", label: "Other" },
 ] as const;
@@ -55,6 +55,13 @@ export default function ContactForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [successId, setSuccessId] = useState("");
+  const [linkedProject, setLinkedProject] = useState<{
+    projectId: string;
+    projectName: string;
+    studio: string;
+    serviceId: string;
+    sourceJobId: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -66,9 +73,22 @@ export default function ContactForm() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const topic = new URLSearchParams(window.location.search).get("topic")?.trim().toLowerCase();
+    const params = new URLSearchParams(window.location.search);
+    const rawTopic = params.get("topic")?.trim().toLowerCase() || "";
+    const topic = rawTopic === "expert-production" ? "expert" : rawTopic;
     if (topic && INQUIRY_TYPES.some((item) => item.value === topic)) {
       setInquiryType(topic as InquiryType);
+    }
+
+    const projectId = String(params.get("projectId") || "").trim();
+    const projectName = String(params.get("projectName") || "").trim();
+    const studio = String(params.get("studio") || "").trim();
+    const serviceId = String(params.get("serviceId") || "").trim();
+    const sourceJobId = String(params.get("sourceJobId") || "").trim();
+    if (projectId) {
+      setLinkedProject({ projectId, projectName, studio, serviceId, sourceJobId });
+      setInquiryType("expert");
+      setSubject((current) => current || `Additional work for ${projectName || "this project"}`);
     }
   }, []);
 
@@ -117,6 +137,10 @@ export default function ContactForm() {
     setError("");
     setSuccessId("");
 
+    if (inquiryType === "expert" && !user) {
+      setError("Sign in or create a free Heyy Studio account before sending an Expert / Project Request. This keeps quotes, payments, files and revisions connected to your private workspace.");
+      return;
+    }
     if (!name.trim()) {
       setError("Enter your name before sending.");
       return;
@@ -144,6 +168,13 @@ export default function ContactForm() {
       form.set("subject", subject.trim());
       form.set("message", message.trim());
       form.set("website", website);
+      if (linkedProject) {
+        form.set("project_id", linkedProject.projectId);
+        form.set("project_name", linkedProject.projectName);
+        form.set("studio", linkedProject.studio);
+        form.set("service_id", linkedProject.serviceId);
+        form.set("source_job_id", linkedProject.sourceJobId);
+      }
       attachments.forEach((file) => form.append("attachments", file, file.name));
 
       const { data } = await supabase.auth.getSession();
@@ -227,9 +258,27 @@ export default function ContactForm() {
             </Field>
           </div>
 
+          {inquiryType === "expert" && linkedProject && (
+            <div className="rounded-2xl border border-emerald-300/50 bg-emerald-500/10 p-4 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
+              <p className="font-black text-[var(--text-primary)]">Connected to your existing project</p>
+              <p className="mt-1">{linkedProject.projectName || "Current project"}. This request can become a new production job without creating another AI project.</p>
+            </div>
+          )}
+
+          {inquiryType === "expert" && !user && (
+            <div className="rounded-2xl border border-violet-300/50 bg-violet-500/10 p-4 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
+              <p className="font-black text-[var(--text-primary)]">A Heyy Studio account is required for Expert production.</p>
+              <p className="mt-1">You do not need to create anything with AI. The account simply keeps your quote, payment, production files and revisions private and connected.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link href={`/login?next=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/contact?topic=expert")}`} className="inline-flex min-h-10 items-center rounded-full bg-[var(--text-primary)] px-4 text-xs font-black text-[var(--surface-strong)]">Sign in</Link>
+                <Link href={`/signup?next=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/contact?topic=expert")}`} className="inline-flex min-h-10 items-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-xs font-black">Create free account</Link>
+              </div>
+            </div>
+          )}
+
           {inquiryType === "careers" && (
             <div className="rounded-2xl border border-violet-300/40 bg-violet-500/10 p-4 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-              Looking to apply for a role? Use the dedicated <Link href="/careers" className="font-black text-[var(--accent-strong)] underline underline-offset-4">Careers page</Link>. This form is best for general career questions.
+              Looking to join the freelance Expert Network? Use the dedicated <Link href="/expertsnetwork" className="font-black text-[var(--accent-strong)] underline underline-offset-4">Expert Network page</Link>. This form is best for general talent-network questions.
             </div>
           )}
 
@@ -297,9 +346,9 @@ export default function ContactForm() {
             </div>
           )}
 
-          <Button type="submit" size="lg" disabled={submitting} className="w-full sm:w-fit">
+          <Button type="submit" size="lg" disabled={submitting || (inquiryType === "expert" && !user)} className="w-full sm:w-fit">
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-            {submitting ? "Sending request…" : "Send request"}
+            {submitting ? "Sending request…" : inquiryType === "expert" && !user ? "Sign in to send Expert request" : "Send request"}
           </Button>
         </form>
       </GlassCard>

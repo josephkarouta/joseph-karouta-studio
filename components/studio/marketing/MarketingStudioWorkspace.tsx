@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -49,6 +49,11 @@ import {
 import HeyySelect, { type HeyySelectOption } from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
+import StudioWorkspaceNavigation from "@/components/studio/common/StudioWorkspaceNavigation";
+import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
+import StudioHero from "@/components/studio/common/StudioHero";
+import StudioProjectHero from "@/components/studio/common/StudioProjectHero";
+import StudioCreationSummary from "@/components/studio/common/StudioCreationSummary";
 import { exportMarketingCampaignPackPdf } from "@/lib/marketing/export-campaign-pack";
 import { generationFetch } from "@/lib/client/generation-request";
 
@@ -271,6 +276,7 @@ export default function MarketingStudioWorkspace() {
 function MarketingExperience() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { user, refreshAccount } = useAuth();
+  const userId = user?.id || null;
   const [form, setForm] = useState<FormState>(() => initialState());
   const [step, setStep] = useState(0);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
@@ -285,6 +291,7 @@ function MarketingExperience() {
   const [exportingCampaignPack, setExportingCampaignPack] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxImage>(null);
   const [error, setError] = useState("");
+  const [resolvingProject, setResolvingProject] = useState(true);
 
   const workMode: WorkMode = form.workMode === "professional" ? "professional" : "guided";
   const activeSteps = useMemo(
@@ -309,17 +316,22 @@ function MarketingExperience() {
   } as CSSProperties;
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     void loadBrandProjects();
     const projectId = new URLSearchParams(window.location.search).get("project");
-    if (projectId) void loadProject(projectId);
-  }, [user]);
+    if (!projectId) {
+      setResolvingProject(false);
+      return;
+    }
+    setResolvingProject(true);
+    void loadProject(projectId).finally(() => setResolvingProject(false));
+  }, [userId]);
 
   async function loadBrandProjects() {
     const { data } = await supabase
       .from("brand_projects")
       .select("*")
-      .eq("user_id", user?.id || "")
+      .eq("user_id", userId || "")
       .order("updated_at", { ascending: false })
       .limit(40);
     setBrandProjects((data || []) as BrandRecord[]);
@@ -330,7 +342,7 @@ function MarketingExperience() {
       .from("studio_projects")
       .select("*")
       .eq("id", projectId)
-      .eq("user_id", user?.id || "")
+      .eq("user_id", userId || "")
       .eq("studio", config.databaseId)
       .maybeSingle();
 
@@ -376,6 +388,10 @@ function MarketingExperience() {
   }
 
   function nextStep() {
+    if (form.objective === "Other" && !String(form.objectiveOther || "").trim()) {
+      setError("Describe the other primary objective before continuing.");
+      return;
+    }
     if (requiredMissing.length) {
       setError(`Complete ${requiredMissing.map((field) => field.label.toLowerCase()).join(", ")} before continuing.`);
       return;
@@ -388,6 +404,11 @@ function MarketingExperience() {
   }
 
   async function generateConcept() {
+    if (form.objective === "Other" && !String(form.objectiveOther || "").trim()) {
+      setError("Describe the other primary objective before generating.");
+      setStep(0);
+      return;
+    }
     const missing = allFields.filter((field) => field.required && isEmpty(form[field.id]));
     if (missing.length) {
       setError(`Complete ${missing.map((field) => field.label.toLowerCase()).join(", ")} before generating.`);
@@ -564,6 +585,22 @@ async function approveAsset(asset: ProjectAsset) {
     }
   }
 
+  if (resolvingProject) {
+    return (
+      <main className="heyy-page min-h-screen py-8 sm:py-10" style={studioStyle}>
+        <PageContainer>
+          <StudioLoader
+            tone="marketing"
+            eyebrow="Marketing Studio"
+            title="Opening your campaign workspace"
+            detail="Loading the campaign brief, saved strategy and generated assets."
+            variant="inline"
+          />
+        </PageContainer>
+      </main>
+    );
+  }
+
   const selectedChannels = Array.isArray(form.channels) ? form.channels : [];
   const approvedVisuals = assets.filter((asset) => String(asset.asset_type || "").startsWith("marketing_visual_") && isApproved(asset));
   const previewImage = approvedVisuals[0]?.file_url || assets.find((asset) => String(asset.asset_type || "").startsWith("marketing_visual_key_visual"))?.file_url || undefined;
@@ -574,34 +611,34 @@ async function approveAsset(asset: ProjectAsset) {
       {lightbox && <ImageLightbox image={lightbox} onClose={() => setLightbox(null)} />}
 
       <PageContainer>
-        <section
-          className="relative overflow-hidden rounded-[2rem] border p-6 shadow-[var(--shadow-card)] sm:p-9"
-          style={{
-            borderColor: `${config.accent}66`,
-            background: `linear-gradient(120deg,${config.soft},var(--surface-strong),${config.soft})`,
-          }}
-        >
-          <div className="absolute -right-14 -top-20 h-56 w-56 rounded-full border-[34px] border-white/20" />
-          <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-4xl">
-              <Eyebrow style={{ color: config.accent }}>{config.eyebrow}</Eyebrow>
-              <h1 className="mt-4 text-4xl font-black leading-[.94] tracking-[-.06em] sm:text-6xl">{config.title}</h1>
-              <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base">{config.description}</p>
-            </div>
-            <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 backdrop-blur-xl">
-              <StudioModeToggle
-                value={workMode}
-                onChange={(mode) => void changeWorkMode(mode)}
-                tone="marketing"
-                compact
-              />
-              <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple campaign questions and a complete direction" : "Integrated strategy, media, testing and launch system"}</span>
-                <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.marketingCreativePack : config.creditCost} />
-              </div>
-            </div>
-          </div>
-        </section>
+        {result ? (
+          <StudioProjectHero
+            tone="marketing"
+            eyebrow="Marketing project"
+            title={String(project?.project_name || form.campaignName || "Untitled campaign")}
+            description={[String(form.business || ""), marketingObjective(form)].filter(Boolean).join(" · ") || "Marketing campaign"}
+            progress={progress}
+            statusLabel="Strategy, messaging, channels, content, visuals and launch assets stay connected in one workspace."
+            mode={workMode}
+            onModeChange={(mode) => void changeWorkMode(mode)}
+          />
+        ) : (
+          <StudioHero
+            tone="marketing"
+            eyebrow={config.eyebrow}
+            title={config.title}
+            description={config.description}
+            controls={(
+              <>
+                <StudioModeToggle value={workMode} onChange={(mode) => void changeWorkMode(mode)} tone="marketing" compact />
+                <div className="mt-3 flex items-center justify-between gap-3 px-1">
+                  <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple campaign questions and a complete direction" : "Integrated strategy, media, testing and launch system"}</span>
+                  <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.marketingCreativePack : config.creditCost} />
+                </div>
+              </>
+            )}
+          />
+        )}
 
         {result ? (
           <WorkspaceNavigation activeTab={activeTab} onChange={selectWorkspaceTab} />
@@ -739,7 +776,7 @@ function OnboardingWorkspace({
 }) {
   const section = steps[Math.min(step, steps.length - 1)];
   return (
-    <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
+    <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
       <GlassCard className="p-5 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -753,7 +790,22 @@ function OnboardingWorkspace({
         {step === 0 && <BrandConnection form={form} brands={brands} onChange={onFieldChange} />}
 
         <div className="mt-7 grid gap-5 md:grid-cols-2">
-          {section.fields.map((field) => <FieldControl key={field.id} field={field} value={form[field.id]} onChange={(value) => onFieldChange(field.id, value)} />)}
+          {section.fields.map((field) => (
+            <div key={field.id} className={field.type === "textarea" || field.type === "multiselect" ? "md:col-span-2" : ""}>
+              <FieldControl field={field} value={form[field.id]} onChange={(value) => onFieldChange(field.id, value)} />
+              {field.id === "objective" && form.objective === "Other" ? (
+                <div className="mt-3">
+                  <label className="text-[.65rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">Describe the objective <span className="text-[var(--accent-strong)]">*</span></label>
+                  <input
+                    value={String(form.objectiveOther || "")}
+                    onChange={(event) => onFieldChange("objectiveOther", event.target.value)}
+                    placeholder="e.g. Grow memberships, promote a new service, attract sponsors"
+                    className="heyy-form-field mt-2"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ))}
         </div>
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-5">
@@ -766,22 +818,22 @@ function OnboardingWorkspace({
         </div>
       </GlassCard>
 
-      <aside className="space-y-4">
-        <GlassCard className="p-5">
-          <Eyebrow>Campaign summary</Eyebrow>
-          <h3 className="mt-3 text-xl font-black">{String(form.campaignName || "Untitled campaign")}</h3>
-          <div className="mt-4 grid gap-2">
-            <SummaryLine label="Mode" value={workMode === "professional" ? "Professional" : "Guided"} />
-            <SummaryLine label="Objective" value={String(form.objective || "Not selected")} />
-            <SummaryLine label="Business" value={String(form.business || "Not added")} />
-            <SummaryLine label="Channels" value={Array.isArray(form.channels) && form.channels.length ? `${form.channels.length} selected` : "Not selected"} />
-            <SummaryLine label="Brand" value={form.brandSource === "Use an existing Heyy Studio brand" ? "Connected Brand System" : String(form.brandSource || "Independent campaign")} />
-          </div>
-        </GlassCard>
-        <GlassCard className="p-5">
-          <p className="text-[.6rem] font-black uppercase tracking-[.16em] text-pink-600">Performance note</p>
-          <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{config.disclaimer}</p>
-        </GlassCard>
+      <aside className="xl:sticky xl:top-[calc(var(--header-height)+20px)] xl:self-start">
+        <StudioCreationSummary
+          tone="marketing"
+          eyebrow="Campaign summary"
+          title={String(form.campaignName || "Untitled campaign")}
+          subtitle={workMode === "professional" ? "Professional integrated campaign" : "Guided campaign system"}
+          progress={progress}
+          rows={[
+            { label: "Mode", value: workMode === "professional" ? "Professional" : "Guided" },
+            { label: "Objective", value: marketingObjective(form) || "Not selected" },
+            { label: "Business", value: String(form.business || "Not added") },
+            { label: "Channels", value: Array.isArray(form.channels) && form.channels.length ? `${form.channels.length} selected` : "Not selected" },
+            { label: "Brand", value: form.brandSource === "Use an existing Heyy Studio brand" ? "Connected Brand System" : String(form.brandSource || "Independent campaign") },
+          ]}
+          note={{ eyebrow: "Performance note", text: config.disclaimer }}
+        />
       </aside>
     </div>
   );
@@ -831,9 +883,8 @@ function BrandConnection({ form, brands, onChange }: { form: FormState; brands: 
 }
 
 function FieldControl({ field, value, onChange }: { field: StudioField; value: string | string[] | undefined; onChange: (value: string | string[]) => void }) {
-  const fullWidth = field.type === "textarea" || field.type === "multiselect";
   return (
-    <div className={fullWidth ? "md:col-span-2" : ""}>
+    <div>
       <label className="text-[.65rem] font-black uppercase tracking-[.14em] text-[var(--text-secondary)]">{field.label}{field.required && <span className="ml-1 text-[var(--accent-strong)]">*</span>}</label>
       {field.helper && <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">{field.helper}</p>}
       {field.type === "textarea" ? (
@@ -848,86 +899,14 @@ function FieldControl({ field, value, onChange }: { field: StudioField; value: s
 }
 
 function WorkspaceNavigation({ activeTab, onChange }: { activeTab: WorkspaceTab; onChange: (tab: WorkspaceTab) => void }) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const tabRefs = useRef<Partial<Record<WorkspaceTab, HTMLButtonElement | null>>>({});
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  function updateScrollState() {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    setCanScrollLeft(scroller.scrollLeft > 6);
-    setCanScrollRight(scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 6);
-  }
-
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    updateScrollState();
-    const activeButton = tabRefs.current[activeTab];
-    activeButton?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-    const timer = window.setTimeout(updateScrollState, 280);
-    window.addEventListener("resize", updateScrollState);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("resize", updateScrollState);
-    };
-  }, [activeTab]);
-
-  function scrollTabs(direction: -1 | 1) {
-    const scroller = scrollerRef.current;
-    if (!scroller) return;
-    scroller.scrollBy({ left: direction * Math.max(260, scroller.clientWidth * 0.72), behavior: "smooth" });
-    window.setTimeout(updateScrollState, 300);
-  }
-
   return (
-    <GlassCard className="mt-5 p-2.5">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label="Scroll campaign sections left"
-          onClick={() => scrollTabs(-1)}
-          disabled={!canScrollLeft}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] disabled:cursor-default disabled:opacity-30"
-        >
-          <ArrowLeft size={15} />
-        </button>
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <div
-            ref={scrollerRef}
-            onScroll={updateScrollState}
-            className="flex gap-2 overflow-x-auto overscroll-x-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                ref={(node) => { tabRefs.current[tab.id] = node; }}
-                type="button"
-                onClick={() => onChange(tab.id)}
-                className={cx(
-                  "shrink-0 rounded-xl border px-4 py-3 text-xs font-black transition",
-                  activeTab === tab.id
-                    ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_0_0_3px_var(--accent-soft)]"
-                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          type="button"
-          aria-label="Scroll campaign sections right"
-          onClick={() => scrollTabs(1)}
-          disabled={!canScrollRight}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)] disabled:cursor-default disabled:opacity-30"
-        >
-          <ArrowRight size={15} />
-        </button>
-      </div>
-    </GlassCard>
+    <StudioWorkspaceNavigation
+      tabs={TABS}
+      activeTab={activeTab}
+      onChange={(tabId) => onChange(tabId as WorkspaceTab)}
+      tone="marketing"
+      ariaLabel="Marketing Studio sections"
+    />
   );
 }
 
@@ -968,7 +947,7 @@ function BriefSection({ form, fields, brands }: { form: FormState; fields: Studi
       <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">The source behind every strategy, message and visual</h2>
       <div className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <BriefItem label="Brand connection" value={brand ? `${brand.business_name || brand.project_name || brand.name || "Saved brand"}${brand.industry ? ` · ${brand.industry}` : ""}` : String(form.brandSource || "Independent campaign")} />
-        {fields.filter((field, index, all) => all.findIndex((item) => item.id === field.id) === index).map((field) => <BriefItem key={field.id} label={field.label} value={Array.isArray(form[field.id]) ? (form[field.id] as string[]).join(", ") : String(form[field.id] || "Not added")} />)}
+        {fields.filter((field, index, all) => all.findIndex((item) => item.id === field.id) === index).map((field) => <BriefItem key={field.id} label={field.label} value={field.id === "objective" ? marketingObjective(form) || "Not added" : Array.isArray(form[field.id]) ? (form[field.id] as string[]).join(", ") : String(form[field.id] || "Not added")} />)}
       </div>
     </GlassCard>
   );
@@ -1446,11 +1425,10 @@ function FullScreenCampaignLoader({ workMode }: { workMode: WorkMode }) {
 
 function CardLoader({ title }: { title: string }) {
   return (
-    <StudioLoader
+    <StudioVisualGenerationLoader
       tone="marketing"
       title={title}
       detail="Applying the campaign strategy, message and selected creative format."
-      variant="overlay"
     />
   );
 }
@@ -1484,10 +1462,16 @@ function EmptySection({ message }: { message: string }) { return <GlassCard clas
 function ErrorBanner({ message }: { message: string }) { return <div className="mt-5 flex items-start gap-3 rounded-2xl border border-red-300/60 bg-red-500/10 p-4 text-sm font-bold text-red-700 dark:text-red-200"><AlertCircle size={18} className="mt-0.5 shrink-0" /><span>{message}</span></div>; }
 
 function initialState(): FormState {
-  const state: FormState = { workMode: "guided", brandSource: "Start without a saved brand", brandProjectId: "" };
+  const state: FormState = { workMode: "guided", brandSource: "Start without a saved brand", brandProjectId: "", objectiveOther: "" };
   const fields = [...config.steps, ...(config.professionalSteps || [])].flatMap((item) => item.fields);
   for (const field of fields) if (!(field.id in state)) state[field.id] = field.type === "multiselect" ? [] : "";
   return state;
+}
+
+function marketingObjective(form: FormState) {
+  return String(form.objective || "") === "Other"
+    ? String(form.objectiveOther || "").trim() || "Other"
+    : String(form.objective || "").trim();
 }
 
 function readMarketingWorkspaceTab(projectId: string): WorkspaceTab {

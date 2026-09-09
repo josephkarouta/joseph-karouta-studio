@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { getStudioIdentity } from "../../../../lib/studio/studio-identity";
+import ExpertSourcing from "@/components/production/admin/ExpertSourcing";
 
 type StudioRequest = {
   id: string;
@@ -18,6 +19,49 @@ type StudioRequest = {
   metadata: any;
   created_at: string;
 };
+
+
+type ExpertSelection = {
+  id: string;
+  expert_profile_id: string;
+  status: string;
+  quoted_fee_cents: number | null;
+  currency: string;
+  turnaround_days: number | null;
+  included_revisions: number | null;
+  extra_revision_fee_cents: number | null;
+  expert_notes: string | null;
+  quoted_at: string | null;
+  shared_scope: Record<string, any>;
+  expert: {
+    id: string;
+    full_name: string;
+    studio: string | null;
+    role_title: string | null;
+    availability: string | null;
+  } | null;
+};
+
+type RequestWorkspaceTab = "Client Brief" | "Expert Sourcing" | "Client Quote" | "Activity";
+
+const REQUEST_TABS: RequestWorkspaceTab[] = [
+  "Client Brief",
+  "Expert Sourcing",
+  "Client Quote",
+  "Activity",
+];
+
+const REQUEST_TAB_SLUGS: Record<RequestWorkspaceTab, string> = {
+  "Client Brief": "client-brief",
+  "Expert Sourcing": "expert-sourcing",
+  "Client Quote": "client-quote",
+  "Activity": "activity",
+};
+
+function requestTabFromSlug(value: string | null): RequestWorkspaceTab | null {
+  const match = Object.entries(REQUEST_TAB_SLUGS).find(([, slug]) => slug === String(value || "").toLowerCase());
+  return (match?.[0] as RequestWorkspaceTab | undefined) || null;
+}
 
 type QuoteTemplate = {
   id: string;
@@ -40,6 +84,14 @@ type WorkspaceQuote = {
   created_at: string;
   paid_at?: string | null;
   production_job_id?: string | null;
+  expert_cost_amount?: number | null;
+  management_fee_percent?: number | null;
+  management_fee_amount?: number | null;
+  expert_extra_revision_cost_amount?: number | null;
+  expert_opportunity_id?: string | null;
+  subtotal_amount?: number | null;
+  discount_amount?: number | null;
+  discount_label?: string | null;
 };
 
 export default function StudioRequestReviewPage() {
@@ -48,7 +100,17 @@ export default function StudioRequestReviewPage() {
 
   const [request, setRequest] = useState<StudioRequest | null>(null);
   const [quote, setQuote] = useState<WorkspaceQuote | null>(null);
+  const [expertSelection, setExpertSelection] = useState<ExpertSelection | null>(null);
+  const [activeTab, setActiveTab] = useState<RequestWorkspaceTab>("Client Brief");
   const [loading, setLoading] = useState(true);
+
+  function selectTab(tab: RequestWorkspaceTab) {
+    setActiveTab(tab);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", REQUEST_TAB_SLUGS[tab]);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
 
   async function loadRequest() {
     setLoading(true);
@@ -63,14 +125,22 @@ export default function StudioRequestReviewPage() {
 
       setRequest(data.request);
       setQuote(data.quote || null);
+      setExpertSelection(data.expertSelection || null);
     } catch (error) {
       console.error("Studio request load error:", error);
       setRequest(null);
       setQuote(null);
+      setExpertSelection(null);
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const requestedTab = requestTabFromSlug(new URLSearchParams(window.location.search).get("section"));
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [params.id]);
 
   useEffect(() => {
     if (params.id) {
@@ -180,6 +250,125 @@ export default function StudioRequestReviewPage() {
           border-color: #6c00ff !important;
           background: #6c00ff !important;
           box-shadow: 0 12px 28px rgba(108,0,255,.25) !important;
+        }
+
+        .heyy-request-progress {
+          display: grid !important;
+          grid-template-columns: repeat(5,minmax(0,1fr)) !important;
+          gap: 8px !important;
+          margin-top: 14px !important;
+          border: 1px solid #ddd6e8 !important;
+          border-radius: 20px !important;
+          background: #fff !important;
+          padding: 7px !important;
+          box-shadow: 0 10px 28px rgba(30,20,45,.05) !important;
+        }
+
+        .heyy-request-progress-step {
+          position: relative !important;
+          min-height: 62px !important;
+          border: 1px solid #ece7f1 !important;
+          border-radius: 14px !important;
+          background: #faf9fc !important;
+          padding: 11px 12px !important;
+        }
+
+        .heyy-request-progress-step[data-state="done"] {
+          border-color: #b9e9cc !important;
+          background: #f1fff6 !important;
+        }
+
+        .heyy-request-progress-step[data-state="active"] {
+          border-color: #8d4dff !important;
+          background: #f4edff !important;
+          box-shadow: inset 0 0 0 1px rgba(108,0,255,.08) !important;
+        }
+
+        .heyy-request-progress-step strong {
+          display: block !important;
+          color: #17151f !important;
+          font-size: 10px !important;
+          font-weight: 900 !important;
+        }
+
+        .heyy-request-progress-step span {
+          display: block !important;
+          margin-top: 4px !important;
+          color: #777080 !important;
+          font-size: 9px !important;
+          line-height: 1.45 !important;
+        }
+
+        .heyy-request-tabs {
+          display: grid !important;
+          grid-template-columns: repeat(4,minmax(0,1fr)) !important;
+          gap: 7px !important;
+          margin-top: 14px !important;
+          border: 1px solid #ddd6e8 !important;
+          border-radius: 20px !important;
+          background: #fff !important;
+          padding: 7px !important;
+          box-shadow: 0 10px 28px rgba(30,20,45,.05) !important;
+        }
+
+        .heyy-request-tab {
+          min-height: 58px !important;
+          border: 1px solid transparent !important;
+          border-radius: 14px !important;
+          background: #f8f7fb !important;
+          color: #51495a !important;
+          padding: 11px 13px !important;
+          text-align: left !important;
+          cursor: pointer !important;
+          font-weight: 900 !important;
+          transition: all 180ms ease !important;
+        }
+
+        .heyy-request-tab:hover {
+          border-color: #9b63ff !important;
+          background: #f2e9ff !important;
+          color: #5b00d6 !important;
+        }
+
+        .heyy-request-tab[data-active="true"] {
+          border-color: #6c00ff !important;
+          background: #6c00ff !important;
+          color: #fff !important;
+          box-shadow: 0 10px 24px rgba(108,0,255,.20) !important;
+        }
+
+        .heyy-request-tab small {
+          display: block !important;
+          margin-top: 3px !important;
+          font-size: 9px !important;
+          font-weight: 700 !important;
+          opacity: .72 !important;
+        }
+
+        .heyy-request-tab-panel {
+          display: grid !important;
+          gap: 18px !important;
+          margin-top: 18px !important;
+        }
+
+        .heyy-client-quote-grid {
+          display: grid !important;
+          grid-template-columns: minmax(0,1fr) minmax(340px,430px) !important;
+          align-items: start !important;
+          gap: 18px !important;
+        }
+
+        .heyy-internal-cost-card {
+          border: 1px solid #cfe8da !important;
+          border-radius: 17px !important;
+          background: linear-gradient(135deg,#f2fff7,#fff) !important;
+          padding: 15px !important;
+        }
+
+        .heyy-activity-grid {
+          display: grid !important;
+          grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+          gap: 12px !important;
         }
 
         .heyy-review-layout {
@@ -468,6 +657,8 @@ export default function StudioRequestReviewPage() {
           .heyy-review-layout {
             grid-template-columns: minmax(0,1fr) !important;
           }
+          .heyy-client-quote-grid { grid-template-columns: minmax(0,1fr) !important; }
+          .heyy-request-progress { grid-template-columns: repeat(3,minmax(0,1fr)) !important; }
           .heyy-quote-panel {
             position: static !important;
           }
@@ -488,7 +679,10 @@ export default function StudioRequestReviewPage() {
           }
           .heyy-info-grid,
           .heyy-quote-details,
-          .heyy-brief-field-grid {
+          .heyy-brief-field-grid,
+          .heyy-request-tabs,
+          .heyy-request-progress,
+          .heyy-activity-grid {
             grid-template-columns: minmax(0,1fr) !important;
           }
         }
@@ -533,113 +727,370 @@ export default function StudioRequestReviewPage() {
           </div>
         </div>
 
-        <div className="heyy-review-layout">
-          <div className="heyy-review-left">
-            <div className="heyy-surface heyy-summary-grid">
-              <div className="heyy-preview-box">
-                {request.preview_image ? (
-                  <img
-                    src={request.preview_image}
-                    alt={request.service || "Request preview"}
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm font-black text-violet-500">
-                    No Preview
-                  </div>
-                )}
-              </div>
+        <div className="heyy-request-progress" aria-label="Request progress">
+          {requestProgressSteps(request, quote, expertSelection).map((step) => (
+            <div
+              key={step.label}
+              className="heyy-request-progress-step"
+              data-state={step.state}
+            >
+              <strong>{step.label}</strong>
+              <span>{step.description}</span>
+            </div>
+          ))}
+        </div>
 
-              <div className="heyy-summary-copy">
-                <p className="text-[10px] font-black uppercase tracking-[0.17em] text-violet-600">
-                  Request Summary
-                </p>
+        <nav className="heyy-request-tabs" aria-label="Request workspace sections">
+          {REQUEST_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className="heyy-request-tab"
+              data-active={activeTab === tab ? "true" : "false"}
+              onClick={() => selectTab(tab)}
+            >
+              {tab}
+              <small>{requestTabDescription(tab)}</small>
+            </button>
+          ))}
+        </nav>
 
-                <h2 className="mt-2 text-2xl font-black tracking-[-0.025em]">
-                  {request.project_name || "Untitled Project"}
-                </h2>
-
-                <p className="mt-2 text-sm leading-7 text-slate-500">
-                  {request.service || "Service not set"}
-                </p>
-
-                <div className="heyy-info-grid">
-                  <InfoTile
-                    label="Client"
-                    value={
-                      request.metadata?.client_name ||
-                      request.metadata?.name ||
-                      "Logged-in User"
-                    }
-                  />
-                  <InfoTile
-                    label="Email"
-                    value={
-                      request.metadata?.client_email ||
-                      request.metadata?.email ||
-                      "Not attached"
-                    }
-                  />
-                  <StudioInfoTile studio={request.studio} />
-                  <InfoTile
-                    label="Requested"
-                    value={formatDateTime(request.created_at)}
-                  />
+        <div className="heyy-request-tab-panel">
+          {activeTab === "Client Brief" && (
+            <>
+              <div className="heyy-surface heyy-summary-grid">
+                <div className="heyy-preview-box">
+                  {request.preview_image ? (
+                    <img
+                      src={request.preview_image}
+                      alt={request.service || "Request preview"}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-sm font-black text-violet-500">
+                      No Preview
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
 
-            <div className="heyy-surface heyy-content-card heyy-notes-card">
-              <h2 className="text-xl font-black tracking-[-0.02em]">
-                Client Notes
-              </h2>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600">
-                {request.notes || "No notes provided."}
-              </p>
-            </div>
-
-            <QuoteQuestions request={request} onRefresh={loadRequest} />
-
-            <div className="heyy-surface heyy-content-card heyy-brief-card">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-black tracking-[-0.02em]">
-                    Project Brief
-                  </h2>
-                  <p className="mt-1 text-xs leading-6 text-slate-500">
-                    The most important project information is organised below. Technical data is still available when needed.
+                <div className="heyy-summary-copy">
+                  <p className="text-[10px] font-black uppercase tracking-[0.17em] text-violet-600">
+                    Request Summary
                   </p>
+                  <h2 className="mt-2 text-2xl font-black tracking-[-0.025em]">
+                    {request.project_name || "Untitled Project"}
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-slate-500">
+                    {request.service || "Service not set"}
+                  </p>
+                  <div className="heyy-info-grid">
+                    <InfoTile
+                      label="Client"
+                      value={
+                        request.metadata?.client_name ||
+                        request.metadata?.name ||
+                        "Logged-in User"
+                      }
+                    />
+                    <InfoTile
+                      label="Email"
+                      value={
+                        request.metadata?.client_email ||
+                        request.metadata?.email ||
+                        "Not attached"
+                      }
+                    />
+                    <StudioInfoTile studio={request.studio} />
+                    <InfoTile
+                      label="Requested"
+                      value={formatDateTime(request.created_at)}
+                    />
+                  </div>
                 </div>
-                <StudioPill studio={request.studio} />
               </div>
-              <ProjectBriefSummary request={request} />
-            </div>
-          </div>
 
-          <div className="heyy-surface heyy-quote-panel">
-            <p className="text-[10px] font-black uppercase tracking-[0.17em] text-amber-700">
-              {quote ? "Sent Quote" : "Quote Builder"}
-            </p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.025em]">
-              {quote ? "Quote Already Sent" : "Create & Send Quote"}
-            </h2>
-            <p className="mt-2 text-sm leading-7 text-slate-600">
-              {quote
-                ? "This request already has a quote. Its current details and payment status are shown below."
-                : "Review the scope and send the production quote to the client."}
-            </p>
+              <div className="heyy-surface heyy-content-card heyy-notes-card">
+                <h2 className="text-xl font-black tracking-[-0.02em]">Client Notes</h2>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600">
+                  {request.notes || "No notes provided."}
+                </p>
+              </div>
 
-            <div className="mt-5">
-              {quote ? (
-                <ExistingQuoteCard quote={quote} />
-              ) : (
-                <CreateQuoteForm request={request} />
-              )}
+              <div className="heyy-surface heyy-content-card heyy-brief-card">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-black tracking-[-0.02em]">Project Brief</h2>
+                    <p className="mt-1 text-xs leading-6 text-slate-500">
+                      Review the client request and approved project context before sharing anything with an Expert.
+                    </p>
+                  </div>
+                  <StudioPill studio={request.studio} />
+                </div>
+                <ProjectBriefSummary request={request} />
+              </div>
+            </>
+          )}
+
+          {activeTab === "Expert Sourcing" && (
+            <ExpertSourcing
+              requestId={request.id}
+              onChanged={loadRequest}
+              onPreferredSelected={() => selectTab("Client Quote")}
+            />
+          )}
+
+          {activeTab === "Client Quote" && (
+            <div className="heyy-client-quote-grid">
+              <div className="grid gap-4">
+                <InternalExpertCostCard
+                  selection={expertSelection}
+                  clientQuote={quote}
+                />
+                <QuoteQuestions request={request} onRefresh={loadRequest} />
+              </div>
+
+              <div className="heyy-surface heyy-quote-panel">
+                <p className="text-[10px] font-black uppercase tracking-[0.17em] text-amber-700">
+                  {quote ? (String(quote.status || "").toLowerCase() === "paid" || quote.paid_at ? "Paid Quote" : "Sent Quote") : "Client Quote"}
+                </p>
+                <h2 className="mt-2 text-2xl font-black tracking-[-0.025em]">
+                  {quote ? (String(quote.status || "").toLowerCase() === "paid" || quote.paid_at ? "Payment Confirmed" : "Quote Awaiting Payment") : "Create & Send Quote"}
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  {quote
+                    ? (String(quote.status || "").toLowerCase() === "paid" || quote.paid_at
+                      ? "The client paid this quote and the request is now connected to the production job."
+                      : "This is the Heyy Studio quote the client sees. You can revise it before payment if the scope, Expert cost or price changes. Expert cost and Heyy margin stay internal.")
+                    : expertSelection
+                      ? "Use the selected Expert cost as an internal reference, then set the final Heyy Studio client price."
+                      : "You can source an Expert first or send a direct Heyy Studio quote when the cost is already known."}
+                </p>
+
+                <div className="mt-5">
+                  {quote ? (
+                    <ExistingQuoteCard quote={quote} request={request} expertSelection={expertSelection} onUpdated={loadRequest} />
+                  ) : (
+                    <CreateQuoteForm
+                      request={request}
+                      expertSelection={expertSelection}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {activeTab === "Activity" && (
+            <RequestActivity
+              request={request}
+              quote={quote}
+              expertSelection={expertSelection}
+            />
+          )}
         </div>
       </div>
     </main>
   );
+}
+
+
+function requestTabDescription(tab: RequestWorkspaceTab) {
+  if (tab === "Client Brief") return "Client scope and approved context";
+  if (tab === "Expert Sourcing") return "Private matching and Expert quotes";
+  if (tab === "Client Quote") return "Heyy Studio price and client questions";
+  return "Commercial milestones and handoff";
+}
+
+function requestProgressSteps(
+  request: StudioRequest,
+  quote: WorkspaceQuote | null,
+  expertSelection: ExpertSelection | null,
+) {
+  const converted =
+    String(request.status || "").toLowerCase() === "converted" ||
+    Boolean(quote?.production_job_id);
+  const paid = converted || Boolean(quote?.paid_at) || String(quote?.status || "").toLowerCase() === "paid";
+
+  return [
+    {
+      label: "Request received",
+      description: "Client brief is ready for Admin review.",
+      state: "done",
+    },
+    {
+      label: "Expert costing",
+      description: expertSelection
+        ? "Preferred Expert selected."
+        : quote
+          ? "Direct Heyy Studio quote — Expert sourcing skipped."
+          : "Optional private Expert quotes before pricing.",
+      state: expertSelection || quote ? "done" : "active",
+    },
+    {
+      label: "Client quote",
+      description: quote ? "Heyy Studio quote sent." : "Set the final client scope and price.",
+      state: quote ? "done" : expertSelection ? "active" : "pending",
+    },
+    {
+      label: "Awaiting payment",
+      description: paid ? "Payment confirmed." : quote ? "Waiting for client payment." : "Starts after the client quote.",
+      state: paid ? "done" : quote ? "active" : "pending",
+    },
+    {
+      label: "Production",
+      description: converted ? "Converted to a paid production job." : "Expert assignment activates after payment.",
+      state: converted ? "done" : "pending",
+    },
+  ];
+}
+
+function InternalExpertCostCard({
+  selection,
+  clientQuote,
+}: {
+  selection: ExpertSelection | null;
+  clientQuote: WorkspaceQuote | null;
+}) {
+  if (!selection) {
+    return (
+      <div className="heyy-surface heyy-content-card">
+        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-600">
+          Internal costing
+        </p>
+        <h2 className="mt-2 text-xl font-black tracking-[-0.02em]">No preferred Expert selected</h2>
+        <p className="mt-2 text-sm leading-7 text-slate-600">
+          You can source an Expert first, or continue with a direct Heyy Studio quote when the production cost is already known.
+        </p>
+      </div>
+    );
+  }
+
+  const clientCents = clientQuote ? Math.round(Number(clientQuote.amount || 0) * 100) : null;
+  const expertCents = Number(selection.quoted_fee_cents || 0);
+  const grossMarginCents = clientCents === null ? null : clientCents - expertCents;
+
+  return (
+    <div className="heyy-internal-cost-card">
+      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700">
+        Internal only — never shown to client
+      </p>
+      <h2 className="mt-2 text-xl font-black tracking-[-0.02em] text-slate-950">
+        {selection.expert?.full_name || "Preferred Expert"}
+      </h2>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <QuoteSummaryItem
+          label="Expert Fee"
+          value={formatMoney(selection.quoted_fee_cents, selection.currency)}
+        />
+        <QuoteSummaryItem
+          label="Expert Turnaround"
+          value={selection.turnaround_days ? `${selection.turnaround_days} days` : "—"}
+        />
+        <QuoteSummaryItem
+          label="Expert Revisions"
+          value={String(selection.included_revisions ?? "—")}
+        />
+        <QuoteSummaryItem
+          label="Expert Fee / Extra Revision"
+          value={selection.extra_revision_fee_cents !== null ? formatMoney(selection.extra_revision_fee_cents, selection.currency) : "—"}
+        />
+      </div>
+      {grossMarginCents !== null && (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-4 py-3">
+          <p className="text-[8px] font-black uppercase tracking-[0.14em] text-emerald-700">
+            Gross project margin before platform/provider/tax costs
+          </p>
+          <p className="mt-1 text-lg font-black text-slate-950">
+            {formatMoney(grossMarginCents, selection.currency)}
+          </p>
+        </div>
+      )}
+      <p className="mt-3 text-[10px] font-bold leading-5 text-slate-500">
+        The client sees only the Heyy Studio scope, price, delivery and revision allowance.
+      </p>
+    </div>
+  );
+}
+
+function RequestActivity({
+  request,
+  quote,
+  expertSelection,
+}: {
+  request: StudioRequest;
+  quote: WorkspaceQuote | null;
+  expertSelection: ExpertSelection | null;
+}) {
+  const converted =
+    String(request.status || "").toLowerCase() === "converted" ||
+    Boolean(quote?.production_job_id);
+
+  return (
+    <div className="heyy-surface heyy-content-card">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+        Request Activity
+      </p>
+      <h2 className="mt-2 text-2xl font-black tracking-[-0.03em]">Commercial handoff timeline</h2>
+      <p className="mt-2 text-sm leading-7 text-slate-600">
+        This view separates pre-production commercial decisions from the paid production workspace.
+      </p>
+      <div className="heyy-activity-grid mt-5">
+        <ActivityTile
+          label="Client request received"
+          value={formatDateTime(request.created_at)}
+          status="Done"
+        />
+        <ActivityTile
+          label="Preferred Expert"
+          value={expertSelection?.expert?.full_name || "Not selected"}
+          status={expertSelection ? "Selected" : "Pending"}
+        />
+        <ActivityTile
+          label="Client quote"
+          value={quote ? `${quote.currency || "USD"} ${Number(quote.amount || 0).toFixed(2)}` : "Not sent"}
+          status={quote ? String(quote.status || "Sent") : "Pending"}
+        />
+        <ActivityTile
+          label="Production handoff"
+          value={converted ? "Paid production job created" : "Waiting for payment"}
+          status={converted ? "Done" : "Pending"}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActivityTile({
+  label,
+  value,
+  status,
+}: {
+  label: string;
+  value: string;
+  status: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-[#faf9fc] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">{label}</p>
+        <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-violet-700">
+          {status}
+        </span>
+      </div>
+      <p className="mt-2 text-sm font-black text-slate-800">{value}</p>
+    </div>
+  );
+}
+
+function formatMoney(cents: number | null, currency = "USD") {
+  if (cents === null || cents === undefined) return "—";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+    }).format(Number(cents) / 100);
+  } catch {
+    return `${currency} ${(Number(cents) / 100).toFixed(2)}`;
+  }
 }
 
 function InfoTile({ label, value }: { label: string; value: string }) {
@@ -1613,9 +2064,35 @@ function setbacks(planning: any): string | null {
   return values.map(([label, value]) => `${label}: ${formatBriefValue(value)} m`).join(" · ");
 }
 
-function ExistingQuoteCard({ quote }: { quote: WorkspaceQuote }) {
+function ExistingQuoteCard({
+  quote,
+  request,
+  expertSelection,
+  onUpdated,
+}: {
+  quote: WorkspaceQuote;
+  request: StudioRequest;
+  expertSelection: ExpertSelection | null;
+  onUpdated: () => Promise<void>;
+}) {
   const normalizedStatus = String(quote.status || "Sent").toLowerCase();
-  const paid = normalizedStatus === "paid";
+  const paid = normalizedStatus === "paid" || Boolean(quote.paid_at) || Boolean(quote.production_job_id);
+  const [editing, setEditing] = useState(false);
+
+  if (editing && !paid) {
+    return (
+      <EditQuoteForm
+        quote={quote}
+        request={request}
+        expertSelection={expertSelection}
+        onCancel={() => setEditing(false)}
+        onUpdated={async () => {
+          setEditing(false);
+          await onUpdated();
+        }}
+      />
+    );
+  }
 
   return (
     <div>
@@ -1642,13 +2119,36 @@ function ExistingQuoteCard({ quote }: { quote: WorkspaceQuote }) {
                 : "bg-amber-200 text-amber-900"
             }`}
           >
-            {quote.status || "Sent"}
+            {paid ? "Paid" : quote.status || "Sent"}
           </span>
         </div>
 
-        <p className="mt-4 text-3xl font-black tracking-[-0.03em] text-slate-950">
+        <p className="mt-2 text-[8px] font-black uppercase tracking-[0.14em] text-slate-400">Client quote subtotal · before tax</p>
+        <p className="mt-1 text-3xl font-black tracking-[-0.03em] text-slate-950">
           {quote.currency || "USD"} {Number(quote.amount || 0).toFixed(2)}
         </p>
+
+        {Number(quote.expert_cost_amount || 0) > 0 && (
+          <div className="mt-4 grid gap-2">
+            <QuoteBreakdownLine
+              label="Expert production cost · internal"
+              value={formatMoney(Math.round(Number(quote.expert_cost_amount || 0) * 100), quote.currency || "USD")}
+            />
+            <QuoteBreakdownLine
+              label={`Heyy Studio service / management fee (${Number(quote.management_fee_percent || 0)}%)`}
+              value={formatMoney(Math.round(Number(quote.management_fee_amount || 0) * 100), quote.currency || "USD")}
+            />
+            <QuoteBreakdownLine
+              label="Pre-tax client subtotal"
+              value={formatMoney(Math.round(Number(quote.amount || 0) * 100), quote.currency || "USD")}
+              strong
+            />
+            <QuoteBreakdownLine
+              label="AU GST estimate if applicable (10%)"
+              value={formatMoney(Math.round(Number(quote.amount || 0) * 10), quote.currency || "USD")}
+            />
+          </div>
+        )}
 
         {quote.description && (
           <div className="mt-4 rounded-xl border border-white/80 bg-white p-3">
@@ -1662,31 +2162,175 @@ function ExistingQuoteCard({ quote }: { quote: WorkspaceQuote }) {
         )}
 
         <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
-          <QuoteSummaryItem
-            label="Delivery"
-            value={`${quote.estimated_days ?? "-"} days`}
-          />
-          <QuoteSummaryItem
-            label="Included Revisions"
-            value={`${quote.included_revisions ?? 0}`}
-          />
-          <QuoteSummaryItem
-            label="Extra Revision"
-            value={`${quote.currency || "USD"} ${Number(
-              quote.extra_revision_fee || 0,
-            ).toFixed(2)}`}
-          />
+          <QuoteSummaryItem label="Delivery" value={`${quote.estimated_days ?? "-"} days`} />
+          <QuoteSummaryItem label="Included Revisions" value={`${quote.included_revisions ?? 0}`} />
+          <QuoteSummaryItem label="Extra Revision" value={`${quote.currency || "USD"} ${Number(quote.extra_revision_fee || 0).toFixed(2)}`} />
         </div>
 
         <div className="mt-4 border-t border-slate-200 pt-4 text-[10px] font-bold leading-5 text-slate-500">
           <p>Sent: {formatDateTime(quote.created_at)}</p>
           {quote.paid_at && <p>Paid: {formatDateTime(quote.paid_at)}</p>}
         </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {!paid && (
+            <button type="button" onClick={() => setEditing(true)} className="rounded-full bg-violet-600 px-4 py-2.5 text-xs font-black text-white hover:bg-violet-700">
+              Edit & resend quote
+            </button>
+          )}
+          {paid && quote.production_job_id && (
+            <a href={`/admin/production/${encodeURIComponent(String(quote.production_job_id))}`} className="rounded-full bg-emerald-600 px-4 py-2.5 text-xs font-black text-white hover:bg-emerald-700">
+              Open production job →
+            </a>
+          )}
+        </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs font-bold leading-6 text-violet-800">
-        A second quote cannot be created for this request. The client continues with this quote until it is paid or replaced through a future quote-edit workflow.
+      <div className={`mt-4 rounded-xl border px-4 py-3 text-xs font-bold leading-6 ${paid ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-violet-200 bg-violet-50 text-violet-800"}`}>
+        {paid
+          ? "Payment is confirmed. This quote is locked so the paid commercial record stays intact. Any new work should be handled as additional scope/change order."
+          : "You can revise this unpaid quote after a client question or an agreed Expert fee change. The same quote is updated and the client is notified again — a duplicate quote is not created."}
       </div>
+    </div>
+  );
+}
+
+function EditQuoteForm({
+  quote,
+  request,
+  expertSelection,
+  onCancel,
+  onUpdated,
+}: {
+  quote: WorkspaceQuote;
+  request: StudioRequest;
+  expertSelection: ExpertSelection | null;
+  onCancel: () => void;
+  onUpdated: () => Promise<void>;
+}) {
+  const [title, setTitle] = useState(quote.title || `${request.service} Production`);
+  const [description, setDescription] = useState(quote.description || "");
+  const [expertCost, setExpertCost] = useState(
+    Number(quote.expert_cost_amount || 0) > 0
+      ? Number(quote.expert_cost_amount).toFixed(2)
+      : expertSelection?.quoted_fee_cents
+        ? (Number(expertSelection.quoted_fee_cents) / 100).toFixed(2)
+        : "",
+  );
+  const [managementFeePercent, setManagementFeePercent] = useState(String(quote.management_fee_percent ?? 25));
+  const [directAmount, setDirectAmount] = useState(Number((quote.subtotal_amount ?? quote.amount) || 0).toFixed(2));
+  const [estimatedDays, setEstimatedDays] = useState(String(quote.estimated_days ?? ""));
+  const [includedRevisions, setIncludedRevisions] = useState(String(quote.included_revisions ?? 0));
+  const [extraRevisionFee, setExtraRevisionFee] = useState(String(quote.extra_revision_fee ?? 0));
+  const [expertExtraRevisionCost, setExpertExtraRevisionCost] = useState(
+    Number(quote.expert_extra_revision_cost_amount || 0) > 0
+      ? Number(quote.expert_extra_revision_cost_amount).toFixed(2)
+      : expertSelection?.extra_revision_fee_cents !== null && expertSelection?.extra_revision_fee_cents !== undefined
+        ? (Number(expertSelection.extra_revision_fee_cents) / 100).toFixed(2)
+        : "",
+  );
+  const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const hasExpertCost = Number(quote.expert_cost_amount || 0) > 0 || Boolean(expertSelection);
+  const expertCostNumber = Number(expertCost);
+  const managementPercentNumber = Number(managementFeePercent);
+  const managementFeeAmount = hasExpertCost && Number.isFinite(expertCostNumber) && Number.isFinite(managementPercentNumber)
+    ? Number((expertCostNumber * managementPercentNumber / 100).toFixed(2))
+    : null;
+  const calculatedSubtotal = managementFeeAmount !== null
+    ? Number((expertCostNumber + managementFeeAmount).toFixed(2))
+    : Number(directAmount);
+  const expertExtraRevisionCostNumber = Number(expertExtraRevisionCost);
+  const calculatedClientExtraRevisionFee = hasExpertCost && Number.isFinite(expertExtraRevisionCostNumber) && Number.isFinite(managementPercentNumber)
+    ? Number((expertExtraRevisionCostNumber * (1 + managementPercentNumber / 100)).toFixed(2))
+    : Number(extraRevisionFee);
+
+  async function save() {
+    setErrorMessage("");
+    const days = Number(estimatedDays);
+    const revisions = Number(includedRevisions);
+    const extraFee = calculatedClientExtraRevisionFee;
+    if (!title.trim() || !description.trim()) { setErrorMessage("Add the quote title and scope."); return; }
+    if (hasExpertCost && (!Number.isFinite(expertCostNumber) || expertCostNumber <= 0)) { setErrorMessage("Enter the revised agreed Expert cost."); return; }
+    if (hasExpertCost && (!Number.isFinite(managementPercentNumber) || managementPercentNumber < 0)) { setErrorMessage("Enter a valid Heyy Studio management fee percentage."); return; }
+    if (hasExpertCost && (!Number.isFinite(expertExtraRevisionCostNumber) || expertExtraRevisionCostNumber < 0)) { setErrorMessage("Enter the Expert fee for one additional revision."); return; }
+    if (!hasExpertCost && (!Number.isFinite(calculatedSubtotal) || calculatedSubtotal <= 0)) { setErrorMessage("Enter a valid quote amount."); return; }
+    if (!Number.isInteger(days) || days < 1) { setErrorMessage("Enter delivery in whole days."); return; }
+    if (!Number.isInteger(revisions) || revisions < 0) { setErrorMessage("Included revisions must be zero or more."); return; }
+    if (!Number.isFinite(extraFee) || extraFee < 0) { setErrorMessage("Extra revision fee must be zero or more."); return; }
+
+    setSending(true);
+    try {
+      const response = await fetch("/api/admin/create-quote-from-request", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          request_id: request.id,
+          quote_id: quote.id,
+          title: title.trim(),
+          description: description.trim(),
+          expert_cost_amount: hasExpertCost ? expertCostNumber : null,
+          management_fee_percent: hasExpertCost ? managementPercentNumber : null,
+          expert_extra_revision_cost_amount: hasExpertCost ? expertExtraRevisionCostNumber : null,
+          subtotal_amount: calculatedSubtotal,
+          discount_amount: Number(quote.discount_amount || 0),
+          discount_label: quote.discount_label || null,
+          currency: quote.currency || "USD",
+          estimated_days: days,
+          included_revisions: revisions,
+          extra_revision_fee: extraFee,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "Quote could not be updated.");
+      await onUpdated();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Quote could not be updated.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="text-[9px] font-black uppercase tracking-[0.15em] text-violet-600">Revise unpaid quote</p><h3 className="mt-1 text-lg font-black">Update the same client proposal</h3><p className="mt-1 text-xs font-semibold leading-5 text-slate-500">Use this after a client question or an agreed pricing/scope change. Saving sends the updated quote to the client again.</p></div>
+        <button type="button" onClick={onCancel} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black">Cancel</button>
+      </div>
+
+      <label className="heyy-field"><span className="heyy-field-label">Quote Title</span><input className="heyy-review-input" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label className="heyy-field"><span className="heyy-field-label">Scope & Inclusions</span><textarea className="heyy-review-textarea" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+
+      {hasExpertCost ? (
+        <div className="mt-4 rounded-[20px] border border-emerald-200 bg-white p-4">
+          <p className="text-[8px] font-black uppercase tracking-[0.14em] text-emerald-700">Internal commercial update</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <label><span className="text-[8px] font-black uppercase tracking-[0.13em] text-slate-400">Agreed Expert cost · internal</span><input className="heyy-review-input mt-2" inputMode="decimal" value={expertCost} onChange={(event) => setExpertCost(event.target.value)} /></label>
+            <label><span className="text-[8px] font-black uppercase tracking-[0.13em] text-slate-400">Expert fee / extra revision · internal</span><input className="heyy-review-input mt-2" inputMode="decimal" value={expertExtraRevisionCost} onChange={(event) => setExpertExtraRevisionCost(event.target.value)} /></label>
+            <label><span className="text-[8px] font-black uppercase tracking-[0.13em] text-slate-400">Heyy Studio management fee %</span><input className="heyy-review-input mt-2" inputMode="decimal" value={managementFeePercent} onChange={(event) => setManagementFeePercent(event.target.value)} /></label>
+          </div>
+          <div className="mt-3 grid gap-2">
+            <QuoteBreakdownLine label="Heyy Studio fee" value={managementFeeAmount !== null ? formatMoney(Math.round(managementFeeAmount * 100), quote.currency || "USD") : "—"} />
+            <QuoteBreakdownLine label="Updated client subtotal · before tax" value={Number.isFinite(calculatedSubtotal) ? formatMoney(Math.round(calculatedSubtotal * 100), quote.currency || "USD") : "—"} strong />
+            <QuoteBreakdownLine label="Client extra revision · before tax" value={Number.isFinite(calculatedClientExtraRevisionFee) ? formatMoney(Math.round(calculatedClientExtraRevisionFee * 100), quote.currency || "USD") : "—"} strong />
+          </div>
+        </div>
+      ) : (
+        <label className="heyy-field"><span className="heyy-field-label">Quote Amount (USD, pre-tax)</span><input className="heyy-review-input" inputMode="decimal" value={directAmount} onChange={(event) => setDirectAmount(event.target.value)} /></label>
+      )}
+
+      <div className="heyy-quote-details">
+        <EditableQuoteDetail label="Delivery" value={estimatedDays} onChange={setEstimatedDays} placeholder="Days" suffix="days" />
+        <EditableQuoteDetail label="Included Revisions" value={includedRevisions} onChange={setIncludedRevisions} placeholder="Number" suffix="included" />
+        {hasExpertCost ? (
+          <QuoteSummaryItem label="Client Extra Revision · Pre-tax" value={Number.isFinite(calculatedClientExtraRevisionFee) ? formatMoney(Math.round(calculatedClientExtraRevisionFee * 100), quote.currency || "USD") : "—"} />
+        ) : (
+          <EditableQuoteDetail label="Client Extra Revision" value={extraRevisionFee} onChange={setExtraRevisionFee} placeholder="Fee" prefix="$" suffix="USD" allowDecimal />
+        )}
+      </div>
+      {errorMessage && <div className="heyy-quote-error">{errorMessage}</div>}
+      <button type="button" onClick={() => void save()} disabled={sending} className="heyy-send-quote">{sending ? "Updating Quote..." : "Update & Resend Quote →"}</button>
     </div>
   );
 }
@@ -1702,10 +2346,11 @@ function QuoteSummaryItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CreateQuoteForm({ request }: { request: StudioRequest }) {
+function CreateQuoteForm({ request, expertSelection }: { request: StudioRequest; expertSelection: ExpertSelection | null }) {
   const [title, setTitle] = useState(`${request.service} Production`);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [managementFeePercent, setManagementFeePercent] = useState("25");
   const [estimatedDays, setEstimatedDays] = useState("");
   const [includedRevisions, setIncludedRevisions] = useState("");
   const [extraRevisionFee, setExtraRevisionFee] = useState("");
@@ -1714,6 +2359,53 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
   const [errorMessage, setErrorMessage] = useState("");
   const [sending, setSending] = useState(false);
   const router = useRouter();
+  const expertCostAmount = expertSelection
+    ? Number(expertSelection.quoted_fee_cents || 0) / 100
+    : null;
+  const expertExtraRevisionCostAmount = expertSelection?.extra_revision_fee_cents !== null && expertSelection?.extra_revision_fee_cents !== undefined
+    ? Number(expertSelection.extra_revision_fee_cents) / 100
+    : null;
+  const managementPercentNumber = Number(managementFeePercent);
+  const managementFeeAmount =
+    expertCostAmount !== null && Number.isFinite(managementPercentNumber)
+      ? Number((expertCostAmount * managementPercentNumber / 100).toFixed(2))
+      : null;
+  const calculatedClientSubtotal =
+    expertCostAmount !== null && managementFeeAmount !== null
+      ? Number((expertCostAmount + managementFeeAmount).toFixed(2))
+      : null;
+  const calculatedClientExtraRevisionFee =
+    expertExtraRevisionCostAmount !== null && Number.isFinite(managementPercentNumber)
+      ? Number((expertExtraRevisionCostAmount * (1 + managementPercentNumber / 100)).toFixed(2))
+      : null;
+  const auGstEstimate =
+    calculatedClientSubtotal !== null
+      ? Number((calculatedClientSubtotal * 0.1).toFixed(2))
+      : null;
+  const auClientTotalEstimate =
+    calculatedClientSubtotal !== null && auGstEstimate !== null
+      ? Number((calculatedClientSubtotal + auGstEstimate).toFixed(2))
+      : null;
+
+  useEffect(() => {
+    if (!expertSelection) return;
+    if (!estimatedDays && expertSelection.turnaround_days) {
+      setEstimatedDays(String(expertSelection.turnaround_days));
+    }
+    if (!includedRevisions && expertSelection.included_revisions !== null) {
+      setIncludedRevisions(String(expertSelection.included_revisions));
+    }
+  }, [expertSelection?.id]);
+
+  useEffect(() => {
+    if (!expertSelection || calculatedClientSubtotal === null) return;
+    setAmount(calculatedClientSubtotal.toFixed(2));
+  }, [expertSelection?.id, calculatedClientSubtotal]);
+
+  useEffect(() => {
+    if (!expertSelection || calculatedClientExtraRevisionFee === null) return;
+    setExtraRevisionFee(calculatedClientExtraRevisionFee.toFixed(2));
+  }, [expertSelection?.id, calculatedClientExtraRevisionFee]);
 
   useEffect(() => {
     let active = true;
@@ -1740,7 +2432,7 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
     const content = template.content || {};
     if (content.title) setTitle(String(content.title));
     if (content.description) setDescription(String(content.description));
-    if (content.amount !== undefined && content.amount !== null) setAmount(String(content.amount));
+    if (!expertSelection && content.amount !== undefined && content.amount !== null) setAmount(String(content.amount));
     if (content.estimated_days !== undefined && content.estimated_days !== null) setEstimatedDays(String(content.estimated_days));
     if (content.included_revisions !== undefined && content.included_revisions !== null) setIncludedRevisions(String(content.included_revisions));
     if (content.extra_revision_fee !== undefined && content.extra_revision_fee !== null) setExtraRevisionFee(String(content.extra_revision_fee));
@@ -1761,6 +2453,11 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
 
     if (!description.trim()) {
       setErrorMessage("Add the project scope and inclusions.");
+      return;
+    }
+
+    if (expertSelection && (!Number.isFinite(managementPercentNumber) || managementPercentNumber < 0)) {
+      setErrorMessage("Enter a valid Heyy Studio management fee percentage.");
       return;
     }
 
@@ -1797,6 +2494,10 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
           title: title.trim(),
           description: description.trim(),
           amount: amountNumber,
+          subtotal_amount: amountNumber,
+          expert_cost_amount: expertCostAmount,
+          management_fee_percent: expertSelection ? managementPercentNumber : null,
+          management_fee_amount: expertSelection ? managementFeeAmount : null,
           currency: "USD",
           estimated_days: daysNumber,
           included_revisions: revisionsNumber,
@@ -1863,16 +2564,88 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
         />
       </label>
 
-      <label className="heyy-field">
-        <span className="heyy-field-label">Quote Amount (USD)</span>
-        <input
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-          inputMode="decimal"
-          className="heyy-review-input"
-          placeholder="Enter the project amount"
-        />
-      </label>
+      {expertSelection ? (
+        <div className="mt-4 rounded-[20px] border border-emerald-200 bg-emerald-50/70 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[8px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                Internal quote builder
+              </p>
+              <h3 className="mt-1 text-base font-black text-slate-950">Expert cost + Heyy Studio management fee</h3>
+            </div>
+            <span className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.12em] text-emerald-700">
+              Pre-tax
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <QuoteBreakdownRow
+              label="Expert production cost"
+              value={formatMoney(Math.round((expertCostAmount || 0) * 100), expertSelection.currency)}
+            />
+            <label className="rounded-2xl border border-emerald-200 bg-white p-3">
+              <span className="text-[8px] font-black uppercase tracking-[0.13em] text-slate-400">Heyy Studio service / management fee</span>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  value={managementFeePercent}
+                  onChange={(event) => setManagementFeePercent(event.target.value)}
+                  inputMode="decimal"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-900 outline-none focus:border-violet-500"
+                  aria-label="Management fee percent"
+                />
+                <span className="text-sm font-black text-slate-500">%</span>
+                <span className="text-sm font-black text-slate-950">
+                  {managementFeeAmount !== null
+                    ? formatMoney(Math.round(managementFeeAmount * 100), expertSelection.currency)
+                    : "—"}
+                </span>
+              </div>
+            </label>
+          </div>
+
+          <div className="mt-3 grid gap-2">
+            <QuoteBreakdownLine
+              label="Client quote subtotal"
+              value={calculatedClientSubtotal !== null ? formatMoney(Math.round(calculatedClientSubtotal * 100), expertSelection.currency) : "—"}
+              strong
+            />
+            <QuoteBreakdownLine
+              label="Expert fee per additional revision · internal"
+              value={expertExtraRevisionCostAmount !== null ? formatMoney(Math.round(expertExtraRevisionCostAmount * 100), expertSelection.currency) : "Not quoted"}
+            />
+            <QuoteBreakdownLine
+              label="Client additional revision price · pre-tax"
+              value={calculatedClientExtraRevisionFee !== null ? formatMoney(Math.round(calculatedClientExtraRevisionFee * 100), expertSelection.currency) : "Not configured"}
+              strong
+            />
+            <QuoteBreakdownLine
+              label="AU GST estimate (10%, only when applicable)"
+              value={auGstEstimate !== null ? formatMoney(Math.round(auGstEstimate * 100), expertSelection.currency) : "—"}
+            />
+            <QuoteBreakdownLine
+              label="AU client total estimate"
+              value={auClientTotalEstimate !== null ? formatMoney(Math.round(auClientTotalEstimate * 100), expertSelection.currency) : "—"}
+              strong
+            />
+          </div>
+
+          <p className="mt-3 text-[10px] font-bold leading-5 text-slate-500">
+            The stored client quote is the pre-tax subtotal. Stripe Automatic Tax calculates the actual GST/tax at secure checkout from the client billing location, and the payment record stores the actual tax amount for accounting.
+          </p>
+        </div>
+      ) : (
+        <label className="heyy-field">
+          <span className="heyy-field-label">Quote Amount (USD, pre-tax)</span>
+          <input
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            inputMode="decimal"
+            className="heyy-review-input"
+            placeholder="Enter the project amount"
+          />
+          <p className="mt-2 text-[10px] font-bold leading-5 text-slate-500">Tax/GST is calculated at secure checkout according to the client billing location.</p>
+        </label>
+      )}
 
       <div className="heyy-quote-details">
         <EditableQuoteDetail
@@ -1889,15 +2662,22 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
           placeholder="Number"
           suffix="included"
         />
-        <EditableQuoteDetail
-          label="Extra Revision"
-          value={extraRevisionFee}
-          onChange={setExtraRevisionFee}
-          placeholder="Fee"
-          prefix="$"
-          suffix="USD"
-          allowDecimal
-        />
+        {expertSelection ? (
+          <QuoteSummaryItem
+            label="Client Extra Revision · Pre-tax"
+            value={calculatedClientExtraRevisionFee !== null ? formatMoney(Math.round(calculatedClientExtraRevisionFee * 100), expertSelection.currency) : "Not configured"}
+          />
+        ) : (
+          <EditableQuoteDetail
+            label="Client Extra Revision"
+            value={extraRevisionFee}
+            onChange={setExtraRevisionFee}
+            placeholder="Fee"
+            prefix="$"
+            suffix="USD"
+            allowDecimal
+          />
+        )}
       </div>
 
       <p className="mt-3 text-[10px] font-bold leading-5 text-slate-500">
@@ -1914,6 +2694,24 @@ function CreateQuoteForm({ request }: { request: StudioRequest }) {
       >
         {sending ? "Creating Quote..." : "Create & Send Quote →"}
       </button>
+    </div>
+  );
+}
+
+function QuoteBreakdownRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-white p-3">
+      <p className="text-[8px] font-black uppercase tracking-[0.13em] text-slate-400">{label}</p>
+      <p className="mt-2 text-lg font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function QuoteBreakdownLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between gap-4 rounded-xl border px-3 py-2.5 ${strong ? "border-emerald-300 bg-white" : "border-emerald-100 bg-white/70"}`}>
+      <span className={`text-[10px] ${strong ? "font-black text-slate-800" : "font-bold text-slate-500"}`}>{label}</span>
+      <span className={`text-sm ${strong ? "font-black text-slate-950" : "font-bold text-slate-700"}`}>{value}</span>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
-import { processQuotePayment } from "@/lib/payments/process-quote-payment";
+import { ensurePreferredExpertAssignmentForPaidQuote, processQuotePayment } from "@/lib/payments/process-quote-payment";
 
 import { requireAdminApiCapability } from "@/lib/server/admin-api";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -92,7 +92,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (quote.status === "Paid" && quote.production_job_id) {
+    if (
+      String(quote.status || "").toLowerCase() === "paid" &&
+      quote.production_job_id
+    ) {
+      await ensurePreferredExpertAssignmentForPaidQuote(quote.id);
+
       return NextResponse.json({
         success: true,
         paid: true,

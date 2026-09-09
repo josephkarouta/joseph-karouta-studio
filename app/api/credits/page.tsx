@@ -14,10 +14,45 @@ import { ButtonLink, CreditPill, Eyebrow, GlassCard, StatusPill } from "@/compon
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import CreditTopUps from "@/components/account/CreditTopUps";
 
-const CREDIT_ACTION_LABELS: Record<string, string> = {
-  pdfUtility: "PDF Tools",
-  fileConversion: "File Converter",
-};
+function formatCreditAction(action: string, metadata?: Record<string, unknown>) {
+  const raw = String(action || "").trim();
+  const normalized = raw.replaceAll("_", "").replaceAll("-", "").toLowerCase();
+  const target = String(metadata?.target || "").trim().toLowerCase();
+
+  const labels: Record<string, string> = {
+    architectureworkspace: "Architecture workspace setup",
+    architecturetext: target === "concept" ? "Architecture concept brief" : target.includes("plan") ? "Plan Foundation brief" : "Architecture text generation",
+    architecturedirection: "Architecture direction visual",
+    architectureconcept: "Architecture concept brief",
+    architectureprofessionalfinal: target.includes("plan") ? "Rendered plan" : target === "concept" ? "Architecture concept visual" : "Architecture visual",
+    architecturevisual: "Architecture visual",
+    architecturetechnicalplan: "Architecture plan",
+    brandsystemtext: "Brand system",
+    branddirectiontext: "Brand creative directions",
+    brandlogoconcept: "Brand logo concept",
+    brandguidelines: "Brand guidelines",
+    brandapplicationvisual: "Brand application visual",
+    interiorconcept: "Interior concept",
+    interiorprofessionalconcept: "Interior concept",
+    interiortechnicalplan: "Interior plan",
+    interiorvisual: "Interior visual",
+    marketingcampaign: "Marketing campaign strategy",
+    marketingcreativepack: "Marketing creative strategy",
+    marketingprofessionalfinal: "Marketing visual",
+    texttoimagehigh: "Text to Image",
+    texttoimagepreview: "Text to Image",
+    imagetovideohigh: "Image to Video",
+    imagetovideopreview: "Image to Video",
+    digitaladaptationfamily: "Digital adaptation",
+    aiupscale2x: "AI Upscaler · 2×",
+    aiupscale4x: "AI Upscaler · 4×",
+    pdfutility: "PDF Tools",
+    fileconversion: "File Converter",
+  };
+
+  if (labels[normalized]) return labels[normalized];
+  return raw.replaceAll("_", " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+}
 
 type Event = {
   id: string;
@@ -195,7 +230,7 @@ export default function CreditsPage() {
                     </span>
                     <div>
                       <p className="text-sm font-black capitalize">
-                        {CREDIT_ACTION_LABELS[event.action] || event.action.replaceAll("_", " ")}
+                        {formatCreditAction(event.action, event.metadata)}
                       </p>
                       <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">
                         {new Date(event.created_at).toLocaleString("en-US")}

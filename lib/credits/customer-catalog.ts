@@ -2,7 +2,7 @@ import { CREDIT_COSTS, getPowerPointCreditCost, POWERPOINT_INCLUDED_SLIDES } fro
 
 export type CreditGuideItem = {
   id: string;
-  category: "AI Tools" | "Utilities" | "Brand Studio" | "Marketing Studio";
+  category: "Brand Studio" | "Marketing Studio" | "Architecture Studio" | "Interior Studio" | "AI Tools" | "Utilities";
   label: string;
   credits: number;
   unit?: string;
@@ -25,6 +25,62 @@ export const CUSTOMER_CREDIT_GUIDE: CreditGuideItem[] = [
     credits: CREDIT_COSTS.fileConversion,
     unit: "after 5 free daily conversions",
     detail: "Free accounts get 5 successful conversions each day. Starter and Pro conversions are unlimited subject to fair-use limits.",
+  },
+  {
+    id: "architecture-workspace",
+    category: "Architecture Studio",
+    label: "Workspace setup",
+    credits: CREDIT_COSTS.architectureWorkspace,
+    detail: "Create the project workspace and initial guided structure.",
+  },
+  {
+    id: "architecture-direction-brief",
+    category: "Architecture Studio",
+    label: "Design direction brief",
+    credits: CREDIT_COSTS.architectureConcept,
+    detail: "Generate the 3 architectural direction text routes before selecting one.",
+  },
+  {
+    id: "architecture-plan-foundation",
+    category: "Architecture Studio",
+    label: "Plan Foundation",
+    credits: CREDIT_COSTS.architectureText,
+    detail: "Prepare or refresh the coordinated multi-floor Plan Foundation sheet and its linked plan data.",
+  },
+  {
+    id: "architecture-detailed-plan",
+    category: "Architecture Studio",
+    label: "Detailed plan / faithful redraw",
+    credits: CREDIT_COSTS.architectureTechnicalPlan,
+    detail: "Generate one detailed concept plan or source-faithful redraw where that optional plan step is available.",
+  },
+  {
+    id: "architecture-concept-brief",
+    category: "Architecture Studio",
+    label: "Concept visual briefs",
+    credits: CREDIT_COSTS.architectureConcept,
+    detail: "Prepare or refresh the focused concept-board briefs before generating images.",
+  },
+  {
+    id: "architecture-visual",
+    category: "Architecture Studio",
+    label: "Single visual generation",
+    credits: CREDIT_COSTS.architectureProfessionalFinal,
+    detail: "Generate one Architecture direction visual, concept board or rendered plan.",
+  },
+  {
+    id: "interior-layout-brief",
+    category: "Interior Studio",
+    label: "Interior concept brief",
+    credits: CREDIT_COSTS.interiorConcept,
+    detail: "Prepare the guided interior concept brief and editable design structure.",
+  },
+  {
+    id: "interior-visual",
+    category: "Interior Studio",
+    label: "Single visual generation",
+    credits: CREDIT_COSTS.interiorProfessionalFinal,
+    detail: "Generate one interior concept visual or focused room image.",
   },
   {
     id: "text-to-image",

@@ -132,7 +132,18 @@ export default function BrandApplications({
           plan,
           brief: journey.applicationBriefs[item.id] || {},
           approval: approvals[item.id] || null,
-          visual: visuals[item.id] || null,
+          // Approval assets deliberately keep a snapshot of the approved image. Use it
+          // as a fallback for historic projects where the original visual was saved by
+          // the generation route but was not present in the in-memory asset store.
+          visual:
+            visuals[item.id] ||
+            (approvals[item.id]?.imageUrl
+              ? {
+                  ...approvals[item.id],
+                  visualAssetId: approvals[item.id]?.visualAssetId || null,
+                  imageUrl: approvals[item.id]?.imageUrl,
+                }
+              : null),
         };
       }),
     [
@@ -161,13 +172,21 @@ export default function BrandApplications({
     );
   }
 
+  const approvalImage =
+    active?.approval?.imageUrl ||
+    active?.approval?.outputs?.[0]?.imageUrl ||
+    null;
+  const hasComparableVisualIds = Boolean(
+    active?.approval?.visualAssetId && active?.visual?.visualAssetId,
+  );
   const approved = Boolean(
     active?.approval &&
-      active?.approval?.visualAssetId &&
-      String(active.approval.visualAssetId) === String(active?.visual?.visualAssetId),
+      (hasComparableVisualIds
+        ? String(active.approval.visualAssetId) === String(active.visual.visualAssetId)
+        : approvalImage),
   );
   const approvedImage = approved
-    ? active?.approval?.imageUrl || active?.visual?.imageUrl
+    ? approvalImage || active?.visual?.imageUrl
     : null;
   const requiredContent =
     active?.requiredContent?.length
@@ -204,9 +223,16 @@ export default function BrandApplications({
         <nav className="border-b border-slate-200 bg-slate-50 p-4 lg:border-b-0 lg:border-r">
           <div className="grid gap-2">
             {applications.map((item) => {
+              const itemApprovalImage =
+                item.approval?.imageUrl || item.approval?.outputs?.[0]?.imageUrl || null;
+              const itemHasComparableIds = Boolean(
+                item.approval?.visualAssetId && item.visual?.visualAssetId,
+              );
               const itemApproved = Boolean(
-                item.approval?.visualAssetId &&
-                  String(item.approval.visualAssetId) === String(item.visual?.visualAssetId),
+                item.approval &&
+                  (itemHasComparableIds
+                    ? String(item.approval.visualAssetId) === String(item.visual.visualAssetId)
+                    : itemApprovalImage),
               );
               return (
                 <button

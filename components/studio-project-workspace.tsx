@@ -5,9 +5,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 
 import StudioHeader from "@/components/studio/workspace/StudioHeader";
 import StudioNavigation from "@/components/studio/workspace/StudioNavigation";
-import StudioStepper, {
-  type StudioStep,
-} from "@/components/studio/workspace/StudioStepper";
+import type { StudioStep } from "@/components/studio/workspace/StudioStepper";
+import StudioWorkspaceNavigation from "@/components/studio/common/StudioWorkspaceNavigation";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
 import type { ProjectContext } from "@/types/project";
 import type { ProjectAsset } from "@/types/asset";
@@ -25,6 +24,10 @@ type StudioProjectWorkspaceProps = {
   backLabel?: string;
   steps?: StudioStep[];
   tabs: StudioWorkspaceTab[];
+  progress?: number | null;
+  mode?: "guided" | "professional";
+  onModeChange?: (mode: "guided" | "professional") => void;
+  savingMode?: boolean;
 };
 
 export default function StudioProjectWorkspace({
@@ -39,6 +42,10 @@ export default function StudioProjectWorkspace({
   backLabel = "Back to Dashboard",
   steps = [],
   tabs,
+  progress,
+  mode,
+  onModeChange,
+  savingMode = false,
 }: StudioProjectWorkspaceProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -112,31 +119,24 @@ export default function StudioProjectWorkspace({
         `}</style>
 
         <div className="heyy-studio-project-frame">
-          <a
-            href={backHref}
-            className="inline-flex items-center rounded-full px-1 py-2 text-sm font-bold text-slate-600 transition hover:text-violet-700"
-          >
-            ← {backLabel}
-          </a>
-
           <StudioHeader
             projectTypeLabel={projectTypeLabel}
             projectName={projectName}
             statusLabel={statusLabel}
             metaItems={metaItems}
+            progress={progress}
+            mode={mode}
+            onModeChange={onModeChange}
+            savingMode={savingMode}
           />
 
-          <div className="mt-5 w-full overflow-x-auto pb-1">
-            <StudioStepper
-              steps={steps}
-              activeTab={activeTab}
-              onStepClick={(step) => {
-                if (step.tabId) {
-                  updateActiveTab(step.tabId);
-                }
-              }}
-            />
-          </div>
+          <StudioWorkspaceNavigation
+            tabs={tabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+            activeTab={activeTab}
+            onChange={updateActiveTab}
+            tone="brand"
+            ariaLabel="Brand Studio sections"
+          />
 
           <div className="heyy-studio-project-content">
             <section className="heyy-studio-project-panel">

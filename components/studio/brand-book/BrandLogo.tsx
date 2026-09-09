@@ -367,7 +367,7 @@ function LogoPanel({
         <div className="flex items-center gap-3">
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] text-sm font-black text-white shadow-md"
-            style={{ background: meta.accent }}
+            style={{ background: "#6c00ff", boxShadow: "0 8px 18px rgba(108,0,255,.18)" }}
           >
             <Icon size={18} strokeWidth={2.1} />
           </span>

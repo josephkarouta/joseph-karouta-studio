@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight, BadgeCheck, FileOutput, ImageIcon, PenTool } from "lucide-react";
 import { normaliseBrandJourney } from "@/lib/brand/project-templates";
 import { useLogos } from "@/hooks/use-logos";
-import BrandGenerationState from "@/components/studio/brand/common/BrandGenerationState";
+import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import BrandImageModal from "@/components/studio/brand/common/BrandImageModal";
 
@@ -103,7 +103,13 @@ export default function BrandLogos({ project, brand }: { project: any; brand: an
                     <span className="absolute left-4 top-4 z-10 rounded-full bg-white px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-violet-700 shadow">Direction {index + 1}</span>
                     {selected && <span className="absolute right-4 top-4 z-10 rounded-full bg-emerald-500 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-white">✓ Selected</span>}
                     {loading ? (
-                      <div className="flex aspect-square items-center justify-center rounded-[18px] border border-violet-200 bg-white p-4"><BrandGenerationState compact title="Generating this logo direction" /></div>
+                      <div className="relative aspect-square overflow-hidden rounded-[18px] border border-violet-200 bg-white">
+                        <StudioVisualGenerationLoader
+                          tone="brand"
+                          title="Generating this logo direction"
+                          detail="Applying the selected logo strategy and saving the concept to the project."
+                        />
+                      </div>
                     ) : concept?.imageUrl ? (
                       <button type="button" onClick={() => setPreview({ url: concept.imageUrl, title: direction.title })} className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-white p-5">
                         <img src={concept.imageUrl} alt={direction.title} className="max-h-full max-w-full object-contain transition hover:scale-[1.02]" />
@@ -135,7 +141,7 @@ export default function BrandLogos({ project, brand }: { project: any; brand: an
                       </div>
                     )}
 
-                    {variationLoading && <div className="mt-4"><BrandGenerationState compact title="Refining this logo concept" /></div>}
+                    {variationLoading && <div className="mt-4"><StudioVisualGenerationLoader tone="brand" title="Refining this logo concept" detail="Keeping the selected logo direction while preparing a new variation." placement="inline" /></div>}
                     {concept?.variation?.imageUrl && !variationLoading && (
                       <div className="mt-4 rounded-[18px] border border-fuchsia-200 bg-fuchsia-50 p-3">
                         <p className="text-[8px] font-black uppercase tracking-[0.15em] text-fuchsia-600">Variation inside this direction</p>

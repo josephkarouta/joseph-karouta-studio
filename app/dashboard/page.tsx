@@ -24,6 +24,7 @@ import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { ButtonLink, CreditPill, Eyebrow, GlassCard, PageContainer, StatusPill } from "@/components/ui/heyy";
 import { PLATFORM_TOOLS, VISIBLE_STUDIOS } from "@/lib/platform/platform-registry";
+import { buildProductionWorkspaceHref } from "@/lib/production/service-registry";
 import GenerationActivity from "@/components/dashboard/GenerationActivity";
 
 type ProjectItem = {
@@ -42,10 +43,13 @@ type ProductionJob = {
   project_name?: string;
   project_id?: string;
   studio?: string;
+  assigned_studio?: string;
+  service_id?: string;
   service?: string;
   status?: string;
   updated_at?: string;
   created_at?: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 type AssetItem = {
@@ -418,7 +422,16 @@ function ProjectCard({ project }: { project: ProjectItem }) {
 function ProductionRow({ job }: { job: ProductionJob }) {
   const status = String(job.status || "Assigned");
   const tone = /delivered|complete/i.test(status) ? "success" : /review|revision/i.test(status) ? "warning" : "info";
-  return <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3.5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Blocks size={17}/></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{job.project_name || "Production project"}</p><p className="mt-0.5 truncate text-xs font-semibold text-[var(--text-muted)]">{job.service || capitalize(String(job.studio || "Production"))}</p></div><div className="text-right"><StatusPill tone={tone}>{status}</StatusPill><p className="mt-1 text-[.58rem] font-bold text-[var(--text-muted)]">{formatDate(job.updated_at || job.created_at)}</p></div></div>;
+  const href = job.project_id
+    ? buildProductionWorkspaceHref({
+        projectId: job.project_id,
+        studio: job.studio || job.assigned_studio,
+        serviceId: job.service_id,
+        service: job.service,
+        productionOnly: Boolean(job.metadata?.production_only),
+      })
+    : "/dashboard#production";
+  return <Link href={href} className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3.5 transition hover:-translate-y-0.5 hover:border-[var(--accent-border)] hover:shadow-[var(--shadow-soft)]"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Blocks size={17}/></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{job.project_name || "Production project"}</p><p className="mt-0.5 truncate text-xs font-semibold text-[var(--text-muted)]">{job.service || capitalize(String(job.studio || "Production"))}</p></div><div className="text-right"><StatusPill tone={tone}>{status}</StatusPill><p className="mt-1 text-[.58rem] font-bold text-[var(--text-muted)]">{formatDate(job.updated_at || job.created_at)}</p></div></Link>;
 }
 
 function AssetCard({ asset }: { asset: AssetItem }) {

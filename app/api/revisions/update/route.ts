@@ -300,6 +300,7 @@ export async function POST(request: NextRequest) {
           revisionNumber: revision.revision_number,
           status: "Waiting Approval",
           reviewFileCount: publishedReviewFiles.length,
+          productionOnly: Boolean(job.metadata?.production_only),
         },
       });
     }
@@ -364,6 +365,7 @@ export async function POST(request: NextRequest) {
           promotedFileCount: promotedFiles.length,
           promotedFilenames: filenames,
           finalDeliverableId: finalFile?.id || null,
+          productionOnly: Boolean(job.metadata?.production_only),
         },
       });
     }

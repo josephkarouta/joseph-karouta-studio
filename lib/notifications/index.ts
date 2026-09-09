@@ -19,23 +19,20 @@ class NotificationEngine {
   async emit(payload: NotificationPayload) {
     const enrichedPayload = await this.enrichPayload(payload);
 
-    let shouldDeliverExternalChannels = true;
-
     try {
-      shouldDeliverExternalChannels =
-        await this.storeInAppNotification(enrichedPayload);
+      await this.storeInAppNotification(enrichedPayload);
     } catch (error) {
       console.error("Notification in-app delivery failed:", error);
     }
 
-    // A notification key represents one business event. If another webhook or
-    // reconciliation request already stored it, do not send a duplicate email.
-    if (shouldDeliverExternalChannels) {
-      try {
-        await handleProductionNotification(enrichedPayload);
-      } catch (error) {
-        console.error("Notification email delivery failed:", error);
-      }
+    // In-app and email delivery are deliberately independent channels.
+    // The email layer has its own communication_sends idempotency key, so an
+    // already-stored in-app notification must never suppress a missing/failed
+    // transactional email on a later retry.
+    try {
+      await handleProductionNotification(enrichedPayload);
+    } catch (error) {
+      console.error("Notification email delivery failed:", error);
     }
 
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

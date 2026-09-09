@@ -1,10 +1,25 @@
 import "server-only";
 
+import { createHash } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { resend } from "@/lib/notifications/resend";
-import { getHeyyEmailLogoPng } from "./brand-assets";
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Heyy Studio <hello@heyystudio.com>";
+
+function providerIdempotencyKey(eventKey: string) {
+  // Resend accepts idempotency keys for 24 hours. Hash the internal event key
+  // so retries stay under the provider's 256-character limit.
+  const digest = createHash("sha256").update(eventKey).digest("hex");
+  return `heyy/${digest}`;
+}
+
+function resendErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: unknown }).message || "Resend email delivery failed.");
+  }
+  return String(error || "Resend email delivery failed.");
+}
 
 function adminClient() {
   return createClient(
@@ -75,21 +90,9 @@ export async function sendTrackedEmail({
   }
 
   try {
-    const logo = await getHeyyEmailLogoPng();
-    const finalAttachments = [
-      ...(logo
-        ? [
-            {
-              filename: logo.filename,
-              content: logo.buffer,
-              contentId: logo.contentId,
-            },
-          ]
-        : []),
-      ...(attachments || []),
-    ];
+    const finalAttachments = [...(attachments || [])];
 
-    const result = await resend.emails.send({
+    const payload = {
       from: FROM_EMAIL,
       to,
       subject,
@@ -107,7 +110,33 @@ export async function sendTrackedEmail({
             })),
           }
         : {}),
-    });
+    };
+
+    const idempotencyKey = providerIdempotencyKey(eventKey);
+    let result: any = null;
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await resend.emails.send(payload, { idempotencyKey });
+        if (response.error) {
+          throw new Error(resendErrorMessage(response.error));
+        }
+        result = response;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+    }
+
+    if (!result) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(resendErrorMessage(lastError));
+    }
 
     if (claimId) {
       await admin

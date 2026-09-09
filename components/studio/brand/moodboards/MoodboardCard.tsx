@@ -1,6 +1,6 @@
 "use client";
 
-import BrandGenerationState from "@/components/studio/brand/common/BrandGenerationState";
+import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 
 export default function MoodboardCard({
@@ -48,8 +48,12 @@ export default function MoodboardCard({
         {isSelected && <span className="absolute right-4 top-4 z-10 rounded-full bg-emerald-500 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.15em] text-white">✓ Selected</span>}
 
         {loadingImage ? (
-          <div className="flex min-h-[210px] items-center justify-center rounded-[18px] border border-violet-200 bg-white p-4">
-            <BrandGenerationState compact title="Generating this direction visual" />
+          <div className="relative min-h-[210px] overflow-hidden rounded-[18px] border border-violet-200 bg-white">
+            <StudioVisualGenerationLoader
+              tone="brand"
+              title="Generating this direction visual"
+              detail="Applying the selected brand direction and saving the visual to the project."
+            />
           </div>
         ) : moodboard.imageUrl ? (
           <button type="button" onClick={() => onOpenImage(moodboard.imageUrl, moodboard.title)} className="block h-full w-full overflow-hidden rounded-[18px] border border-slate-200 bg-white">
@@ -95,7 +99,7 @@ export default function MoodboardCard({
           </div>
         )}
 
-        {variationLoading && <div className="mt-4"><BrandGenerationState compact title="Refining inside this direction" /></div>}
+        {variationLoading && <div className="mt-4"><StudioVisualGenerationLoader tone="brand" title="Refining this direction visual" detail="Keeping the selected direction while preparing a new variation." placement="inline" /></div>}
 
         {moodboard.variation?.imageUrl && !variationLoading && (
           <div className="mt-4 overflow-hidden rounded-[18px] border border-fuchsia-200 bg-fuchsia-50 p-3">

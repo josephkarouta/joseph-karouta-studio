@@ -17,6 +17,31 @@ function image(url: unknown, label: string, fit: "cover" | "contain" = "cover"):
   return value ? { url: value, label, fit } : null;
 }
 
+function objectValue(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
+}
+
+function generatedAssetUrl(record: any, key: string, fallback?: unknown) {
+  const container = objectValue(record);
+  const asset = objectValue(container[key]);
+  return cleanText(asset.master_url || asset.preview_url || fallback);
+}
+
+function directionImageUrl(direction: any) {
+  const generation = objectValue(direction?.generation_json);
+  return generatedAssetUrl(generation, "final_assets", generatedAssetUrl(generation, "preview_assets", direction?.image_url));
+}
+
+function visualImageUrl(visual: any) {
+  const metadata = objectValue(visual?.metadata);
+  return generatedAssetUrl(metadata, "final_assets", generatedAssetUrl(metadata, "preview_assets", visual?.image_url));
+}
+
+function planImageUrl(visual: any) {
+  const metadata = objectValue(visual?.metadata);
+  return generatedAssetUrl(metadata, "technical_assets", visualImageUrl(visual));
+}
+
 function measurement(value: unknown, suffix: string) {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? `${numeric.toLocaleString()} ${suffix}` : "Not added";
@@ -43,22 +68,22 @@ function architectureGallery(visuals: any[]) {
   return chosen
     .map((visual) =>
       image(
-        visual?.image_url,
+        visualImageUrl(visual),
         cleanText(visual?.title || visual?.visual_type, "Architecture visual"),
-        "cover",
+        "contain",
       ),
     )
     .filter(Boolean) as PresentationImage[];
 }
 
 function planImages(visuals: any[]) {
-  const types = new Set(["functional_zoning", "ground_floor", "upper_floor", "circulation"]);
+  const types = new Set(["plan_foundation_sheet", "functional_zoning", "ground_floor", "upper_floor", "circulation"]);
 
   return (Array.isArray(visuals) ? visuals : [])
     .filter((visual) => types.has(visual?.visual_type))
     .map((visual) =>
       image(
-        visual?.image_url,
+        planImageUrl(visual),
         cleanText(visual?.title || visual?.visual_type, "Concept plan"),
         "contain",
       ),
@@ -146,7 +171,7 @@ export function buildArchitecturePresentation({
       title: projectName,
       subtitle: directionTitle,
       meta: location,
-      image: image(direction?.image_url, directionTitle, "cover"),
+      image: image(directionImageUrl(direction), directionTitle, "cover"),
       tone: "blue",
     },
     {
@@ -205,22 +230,22 @@ export function buildArchitecturePresentation({
       number: "02",
       eyebrow: "Selected Direction",
       title: directionTitle,
-      image: image(direction?.image_url, directionTitle, "cover"),
-      lead: truncateText(direction?.philosophy, 440),
+      image: image(directionImageUrl(direction), directionTitle, "cover"),
+      lead: truncateText(direction?.philosophy, 340),
       cards: [
         {
           title: "Form & Massing",
-          body: truncateText(direction?.form_strategy, 300),
+          body: truncateText(direction?.form_strategy, 220),
           tone: "blue",
         },
         {
           title: "Spatial Strategy",
-          body: truncateText(direction?.spatial_strategy, 300),
+          body: truncateText(direction?.spatial_strategy, 220),
           tone: "purple",
         },
         {
           title: "Façade Strategy",
-          body: truncateText(direction?.facade_strategy, 300),
+          body: truncateText(direction?.facade_strategy, 220),
           tone: "green",
         },
       ],
@@ -239,7 +264,7 @@ export function buildArchitecturePresentation({
       number: "03",
       eyebrow: "Architecture Strategy",
       title: cleanText(concept?.title, `${directionTitle} - Architecture Strategy`),
-      image: image(concept?.image_url, "Architecture concept strategy", "contain"),
+      image: image(generatedAssetUrl(objectValue(concept?.generation_json), "final_assets", generatedAssetUrl(objectValue(concept?.generation_json), "preview_assets", concept?.image_url)), "Architecture concept strategy", "contain"),
       lead: truncateText(concept?.summary, 440),
       cards: [
         {

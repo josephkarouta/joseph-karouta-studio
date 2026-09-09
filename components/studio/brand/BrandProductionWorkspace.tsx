@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   BadgeCheck,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import ProductionPanel from "@/components/studio/production/ProductionPanel";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 import {
   getApplicationDeliverables,
   normaliseBrandJourney,
@@ -164,10 +165,11 @@ export default function BrandProductionWorkspace({
   assets: any[];
 }) {
   const searchParams = useSearchParams();
-  const journey = normaliseBrandJourney(brand, project);
+  const journey = useMemo(() => normaliseBrandJourney(brand, project), [brand, project]);
+  const selectedDeliverablesKey = journey.selectedDeliverables.join("|");
   const selectedApplications = useMemo(
     () => getApplicationDeliverables(journey.selectedDeliverables),
-    [journey.selectedDeliverables],
+    [selectedDeliverablesKey],
   );
 
   const scopes = useMemo<ProductionScope[]>(() => {
@@ -284,11 +286,15 @@ export default function BrandProductionWorkspace({
     }
 
     return next;
-  }, [journey, selectedApplications]);
+  }, [selectedDeliverablesKey, journey.logoAction, journey.journeyId, journey.customScope, selectedApplications]);
 
   const requestedScope = searchParams.get("scope");
   const requestedScopes = searchParams.get("scopes");
+  const [restoredServiceId, setRestoredServiceId] = useState<string | null>(null);
+  const restoreAttemptRef = useRef<string | null>(null);
   const requestedEmptySelection = requestedScope === "none";
+  const requestedSelectedPackage =
+    requestedScope === "selected-package" || restoredServiceId === "brand-selected-package";
   const scopeIdsKey = scopes.map((scope) => scope.id).join("|");
   const requestedScopeIds = useMemo(() => {
     if (requestedScope === "complete-package") return scopes.map((scope) => scope.id);
@@ -317,6 +323,86 @@ export default function BrandProductionWorkspace({
   );
 
   useEffect(() => {
+    if (requestedScope || requestedScopes || !project?.id || !scopes.length) return;
+    const restoreKey = `${project.id}:${scopeIdsKey}`;
+    if (restoreAttemptRef.current === restoreKey) return;
+    let active = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const restoreProduction = async (attempt = 0) => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) {
+          if (active && attempt < 1) retryTimer = setTimeout(() => void restoreProduction(attempt + 1), 350);
+          return;
+        }
+
+        const response = await fetch(
+          `/api/production/client-status?projectId=${encodeURIComponent(project.id)}`,
+          { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!active) return;
+        if (!response.ok || !payload?.success) {
+          if (attempt < 1) retryTimer = setTimeout(() => void restoreProduction(attempt + 1), 450);
+          return;
+        }
+
+        // Mark this project/scope set as restored only after a successful status
+        // lookup. This prevents an early auth/network miss from permanently
+        // leaving the Production tab on its default first scope.
+        restoreAttemptRef.current = restoreKey;
+        if (!payload?.latest || payload.latest.studio !== "brand_studio") return;
+
+        setRestoredServiceId(String(payload.latest.serviceId || "") || null);
+        const params = new URLSearchParams(window.location.search);
+        const selected = Array.isArray(payload.latest.selectedScopes)
+          ? payload.latest.selectedScopes
+              .map((item: any) => String(typeof item === "string" ? item : item?.id || ""))
+              .filter((id: string) => scopes.some((scope) => scope.id === id))
+          : [];
+
+        if (payload.latest.serviceId === "brand-selected-package") {
+          params.set("scope", "selected-package");
+          if (selected.length) {
+            params.set("scopes", selected.join(","));
+            setSelectedScopeIds(selected);
+          }
+        } else if (payload.latest.serviceId === "brand-complete-package") {
+          params.set("scope", "complete-package");
+          setSelectedScopeIds(scopes.map((scope) => scope.id));
+        } else {
+          const matched = scopes.find((scope) => scope.serviceId === payload.latest.serviceId);
+          if (!matched) return;
+          params.set("scope", matched.id);
+          setSelectedScopeIds([matched.id]);
+        }
+
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}?${params.toString()}`,
+        );
+      } catch (error) {
+        if (active && attempt < 1) {
+          retryTimer = setTimeout(() => void restoreProduction(attempt + 1), 450);
+        } else {
+          console.warn("Could not restore latest Brand production request:", error);
+        }
+      }
+    };
+
+    void restoreProduction();
+
+    return () => {
+      active = false;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [project?.id, requestedScope, requestedScopes, scopeIdsKey]);
+
+  useEffect(() => {
     setSelectedScopeIds((current) => {
       let next = current.filter((id) => scopes.some((scope) => scope.id === id));
 
@@ -330,7 +416,7 @@ export default function BrandProductionWorkspace({
 
       return sameIds(current, next) ? current : next;
     });
-  }, [requestedEmptySelection, requestedScopeIds, scopeIdsKey, scopes]);
+  }, [requestedEmptySelection, requestedScopeIds, scopeIdsKey]);
 
   const selectedScopes = useMemo(
     () => scopes.filter((scope) => selectedScopeIds.includes(scope.id)),
@@ -339,6 +425,21 @@ export default function BrandProductionWorkspace({
   const allSelected = scopes.length > 0 && selectedScopes.length === scopes.length;
 
   const requestScope = useMemo<ProductionScope | null>(() => {
+    // Older selected-package requests did not preserve the individual scope ids in
+    // the URL. Keep the package service active so an existing request/quote is found
+    // instead of silently falling back to the first (usually Logo) scope.
+    if (requestedSelectedPackage && !requestedScopes) {
+      return {
+        id: "selected-package",
+        title: "Selected Brand Production Package",
+        service: "Selected Brand Production Package",
+        serviceId: "brand-selected-package",
+        description: "Your previously selected Brand Studio production items.",
+        outputs: [],
+        icon: Boxes,
+      };
+    }
+
     if (!selectedScopes.length) return null;
     if (selectedScopes.length === 1) return selectedScopes[0];
 
@@ -370,7 +471,7 @@ export default function BrandProductionWorkspace({
       outputs: selectedOutputs,
       icon: Boxes,
     };
-  }, [selectedScopes, scopes.length]);
+  }, [requestedScopes, requestedSelectedPackage, selectedScopes, scopes.length]);
 
   const generatedOutputs = useMemo(
     () =>

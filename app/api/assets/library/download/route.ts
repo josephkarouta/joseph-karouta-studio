@@ -15,16 +15,25 @@ function safeFilename(value: unknown) {
     .slice(0, 140) || "heyy-studio-asset";
 }
 
-function extension(contentType: string, source: string) {
+function extension(contentType: string, ...sources: Array<string | null | undefined>) {
   const type = contentType.toLowerCase();
   if (type.includes("png")) return "png";
-  if (type.includes("jpeg")) return "jpg";
+  if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
   if (type.includes("webp")) return "webp";
   if (type.includes("svg")) return "svg";
   if (type.includes("pdf")) return "pdf";
   if (type.includes("zip")) return "zip";
-  const clean = source.split("?")[0];
-  return clean.match(/\.([a-zA-Z0-9]{2,6})$/)?.[1]?.toLowerCase() || "bin";
+  if (type.includes("mp4")) return "mp4";
+  if (type.includes("mov")) return "mov";
+  if (type.includes("json")) return "json";
+
+  for (const source of sources) {
+    const clean = String(source || "").split("?")[0];
+    const match = clean.match(/\.([a-zA-Z0-9]{2,8})$/);
+    if (match?.[1]) return match[1].toLowerCase();
+  }
+
+  return "bin";
 }
 
 export async function GET(request: Request) {
@@ -52,7 +61,11 @@ export async function GET(request: Request) {
     if (!response.ok) throw new Error("The asset file could not be retrieved.");
 
     const contentType = response.headers.get("content-type") || "application/octet-stream";
-    const filename = `${safeFilename(source.title)}.${extension(contentType, sourceUrl)}`;
+    const headerFilename = response.headers.get("content-disposition") || "";
+    const responseFilename = headerFilename.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i)?.[1] || "";
+    const ext = extension(contentType, responseFilename, source.storagePath, sourceUrl, source.title);
+    const baseName = safeFilename(source.title).replace(/\.[a-zA-Z0-9]{2,8}$/g, "") || "heyy-studio-asset";
+    const filename = `${baseName}.${ext}`;
     const buffer = await response.arrayBuffer();
 
     return new NextResponse(buffer, {

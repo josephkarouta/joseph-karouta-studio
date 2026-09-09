@@ -638,6 +638,30 @@ function RevisionWorkspace({
                 {revision.message || "No message provided."}
               </p>
 
+              {Array.isArray(revision.target_files) && revision.target_files.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-violet-100 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.17em] text-violet-600">
+                      Files included in this revision round
+                    </p>
+                    <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[9px] font-black text-violet-700">
+                      {revision.target_files.length} file{revision.target_files.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {revision.target_files.map((target: any, index: number) => (
+                      <span
+                        key={`${target?.id || target?.filename || index}`}
+                        className="rounded-full border border-violet-100 bg-violet-50 px-3 py-1.5 text-[10px] font-bold text-slate-700"
+                      >
+                        {target?.filename || "Production file"}
+                        {target?.version ? ` · v${target.version}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {Array.isArray(revision.client_message?.attachments) &&
                 revision.client_message.attachments.length > 0 && (
                   <div className="heyy-revision-files">

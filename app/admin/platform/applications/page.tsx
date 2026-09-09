@@ -1,2 +1,2 @@
-import ResourceManager from "@/components/admin/platform/ResourceManager";
-export default function Page(){return <ResourceManager resource="applications"/>}
+import ExpertApplicationsManager from "@/components/admin/platform/ExpertApplicationsManager";
+export default function Page(){return <ExpertApplicationsManager/>}

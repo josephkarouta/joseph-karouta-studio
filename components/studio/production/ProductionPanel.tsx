@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import ClientProductionWorkspace from "@/components/studio/production/ClientProductionWorkspace";
 import { getStudioIdentity } from "../../../lib/studio/studio-identity";
 import { createSupabaseBrowserClient } from "../../../lib/supabase";
@@ -203,6 +203,7 @@ function compactProjectContext(context: any) {
     production_scope_id: context.production_scope_id || null,
     final_file_requirements: context.final_file_requirements || null,
     selected_brand_applications: context.selected_brand_applications || null,
+    selected_production_scopes: context.selected_production_scopes || null,
   };
 }
 
@@ -267,7 +268,7 @@ export default function ProductionPanel({
     }
   }
 
-  async function loadQuotes(accessToken?: string) {
+  async function loadQuotes(accessToken?: string, studioRequestId?: string | null) {
     if (!project?.id) return;
 
     const token = accessToken || (await getAccessToken());
@@ -279,7 +280,12 @@ export default function ProductionPanel({
     const data = await response.json();
 
     if (data.success) {
-      setQuotes(data.quotes || []);
+      const nextQuotes = Array.isArray(data.quotes) ? data.quotes : [];
+      setQuotes(
+        studioRequestId
+          ? nextQuotes.filter((quote: any) => String(quote.studio_request_id || "") === String(studioRequestId))
+          : nextQuotes,
+      );
     }
   }
 
@@ -310,14 +316,14 @@ export default function ProductionPanel({
         setStatus(data.job.status || "Waiting Assignment");
         setTimeline(data.timeline || []);
         await loadDeliverables(token);
-        await loadQuotes(token);
+        await loadQuotes(token, data.request?.id || null);
       } else {
         setJob(null);
         setStatus("");
         setTimeline([]);
         setDeliverables([]);
         setDeliverableGroups([]);
-        await loadQuotes(token);
+        await loadQuotes(token, data.request?.id || null);
       }
     } catch (error) {
       setStatusError(
@@ -396,6 +402,7 @@ export default function ProductionPanel({
             expertNote,
             context_items: contextItems,
             project_context: compactContext,
+            selected_production_scopes: compactContext.selected_production_scopes || null,
             generated_assets: compactAssets,
             generated_asset_count: compactAssets.length,
             project_context_type: studioIdentity.id,
@@ -872,21 +879,25 @@ export default function ProductionPanel({
           <h3 className="heyy-production-title text-3xl font-black tracking-[-0.05em] md:text-4xl">
             {job
               ? delivered
-                ? "Production complete."
+                ? "Production & project context"
                 : "Production in progress."
-              : requestSubmitted
-                ? "Production request received."
-                : `Ready to produce ${service}?`}
+              : quoteReady
+                ? "Your production quote is ready."
+                : requestSubmitted
+                  ? "Production request received."
+                  : `Ready to produce ${service}?`}
           </h3>
 
           <p className="heyy-production-copy mt-4 max-w-xl text-sm leading-7">
             {job
               ? delivered
-                ? "Your production files are ready. Messages, revisions, final files and project activity are organised in one connected workspace."
+                ? "Your completed production workspace and the approved project context remain connected below. Open the workspace for final files, messages, history and any future production request."
                 : "Your payment has been received and production has started."
-              : requestSubmitted
-                ? "Your request has been sent to the Heyy Studio team. We’ll review the scope and prepare a quote."
-                : "AI created the concept. Heyy Studio production turns it into real, editable, professional files."}
+              : quoteReady
+                ? "Heyy Studio reviewed your request. Review the scope, pre-tax subtotal, delivery and revisions before continuing to secure checkout."
+                : requestSubmitted
+                  ? "Your request has been sent to the Heyy Studio team. We’ll review the scope and prepare a quote."
+                  : "AI created the concept. Heyy Studio production turns it into real, editable, professional files."}
           </p>
 
           <div className="mt-6 grid gap-2 sm:grid-cols-2">
@@ -1171,7 +1182,7 @@ function Benefit({
   children,
   available = true,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   available?: boolean;
 }) {
   return (
@@ -1297,6 +1308,7 @@ function QuoteReady({
   const savedQuestions = Array.isArray(request?.metadata?.quote_questions)
     ? request.metadata.quote_questions
     : [];
+  const auGstEstimate = Number(quote?.amount || 0) * 0.1;
 
   async function reconcilePayment(silent = false) {
     setReconciling(true);
@@ -1457,9 +1469,24 @@ function QuoteReady({
           {quote.title}
         </p>
 
-        <p className="mt-3 text-4xl font-black text-slate-950">
+        <p className="mt-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">
+          Quote subtotal · before tax
+        </p>
+        <p className="mt-1 text-4xl font-black text-slate-950">
           {quote.currency || "USD"} {Number(quote.amount).toFixed(2)}
         </p>
+
+        <div className="mt-4 grid gap-2">
+          <ClientCostLine
+            label="Quote subtotal"
+            value={`${quote.currency || "USD"} ${Number(quote.amount).toFixed(2)}`}
+            strong
+          />
+          <ClientCostLine label="GST / tax" value="Calculated at secure checkout" />
+          <p className="px-1 text-[9px] font-bold leading-5 text-slate-400">
+            If Australian 10% GST applies to your billing location, the current estimate is {quote.currency || "USD"} {auGstEstimate.toFixed(2)}. Stripe confirms the actual tax before payment.
+          </p>
+        </div>
 
         {quote.description && (
           <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600">
@@ -1623,6 +1650,15 @@ function QuoteReady({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function ClientCostLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between gap-4 rounded-xl border px-3 py-2.5 ${strong ? "border-violet-200 bg-violet-50" : "border-slate-200 bg-white"}`}>
+      <span className={`text-[10px] ${strong ? "font-black text-slate-800" : "font-bold text-slate-500"}`}>{label}</span>
+      <span className={`text-right text-[11px] ${strong ? "font-black text-slate-950" : "font-bold text-slate-700"}`}>{value}</span>
     </div>
   );
 }

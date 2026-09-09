@@ -26,7 +26,7 @@ async function waitForImages(root: HTMLElement) {
   );
 }
 
-export async function exportPresentationPdf({
+export async function createPresentationPdfBlob({
   document,
   rootId,
   quality = "high",
@@ -104,9 +104,28 @@ export async function exportPresentationPdf({
     creator: "Heyy Studio Universal Presentation Engine",
   });
 
-  pdf.save(`${document.filenameBase}.pdf`);
+  return pdf.output("blob");
 }
 
+export async function exportPresentationPdf(args: {
+  document: PresentationDocument;
+  rootId: string;
+  quality?: "standard" | "high";
+}) {
+  const blob = await createPresentationPdfBlob(args);
+  triggerBlobDownload(blob, `${args.document.filenameBase}.pdf`);
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  window.document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function presentationFontNames(document: PresentationDocument) {
   return Array.from(

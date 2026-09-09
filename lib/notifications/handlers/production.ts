@@ -2,6 +2,7 @@ import { buildClientProjectHref, buildNotificationKey } from "../content";
 import { NotificationPayload } from "../types";
 import { buildEmail, buildPlainTextEmail } from "../templates";
 import { sitePath } from "@/lib/site-url";
+import { buildProductionWorkspaceHref } from "@/lib/production/service-registry";
 import { productionTemplateKey, resolveCommunicationTemplate } from "@/lib/communications/templates";
 import { sendTrackedEmail } from "@/lib/communications/send-email";
 
@@ -14,6 +15,9 @@ export async function handleProductionNotification(payload: NotificationPayload)
     case "quote.ready":
       await sendQuoteReady(payload);
       break;
+    case "quote.updated":
+      await sendQuoteUpdated(payload);
+      break;
     case "quote.replied":
       await sendQuoteReply(payload);
       break;
@@ -25,6 +29,12 @@ export async function handleProductionNotification(payload: NotificationPayload)
       break;
     case "payment.received":
       await sendPaymentReceived(payload);
+      break;
+    case "production.addon.ready":
+      await sendProductionAddonReady(payload);
+      break;
+    case "production.addon.paid":
+      await sendProductionAddonPaid(payload);
       break;
     case "revision.requested":
       await sendRevisionRequested(payload);
@@ -44,6 +54,56 @@ export async function handleProductionNotification(payload: NotificationPayload)
       break;
     default:
       return;
+  }
+}
+
+async function sendProductionAddonReady(payload: NotificationPayload) {
+  try {
+    const isRevision = stringValue(payload.metadata?.addonKind) === "extra_revision";
+    const amount = formatAmount(payload.metadata?.amount, payload.metadata?.currency);
+    await sendClientEmail(payload, {
+      subject: isRevision
+        ? `Additional revision available — ${payload.projectName || "your project"}`
+        : `Additional project scope ready — ${payload.projectName || "your project"}`,
+      eyebrow: isRevision ? "Additional revision" : "Additional scope",
+      title: isRevision ? "Another revision round is available" : "Review the added project scope",
+      intro: isRevision
+        ? "Your included revision allowance has been used. You can purchase one additional revision round and continue the same production job."
+        : "Heyy Studio prepared a separate proposal for work added after the original production quote. The original paid quote stays unchanged.",
+      status: "Review & pay",
+      amount,
+      details: [
+        { label: "Addition", value: stringValue(payload.metadata?.addonTitle) || null },
+        { label: "Price before tax", value: amount || null },
+      ],
+      note: stringValue(payload.metadata?.addonDescription) || null,
+      ctaLabel: isRevision ? "Buy additional revision" : "Review additional scope",
+      ctaUrl: sitePath(buildClientProjectHref(payload)),
+    });
+  } catch (error) {
+    console.error("Production add-on ready notification failed", error);
+  }
+}
+
+async function sendProductionAddonPaid(payload: NotificationPayload) {
+  try {
+    const isRevision = stringValue(payload.metadata?.addonKind) === "extra_revision";
+    await sendClientEmail(payload, {
+      subject: isRevision
+        ? `Additional revision unlocked — ${payload.projectName || "your project"}`
+        : `Additional scope confirmed — ${payload.projectName || "your project"}`,
+      eyebrow: "Payment confirmed",
+      title: isRevision ? "You can submit another revision" : "The added scope is now active",
+      intro: isRevision
+        ? "Your payment was confirmed and one additional revision round has been added to this production job."
+        : "Your payment was confirmed. Heyy Studio and the assigned Expert can now continue with the approved additional scope.",
+      status: "Paid",
+      details: [{ label: "Addition", value: stringValue(payload.metadata?.addonTitle) || null }],
+      ctaLabel: isRevision ? "Request revision" : "Open production project",
+      ctaUrl: sitePath(buildClientProjectHref(payload)),
+    });
+  } catch (error) {
+    console.error("Production add-on paid notification failed", error);
   }
 }
 
@@ -89,7 +149,6 @@ async function sendQuoteReady(payload: NotificationPayload) {
     const quoteId = stringValue(payload.metadata?.quoteId);
     const estimatedDays = stringValue(payload.metadata?.estimatedDays);
     const includedRevisions = stringValue(payload.metadata?.includedRevisions);
-
     await sendClientEmail(payload, {
       subject: `Your ${payload.service || "production"} quote is ready`,
       eyebrow: "Quote ready",
@@ -98,12 +157,22 @@ async function sendQuoteReady(payload: NotificationPayload) {
       status: "Action required",
       amount,
       details: [
+        { label: "Quote subtotal before tax", value: amount || null },
         { label: "Estimated delivery", value: estimatedDays ? `${estimatedDays} days` : null },
         { label: "Included revisions", value: includedRevisions },
+        { label: "Tax / GST", value: "Calculated at secure checkout from billing location" },
         { label: "Quote ID", value: quoteId },
       ],
       ctaLabel: "Review quote",
-      ctaUrl: sitePath(buildClientProjectHref(payload)),
+      ctaUrl: sitePath(buildProductionWorkspaceHref({
+        projectId: payload.projectId,
+        studio: payload.studio,
+        serviceId: payload.metadata?.serviceId,
+        service: payload.service,
+        quoteId,
+        selectedScopes: payload.metadata?.selectedScopes,
+        productionOnly: payload.metadata?.productionOnly || payload.metadata?.production_only,
+      })),
     });
 
     await sendAdminEmail(payload, {
@@ -123,6 +192,41 @@ async function sendQuoteReady(payload: NotificationPayload) {
     });
   } catch (error) {
     console.error("Quote Ready notification failed", error);
+  }
+}
+
+async function sendQuoteUpdated(payload: NotificationPayload) {
+  try {
+    const amount = formatAmount(payload.metadata?.amount, payload.metadata?.currency);
+    const quoteId = stringValue(payload.metadata?.quoteId);
+    const estimatedDays = stringValue(payload.metadata?.estimatedDays);
+    const includedRevisions = stringValue(payload.metadata?.includedRevisions);
+    await sendClientEmail(payload, {
+      subject: `Updated production quote — ${payload.projectName || "your project"}`,
+      eyebrow: "Quote updated",
+      title: "Your production proposal has been updated",
+      intro: "Heyy Studio updated the production quote after your conversation. Review the revised scope, price, delivery estimate and included revisions before continuing to payment.",
+      status: "Updated — review required",
+      amount,
+      details: [
+        { label: "Updated subtotal before tax", value: amount || null },
+        { label: "Estimated delivery", value: estimatedDays ? `${estimatedDays} days` : null },
+        { label: "Included revisions", value: includedRevisions },
+        { label: "Quote ID", value: quoteId },
+      ],
+      ctaLabel: "Review updated quote",
+      ctaUrl: sitePath(buildProductionWorkspaceHref({
+        projectId: payload.projectId,
+        studio: payload.studio,
+        serviceId: payload.metadata?.serviceId,
+        service: payload.service,
+        quoteId,
+        selectedScopes: payload.metadata?.selectedScopes,
+        productionOnly: payload.metadata?.productionOnly || payload.metadata?.production_only,
+      })),
+    });
+  } catch (error) {
+    console.error("Quote updated notification failed", error);
   }
 }
 
@@ -217,7 +321,7 @@ async function sendPaymentReceived(payload: NotificationPayload) {
     const productionJobId = stringValue(payload.metadata?.productionJobId);
 
     await sendClientEmail(payload, {
-      subject: `Payment received for ${payload.service || "your project"}`,
+      subject: `Your production job is now active — ${payload.projectName || payload.service || "your project"}`,
       eyebrow: "Payment confirmed",
       title: "Your production job is now active",
       intro: "Your payment was confirmed successfully. Heyy Studio has created the production job and the team can now begin working from the approved project context.",
@@ -277,6 +381,9 @@ async function sendRevisionRequested(payload: NotificationPayload) {
     const productionJobId = stringValue(payload.metadata?.productionJobId);
     const message = stringValue(payload.metadata?.message) || "No additional message was provided.";
     const isAnotherRevision = Boolean(payload.metadata?.isAnotherRevision);
+    const targetFiles = Array.isArray(payload.metadata?.targetFiles)
+      ? payload.metadata.targetFiles.map((item: any) => stringValue(item?.filename)).filter(Boolean)
+      : [];
 
     await sendAdminEmail(payload, {
       subject: `${isAnotherRevision ? "Another revision" : "Revision"} requested — ${payload.projectName || "Untitled project"}`,
@@ -286,6 +393,7 @@ async function sendRevisionRequested(payload: NotificationPayload) {
       status: revisionNumber ? `Revision #${revisionNumber}` : "Revision requested",
       details: [
         { label: "Client message", value: message },
+        { label: "Files included in this revision round", value: targetFiles.length ? targetFiles.join(", ") : null },
         { label: "Production job", value: productionJobId },
       ],
       ctaLabel: "Open production job",
@@ -361,18 +469,23 @@ type EmailOptions = {
   note?: string | null;
   ctaLabel: string;
   ctaUrl: string;
+  logoUrl?: string;
 };
 
 async function sendClientEmail(payload: NotificationPayload, options: EmailOptions) {
   if (!payload.clientEmail) return;
   const delivery = payload.deliveryPreferences;
   if (delivery) {
-    const isBilling =
-      payload.event === "quote.ready" ||
-      payload.event === "quote.replied" ||
-      payload.event === "payment.received";
-    if (isBilling && !delivery.billingEmail) return;
-    if (!isBilling && !delivery.productionEmail) return;
+    // Quote ready/replies are both commercial and production-critical. Send them
+    // when either relevant preference is enabled; only the payment receipt is a
+    // strictly billing-only message.
+    if (payload.event === "payment.received") {
+      if (!delivery.billingEmail) return;
+    } else if (payload.event === "quote.ready" || payload.event === "quote.updated" || payload.event === "quote.replied") {
+      if (!delivery.billingEmail && !delivery.productionEmail) return;
+    } else if (!delivery.productionEmail) {
+      return;
+    }
   }
 
   const key = productionTemplateKey(payload.event, "client");

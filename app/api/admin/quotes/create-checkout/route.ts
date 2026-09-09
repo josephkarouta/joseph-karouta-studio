@@ -12,7 +12,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-function getReturnPath(quote: any, paymentState: "success" | "cancelled") {
+function getReturnPath(quote: any, paymentState: "success" | "cancelled", requestMetadata?: any) {
   const service = resolveProductionService({
     serviceId: quote.service_id,
     service: quote.service,
@@ -26,6 +26,11 @@ function getReturnPath(quote: any, paymentState: "success" | "cancelled") {
     service: service.label,
     paymentState,
     quoteId: quote.id,
+    selectedScopes:
+      requestMetadata?.selected_production_scopes ||
+      requestMetadata?.project_context?.selected_production_scopes ||
+      null,
+    productionOnly: Boolean(requestMetadata?.production_only),
   });
 }
 export async function POST(request: NextRequest) {
@@ -57,10 +62,13 @@ export async function POST(request: NextRequest) {
       service: quote.service,
       studio: quote.studio,
     });
+    const { data: studioRequest } = quote.studio_request_id
+      ? await supabase.from("studio_requests").select("metadata").eq("id", quote.studio_request_id).maybeSingle()
+      : { data: null };
     const baseUrl = new URL(request.url).origin;
 
-    const successPath = getReturnPath(quote, "success");
-    const cancelPath = getReturnPath(quote, "cancelled");
+    const successPath = getReturnPath(quote, "success", studioRequest?.metadata);
+    const cancelPath = getReturnPath(quote, "cancelled", studioRequest?.metadata);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",

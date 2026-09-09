@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Download, ExternalLink, Eye, LoaderCircle, Mail, Paperclip, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, Check, Download, ExternalLink, Eye, LoaderCircle, Mail, Paperclip, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Button, GlassCard, StatusPill } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
+import { PRODUCTION_SERVICES } from "@/lib/production/service-registry";
 
 type Resource = "careers" | "pages" | "help" | "contact" | "applications" | "users" | "generations";
 type Row = Record<string, unknown> & {
@@ -38,16 +39,23 @@ type LoadOptions = {
   date?: string;
 };
 
+const PRODUCTION_STUDIOS = [
+  { value: "brand_studio", label: "Brand Studio" },
+  { value: "marketing_studio", label: "Marketing Studio" },
+  { value: "architecture_studio", label: "Architecture Studio" },
+  { value: "interior_studio", label: "Interior Studio" },
+];
+
 const configs: Record<Resource, Config> = {
   careers: {
-    title: "Career positions",
-    description: "Create, edit, publish and close the roles shown on the Careers page.",
+    title: "Expert Network opportunities",
+    description: "Create, edit, publish and close the project-based freelance opportunities shown on the Expert Network page.",
     search: "Search positions",
     fields: [
-      { key: "title", label: "Position title", placeholder: "Senior Brand Designer" },
-      { key: "department", label: "Department", placeholder: "Creative" },
+      { key: "title", label: "Opportunity title", placeholder: "Freelance Brand Designer" },
+      { key: "department", label: "Studio", placeholder: "Brand Studio" },
       { key: "location", label: "Location", placeholder: "Remote / Worldwide" },
-      { key: "employment_type", label: "Employment type", placeholder: "Contract" },
+      { key: "employment_type", label: "Work type", placeholder: "Freelance / Project-based" },
       { key: "summary", label: "Summary", placeholder: "What this role will own", multiline: true },
       { key: "body", label: "Role details", placeholder: "Add responsibilities, experience and application notes. Use one paragraph per line.", multiline: true },
     ],
@@ -86,10 +94,10 @@ const configs: Record<Resource, Config> = {
     statuses: ["new", "reviewing", "replied", "closed", "spam"],
   },
   applications: {
-    title: "Career applications",
-    description: "Review people who applied through Careers.",
+    title: "Expert Network applications",
+    description: "Review freelance experts who applied through the public Expert Network.",
     search: "Search applicants",
-    statuses: ["new", "reviewing", "shortlisted", "rejected", "hired"],
+    statuses: ["new", "reviewing", "shortlisted", "approved", "rejected", "hired"],
   },
   users: {
     title: "Users & credit oversight",
@@ -211,11 +219,56 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
   const [contactReply, setContactReply] = useState("");
   const [contactReplyStatus, setContactReplyStatus] = useState("");
   const [sendingContactReply, setSendingContactReply] = useState(false);
+  const [contactConversionStudio, setContactConversionStudio] = useState("brand_studio");
+  const [contactConversionServiceId, setContactConversionServiceId] = useState("");
+  const [contactConversionProjectName, setContactConversionProjectName] = useState("");
+  const [contactConversionStatus, setContactConversionStatus] = useState("");
+  const [convertingContact, setConvertingContact] = useState(false);
+  const [invitingExpert, setInvitingExpert] = useState(false);
+  const [expertInviteStatus, setExpertInviteStatus] = useState("");
   const initialGenerationSearch = useRef(true);
   const applicationDeepLinkHandled = useRef(false);
   const contactDeepLinkHandled = useRef(false);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
+
+  const contactConversionServices = useMemo(
+    () => PRODUCTION_SERVICES.filter((service) => service.studio === contactConversionStudio),
+    [contactConversionStudio],
+  );
+
+  useEffect(() => {
+    if (!selectedContact || resource !== "contact") return;
+    const requestedStudio = text(selectedContact.contact_studio);
+    const studio = PRODUCTION_STUDIOS.some((item) => item.value === requestedStudio)
+      ? requestedStudio
+      : "brand_studio";
+    const studioServices = PRODUCTION_SERVICES.filter((service) => service.studio === studio);
+    const requestedService = text(selectedContact.contact_service_id);
+    setContactConversionStudio(studio);
+    setContactConversionServiceId(
+      studioServices.some((service) => service.id === requestedService)
+        ? requestedService
+        : studioServices[0]?.id || "",
+    );
+    setContactConversionProjectName(
+      text(selectedContact.contact_project_name) ||
+      text(selectedContact.contact_subject) ||
+      text(selectedContact.contact_company) ||
+      `${text(selectedContact.name) || "Client"} Expert Project`,
+    );
+    setContactConversionStatus("");
+  }, [selectedContact, resource]);
+
+  useEffect(() => {
+    if (!contactConversionServices.length) {
+      setContactConversionServiceId("");
+      return;
+    }
+    if (!contactConversionServices.some((service) => service.id === contactConversionServiceId)) {
+      setContactConversionServiceId(contactConversionServices[0].id);
+    }
+  }, [contactConversionServices, contactConversionServiceId]);
 
   async function load(options?: LoadOptions) {
     setLoading(true);
@@ -398,6 +451,69 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
       setContactReplyStatus(value instanceof Error ? value.message : "Reply could not be sent.");
     } finally {
       setSendingContactReply(false);
+    }
+  }
+
+  async function convertContactToProduction() {
+    if (!selectedContact?.id) return;
+    if (!contactConversionProjectName.trim() || !contactConversionServiceId) {
+      setContactConversionStatus("Add a project name and choose a production service.");
+      return;
+    }
+
+    setConvertingContact(true);
+    setContactConversionStatus("");
+    try {
+      const response = await fetch("/api/admin/contact-to-production", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: String(selectedContact.id),
+          projectName: contactConversionProjectName.trim(),
+          studio: contactConversionStudio,
+          serviceId: contactConversionServiceId,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Production request could not be created.");
+
+      setSelectedContact((current) => current ? {
+        ...current,
+        status: "reviewing",
+        contact_production_request_id: result.requestId,
+        contact_production_project_id: result.projectId,
+        contact_production_only: Boolean(result.productionOnly),
+      } : current);
+      setContactConversionStatus(result.alreadyConverted ? "This request was already converted." : "Production request created. It is ready for Expert sourcing.");
+      await load();
+    } catch (value) {
+      setContactConversionStatus(value instanceof Error ? value.message : "Production request could not be created.");
+    } finally {
+      setConvertingContact(false);
+    }
+  }
+
+
+  async function approveAndInviteExpert() {
+    if (!selectedApplication?.id) return;
+    setInvitingExpert(true);
+    setExpertInviteStatus("");
+    setError("");
+    try {
+      const response = await fetch("/api/admin/experts/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId: String(selectedApplication.id) }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Expert invitation could not be sent.");
+      setExpertInviteStatus(result.alreadyActive ? "This applicant is already an active Expert." : "Approved and Expert Portal invitation sent.");
+      setSelectedApplication((current) => current ? { ...current, status: "approved" } : current);
+      await load();
+    } catch (value) {
+      setExpertInviteStatus(value instanceof Error ? value.message : "Expert invitation could not be sent.");
+    } finally {
+      setInvitingExpert(false);
     }
   }
 
@@ -587,7 +703,7 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                       </button>
                     )}
                     {resource === "applications" && (
-                      <button type="button" onClick={() => setSelectedApplication(row)} className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50">
+                      <button type="button" onClick={() => { setSelectedApplication(row); setExpertInviteStatus(""); }} className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 px-3 text-xs font-black text-violet-600 transition hover:bg-violet-50">
                         <Eye size={14}/>Review
                       </button>
                     )}
@@ -684,9 +800,9 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
       )}
 
       {selectedContact && resource === "contact" && (
-        <div className="fixed inset-0 z-[125] grid place-items-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
-          <GlassCard className="my-8 w-full max-w-4xl bg-white p-6 sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="fixed inset-0 z-[125] flex items-center justify-center overflow-hidden bg-slate-950/45 p-3 backdrop-blur-sm sm:p-5">
+          <GlassCard className="flex h-[min(900px,calc(100dvh-2rem))] w-full max-w-5xl flex-col overflow-hidden bg-white p-0 sm:h-[min(900px,calc(100dvh-3rem))]">
+            <div className="z-20 flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-slate-100 bg-white/98 px-5 py-5 backdrop-blur sm:px-7 sm:py-6">
               <div>
                 <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Contact request</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -695,10 +811,11 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                 </div>
                 <p className="mt-2 text-sm font-black text-violet-600">{String(selectedContact.topic || "Contact request")}</p>
               </div>
-              <button onClick={() => { setSelectedContact(null); setContactReply(""); setContactReplyStatus(""); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
+              <button onClick={() => { setSelectedContact(null); setContactReply(""); setContactReplyStatus(""); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700" aria-label="Close"><X size={17}/></button>
             </div>
 
-            <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-6 sm:px-7 sm:pb-7">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <GenerationDetail label="Name" value={selectedContact.name}/>
               <GenerationDetail label="Email" value={selectedContact.email}/>
               <GenerationDetail label="Company" value={selectedContact.contact_company}/>
@@ -741,6 +858,90 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
               )}
             </div>
 
+            {(text(selectedContact.contact_topic_key).toLowerCase().includes("expert") || text(selectedContact.topic).toLowerCase().includes("project request")) && (
+              <div className="mt-4 rounded-[24px] border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-200">
+                      <BriefcaseBusiness size={18}/>
+                    </span>
+                    <div>
+                      <p className="text-[.62rem] font-black uppercase tracking-[.16em] text-violet-600">Production conversion</p>
+                      <h4 className="mt-1 text-lg font-black tracking-[-.03em] text-slate-950">Turn this request into a production journey</h4>
+                      <p className="mt-1 max-w-2xl text-xs font-semibold leading-5 text-slate-500">
+                        Create a Requests & Quotes record, source Experts privately, send the client quote, collect payment and then open a new production job. The client does not need to create an AI concept first.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {text(selectedContact.contact_project_id) && (
+                  <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-xs font-semibold text-emerald-800">
+                    <strong>Connected to existing project:</strong> {text(selectedContact.contact_project_name) || text(selectedContact.contact_project_id)}. A new paid production job will be created without reopening the completed job.
+                  </div>
+                )}
+
+                {text(selectedContact.contact_production_request_id) ? (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div>
+                      <p className="text-sm font-black text-emerald-800">Production request created</p>
+                      <p className="mt-1 text-xs font-semibold text-emerald-700">Continue with Expert sourcing and the normal quote → payment → production journey.</p>
+                    </div>
+                    <a
+                      href={`/admin/studio-requests/${encodeURIComponent(text(selectedContact.contact_production_request_id))}?section=expert-sourcing`}
+                      className="inline-flex min-h-10 items-center gap-2 rounded-full bg-emerald-700 px-4 text-xs font-black text-white transition hover:bg-emerald-800"
+                    >
+                      Open Requests & Quotes <ArrowRight size={14}/>
+                    </a>
+                  </div>
+                ) : !text(selectedContact.user_id) ? (
+                  <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-black text-amber-800">Client account required before quoting</p>
+                    <p className="mt-1 text-xs font-semibold leading-5 text-amber-700">This older contact request is not linked to a Heyy Studio account. Ask the client to sign in and resend an Expert / Project Request so their quote, payment and private files can be attached securely to them.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <label className="md:col-span-2">
+                        <span className="mb-2 block text-[.6rem] font-black uppercase tracking-[.14em] text-slate-500">Project / job name</span>
+                        <input className="heyy-input w-full" value={contactConversionProjectName} onChange={(event) => setContactConversionProjectName(event.target.value)} placeholder="Project name"/>
+                      </label>
+                      <label>
+                        <span className="mb-2 block text-[.6rem] font-black uppercase tracking-[.14em] text-slate-500">Studio</span>
+                        <HeyySelect
+                          value={contactConversionStudio}
+                          tone="admin"
+                          ariaLabel="Production studio"
+                          options={PRODUCTION_STUDIOS}
+                          onChange={setContactConversionStudio}
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-2 block text-[.6rem] font-black uppercase tracking-[.14em] text-slate-500">Production service</span>
+                        <HeyySelect
+                          value={contactConversionServiceId}
+                          tone="admin"
+                          ariaLabel="Production service"
+                          options={contactConversionServices.map((service) => ({ value: service.id, label: service.label }))}
+                          onChange={setContactConversionServiceId}
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <Button onClick={() => void convertContactToProduction()} disabled={convertingContact || !contactConversionServiceId || contactConversionProjectName.trim().length < 2}>
+                        {convertingContact ? <LoaderCircle size={15} className="animate-spin"/> : <BriefcaseBusiness size={15}/>}Create production request
+                      </Button>
+                      <p className="text-xs font-semibold text-slate-500">The next screen starts at Expert sourcing. Nothing is charged until Admin sends the client quote and the client pays.</p>
+                    </div>
+                  </>
+                )}
+
+                {contactConversionStatus && (
+                  <p className={`mt-3 text-xs font-bold ${contactConversionStatus.toLowerCase().includes("created") || contactConversionStatus.toLowerCase().includes("already") ? "text-emerald-700" : "text-red-500"}`}>{contactConversionStatus}</p>
+                )}
+              </div>
+            )}
+
             {contactReplies(selectedContact).length > 0 && (
               <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/45 p-4">
                 <p className="text-[.6rem] font-black uppercase tracking-[.14em] text-emerald-600">Previous Admin replies</p>
@@ -782,8 +983,9 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={() => { setSelectedContact(null); setContactReply(""); setContactReplyStatus(""); }}>Close</Button>
+              <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-100 pt-5">
+                <Button variant="ghost" onClick={() => { setSelectedContact(null); setContactReply(""); setContactReplyStatus(""); }}>Close</Button>
+              </div>
             </div>
           </GlassCard>
         </div>
@@ -794,22 +996,29 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
           <GlassCard className="my-8 w-full max-w-3xl bg-white p-6 sm:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Career application</p>
+                <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Expert Network application</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <h3 className="text-3xl font-black tracking-[-.05em]">{String(selectedApplication.name || "Applicant")}</h3>
                   {selectedApplication.status && <StatusPill tone={statusTone(selectedApplication.status)}>{selectedApplication.status}</StatusPill>}
                 </div>
                 <p className="mt-2 text-sm font-black text-violet-600">{String(selectedApplication.position_title || "Role unavailable")}</p>
               </div>
-              <button onClick={() => setSelectedApplication(null)} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
+              <button onClick={() => { setSelectedApplication(null); setExpertInviteStatus(""); }} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
             </div>
 
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
               <GenerationDetail label="Role" value={selectedApplication.position_title}/>
-              <GenerationDetail label="Department" value={selectedApplication.position_department}/>
+              <GenerationDetail label="Studio" value={selectedApplication.position_department}/>
               <GenerationDetail label="Applicant" value={selectedApplication.name}/>
               <GenerationDetail label="Email" value={selectedApplication.email}/>
               <GenerationDetail label="Current location" value={selectedApplication.location}/>
+              <GenerationDetail label="Time zone" value={selectedApplication.timezone}/>
+              <GenerationDetail label="Experience" value={selectedApplication.years_experience ? `${selectedApplication.years_experience} years` : "Not added"}/>
+              <GenerationDetail label="Availability" value={selectedApplication.availability}/>
+              <GenerationDetail label="Source" value={selectedApplication.source}/>
+              <GenerationDetail label="Specialties" value={Array.isArray(selectedApplication.specialties) ? selectedApplication.specialties.join(", ") : selectedApplication.specialties}/>
+              <GenerationDetail label="Software / tools" value={Array.isArray(selectedApplication.software_tools) ? selectedApplication.software_tools.join(", ") : selectedApplication.software_tools}/>
+              <GenerationDetail label="Languages" value={Array.isArray(selectedApplication.languages) ? selectedApplication.languages.join(", ") : selectedApplication.languages}/>
               <GenerationDetail label="Role location" value={selectedApplication.position_location}/>
               <GenerationDetail label="Submitted" value={formatDate(selectedApplication.created_at)}/>
               <GenerationDetail label="Application ID" value={selectedApplication.id}/>
@@ -820,7 +1029,15 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
               <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-700">{text(selectedApplication.message) || "No message provided."}</p>
             </div>
 
+            {expertInviteStatus && <p className={`mt-5 rounded-2xl p-4 text-sm font-bold ${expertInviteStatus.toLowerCase().includes("could not") || expertInviteStatus.toLowerCase().includes("missing") || expertInviteStatus.toLowerCase().includes("rejected") ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"}`}>{expertInviteStatus}</p>}
+
             <div className="mt-6 flex flex-wrap gap-2">
+              {String(selectedApplication.status || "").toLowerCase() !== "rejected" && (
+                <Button onClick={() => void approveAndInviteExpert()} disabled={invitingExpert}>
+                  {invitingExpert ? <LoaderCircle size={15} className="animate-spin"/> : <Mail size={15}/>}
+                  {String(selectedApplication.status || "").toLowerCase() === "approved" ? "Resend Expert invite" : "Approve & invite Expert"}
+                </Button>
+              )}
               {Boolean(selectedApplication.resume_url) && (
                 <a href={`/api/admin/careers/resume?applicationId=${encodeURIComponent(String(selectedApplication.id || ""))}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800">
                   <Download size={14}/>Download CV
@@ -836,7 +1053,7 @@ export default function ResourceManager({ resource }: { resource: Resource }) {
                   LinkedIn <ExternalLink size={14}/>
                 </a>
               )}
-              <Button variant="ghost" onClick={() => setSelectedApplication(null)}>Close</Button>
+              <Button variant="ghost" onClick={() => { setSelectedApplication(null); setExpertInviteStatus(""); }}>Close</Button>
             </div>
           </GlassCard>
         </div>

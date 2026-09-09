@@ -50,17 +50,17 @@ function roleLabel(role: string) {
 }
 
 const rolePalette = [
-  { accent: "#6c00ff", soft: "#f3eaff", border: "#d8c2fb" },
-  { accent: "#1766c2", soft: "#edf6ff", border: "#bdd9ff" },
-  { accent: "#c51f7c", soft: "#fff0f8", border: "#f2bfdc" },
+  { accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  { accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  { accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
 ];
 
 const panelPalette = {
-  family: { Icon: Type, accent: "#a45c00", soft: "#fff7df", border: "#efd395" },
-  scale: { Icon: Maximize2, accent: "#6c00ff", soft: "#f3eaff", border: "#d8c2fb" },
-  preview: { Icon: LayoutTemplate, accent: "#1766c2", soft: "#edf6ff", border: "#bdd9ff" },
-  usage: { Icon: Type, accent: "#087e9d", soft: "#ebfbff", border: "#b8e5ee" },
-  rules: { Icon: BadgeCheck, accent: "#0b8f4d", soft: "#ebfbf2", border: "#b7e6cb" },
+  family: { Icon: Type, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  scale: { Icon: Maximize2, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  preview: { Icon: LayoutTemplate, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  usage: { Icon: Type, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  rules: { Icon: BadgeCheck, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
 };
 
 type PanelTone = keyof typeof panelPalette;
@@ -81,7 +81,7 @@ export default function BrandTypography({ brand }: { brand: any }) {
       tone="amber"
       icon={Type}
     >
-      <div className="rounded-[18px] border border-amber-100 bg-gradient-to-r from-amber-50 to-white p-4 md:p-5">
+      <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4 md:p-5">
         <p className="max-w-3xl text-sm font-medium leading-6 text-slate-600">
           Typography defines the visual voice of the brand. Use this hierarchy
           to keep websites, presentations, social assets and client-facing

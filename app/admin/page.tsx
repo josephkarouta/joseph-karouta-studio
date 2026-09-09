@@ -54,6 +54,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     payments,
     contacts,
     applications,
+    expertOpportunities,
+    expertAssignments,
+    expertSubmissions,
   ] = await Promise.all([
     loadTable("studio_requests"),
     loadTable("workspace_quotes"),
@@ -63,6 +66,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     loadTable("payments"),
     loadTable("contact_submissions"),
     loadTable("career_applications"),
+    loadTable("expert_opportunities"),
+    loadTable("expert_assignments"),
+    loadTable("expert_submissions"),
   ]);
 
   return (
@@ -75,6 +81,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       payments={payments}
       contacts={contacts}
       applications={applications}
+      expertOpportunities={expertOpportunities}
+      expertAssignments={expertAssignments}
+      expertSubmissions={expertSubmissions}
       initialTab={initialTab}
     />
   );

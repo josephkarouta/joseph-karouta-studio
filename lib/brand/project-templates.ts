@@ -74,6 +74,7 @@ export type NormalisedBrandJourney = {
   applicationBriefs: BrandApplicationBriefs;
   contactDetails: Record<string, string>;
   projectName: string;
+  workMode: "guided" | "professional";
 };
 
 const CORE_DELIVERABLES = new Set(["strategy", "creative-direction", "logo", "guidelines"]);
@@ -538,6 +539,8 @@ export function normaliseBrandJourney(brand: any, project?: any): NormalisedBran
     applicationBriefs: stored.applicationBriefs && typeof stored.applicationBriefs === "object" ? stored.applicationBriefs : {},
     contactDetails: stored.contactDetails && typeof stored.contactDetails === "object" ? stored.contactDetails : {},
     projectName: project?.project_name || stored.projectName || "Brand Project",
+    // Legacy Brand Studio intake was the full professional brief.
+    workMode: stored.workMode === "guided" ? "guided" : "professional",
   };
 }
 
@@ -553,6 +556,7 @@ export function buildBrandJourneySnapshot(args: {
   applicationBriefs?: BrandApplicationBriefs;
   contactDetails?: Record<string, string>;
   projectName?: string;
+  workMode?: "guided" | "professional";
 }) {
   const journey = getBrandJourney(args.journeyId);
   const selectedDeliverables = uniqueStrings(args.selectedDeliverables);
@@ -585,6 +589,7 @@ export function buildBrandJourneySnapshot(args: {
     applicationBriefs: args.applicationBriefs || {},
     contactDetails: args.contactDetails || {},
     projectName: args.projectName || "Brand Project",
+    workMode: args.workMode === "guided" ? "guided" : "professional",
   };
 }
 

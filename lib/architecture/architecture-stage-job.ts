@@ -511,10 +511,10 @@ async function runArchitectureStage(args: {
     const architectureDna = dnaResult.architectureDna;
     const sourceBrief = metadataRecord(project.source_brief);
     const requestedViews = project.workflow_mode === "build_from_scratch"
-      ? ["Hero Exterior Concept", "Outdoor Living Concept"]
+      ? ["Exterior Concept Board", "Living & Landscape Concept Board"]
       : Array.isArray(sourceBrief.camera_views) && (sourceBrief.camera_views as string[]).length
         ? (sourceBrief.camera_views as string[]).slice(0, 2)
-        : ["Hero Exterior Concept", "Outdoor Living Concept"];
+        : ["Exterior Concept Board", "Living & Landscape Concept Board"];
     const canonicalPlan = canonicalPlanFromRecord(currentPlan?.generation_json) || canonicalPlanFromRecord(currentPlanResult.data?.generation_json);
     if (!canonicalPlan && project.workflow_mode === "build_from_scratch") {
       throw new Error("Prepare and approve the Plan Foundation before preparing Concept Visuals.");

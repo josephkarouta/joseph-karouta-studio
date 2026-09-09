@@ -99,13 +99,17 @@ export function createBrowserZip(files: BrowserZipFile[]) {
 }
 
 function safeZipName(value: string) {
-  return String(value || "heyy-studio-asset")
+  const parts = String(value || "heyy-studio-asset")
     .replace(/\\/g, "/")
     .split("/")
-    .pop()
-    ?.replace(/[\u0000-\u001f\u007f]+/g, "-")
-    .trim()
-    .slice(0, 180) || "heyy-studio-asset";
+    .filter((part) => part && part !== "." && part !== "..")
+    .map((part) => part
+      .replace(/[\u0000-\u001f\u007f]+/g, "-")
+      .replace(/[<>:"|?*]+/g, "-")
+      .trim()
+      .slice(0, 120))
+    .filter(Boolean);
+  return parts.join("/") || "heyy-studio-asset";
 }
 
 function createCrcTable() {

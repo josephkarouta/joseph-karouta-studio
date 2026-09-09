@@ -7,10 +7,12 @@ import type { User } from "@supabase/supabase-js";
 import type { ChangeEvent, PointerEvent as ReactPointerEvent } from "react";
 import ProductionPanel from "@/components/studio/production/ProductionPanel";
 import HeyySelect from "@/components/ui/heyy-select";
-import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
+import StudioWorkspaceNavigation from "@/components/studio/common/StudioWorkspaceNavigation";
+import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
+import StudioProjectHero from "@/components/studio/common/StudioProjectHero";
 import { generationFetch } from "@/lib/client/generation-request";
-import { AlertTriangle, Check, ChevronDown, ChevronUp, DraftingCompass, FileText } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronUp, DraftingCompass, Download, FileText } from "lucide-react";
 import ArchitecturePresentationExport from "@/components/studio/architecture/ArchitecturePresentationExport";
 import {
   ARCHITECTURE_MATERIAL_CATEGORIES,
@@ -159,6 +161,31 @@ function sourcePlanTypeFromCategory(category: string): SourcePlanType | null {
 
 function sourcePlanLabel(type: SourcePlanType) {
   return SOURCE_PLAN_TYPES.find((item) => item.value === type)?.label || "Source Drawing";
+}
+
+function imageExtensionForMime(mimeType: string) {
+  const type = mimeType.toLowerCase();
+  if (type.includes("webp")) return "webp";
+  if (type.includes("png")) return "png";
+  if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
+  if (type.includes("svg")) return "svg";
+  return "png";
+}
+
+async function downloadRemoteAsset(url: string, filename: string) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error("The file could not be downloaded.");
+  const blob = await response.blob();
+  const extension = imageExtensionForMime(blob.type);
+  const cleanFilename = filename.replace(/\.[a-zA-Z0-9]{2,8}$/i, "");
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = `${cleanFilename}.${extension}`;
+  window.document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 250);
 }
 
 type SpaceProgramItem = {
@@ -403,6 +430,7 @@ const tabs: Array<{ id: TabId; label: string; phase?: string }> = [
   { id: "setup", label: "Project Setup" },
   { id: "source", label: "Source Input" },
   { id: "program", label: "Space Program" },
+  { id: "materials", label: "Materials & Palette" },
   { id: "plans", label: "Plan Foundation" },
   { id: "design-direction", label: "Design Direction" },
   { id: "visuals", label: "Concept Visuals" },
@@ -413,7 +441,7 @@ const tabs: Array<{ id: TabId; label: string; phase?: string }> = [
 
 function canonicalArchitectureTab(tab: TabId | null): TabId {
   if (tab === "brief" || tab === "site" || tab === "planning") return "setup";
-  if (tab === "materials" || tab === "directions") return "design-direction";
+  if (tab === "directions") return "design-direction";
   if (tab === "concept") return "design-pack";
   return tab && tabs.some((item) => item.id === tab) ? tab : "overview";
 }
@@ -485,6 +513,12 @@ function floorPlanDisplayName(visualType: string, levels?: unknown[]) {
 
 function assetPreviewUrl(value: unknown): string | null {
   const record = recordValue(value);
+  return typeof record.preview_url === "string" ? record.preview_url : null;
+}
+
+function assetMasterUrl(value: unknown): string | null {
+  const record = recordValue(value);
+  if (typeof record.master_url === "string" && record.master_url) return record.master_url;
   return typeof record.preview_url === "string" ? record.preview_url : null;
 }
 
@@ -565,7 +599,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
   const [uploadCategory, setUploadCategory] = useState("site");
   const [uploading, setUploading] = useState(false);
   const [preparingEstimate, setPreparingEstimate] = useState(false);
-
   const requestedTab = searchParams.get("tab") as TabId | null;
   const activeTab: TabId = canonicalArchitectureTab(requestedTab);
 
@@ -864,7 +897,6 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
 
   function createSuggestedProgram() {
     if (!projectDraft || !user) return;
-    if (spaceProgram.length > 0 && !window.confirm("Replace the current draft Space Program with smart suggestions?")) return;
     const template = getArchitectureProjectTemplate(projectDraft.project_type);
     const selectedSource = (projectDraft.selected_spaces || []).length
       ? [...(projectDraft.selected_spaces || [])]
@@ -2365,13 +2397,14 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     return (
       <main className="architecture-workspace-loading">
         <style>{workspaceStyles}</style>
-        <div className="workspace-loader-card">
-          <span className="loader-mark"><ArchitectureIcon /></span>
-          <div>
-            <p className="eyebrow">Architecture Studio</p>
-            <h1>Opening your project workspace</h1>
-            <p>Loading the brief, site, planning guide and project files.</p>
-          </div>
+        <div className="w-full max-w-[520px]">
+          <StudioLoader
+            tone="architecture"
+            eyebrow="Architecture Studio"
+            title="Opening your project workspace"
+            detail="Loading the brief, site, planning guide and project files."
+            variant="inline"
+          />
         </div>
       </main>
     );
@@ -2404,8 +2437,8 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     );
 
   const workflowHeroMessage = projectDraft.workflow_mode === "build_from_scratch"
-    ? "Set up the project, organise the Space Program, approve one coordinated Plan Foundation, then develop a Design Direction and a small set of concept visuals."
-    : "Organise the source geometry first, then develop a Design Direction and focused concept visuals without replacing the uploaded building.";
+    ? "Set up the project, organise the Space Program, choose Materials & Palette, approve one coordinated Plan Foundation, then develop a Design Direction and focused concept boards."
+    : "Organise the source geometry first, then develop a Design Direction and focused concept boards without replacing the uploaded building.";
 
   const activeTabIndex = visibleTabs.findIndex((tab) => tab.id === activeTab);
   const previousTab = activeTabIndex > 0 ? visibleTabs[activeTabIndex - 1] : null;
@@ -2416,56 +2449,26 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
       <style>{workspaceStyles}</style>
 
       <div className="architecture-workspace-wrap">
-            <section className="workspace-hero">
-              <div className="workspace-hero-copy">
-                <div className="hero-mark"><ArchitectureIcon /></div>
-                <div>
-                  <div className="hero-badges">
-                    <span>{workflowLabel(projectDraft.workflow_mode)}</span>
-                    <span data-tone="status">{projectDraft.status || "Brief"}</span>
-                  </div>
-                  <h1>{projectDraft.project_name}</h1>
-                  <p>
-                    {[projectDraft.project_type, projectDraft.city, projectDraft.country]
-                      .filter(Boolean)
-                      .join(" · ") || "Architecture project"}
-                  </p>
-                </div>
-              </div>
+            <StudioProjectHero
+              tone="architecture"
+              eyebrow="Architecture project"
+              title={projectDraft.project_name}
+              description={[projectDraft.project_type, projectDraft.city, projectDraft.country].filter(Boolean).join(" · ") || workflowLabel(projectDraft.workflow_mode)}
+              progress={projectDraft.completion || 0}
+              statusLabel="Brief, space program, materials, plans, directions and concept boards stay connected in one workspace."
+              mode={projectDraft.working_mode === "professional" ? "professional" : "guided"}
+              onModeChange={(mode) => void changeWorkingMode(mode)}
+              saving={saving === "working-mode"}
+            />
 
-              <div className="hero-progress-card">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="eyebrow">Project Progress</span>
-                  <strong>{projectDraft.completion || 0}%</strong>
-                </div>
-                <div className="hero-progress-line">
-                  <span style={{ width: `${projectDraft.completion || 0}%` }} />
-                </div>
-                <p>{workflowHeroMessage}</p>
-                <StudioModeToggle
-                  value={projectDraft.working_mode === "professional" ? "professional" : "guided"}
-                  onChange={(mode) => void changeWorkingMode(mode)}
-                  tone="architecture"
-                  compact
-                  saving={saving === "working-mode"}
-                  className="mt-3"
-                />
-              </div>
-            </section>
-
-            <nav className="workspace-tabs" aria-label="Architecture project sections">
-              {visibleTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  data-active={activeTab === tab.id}
-                  onClick={() => switchTab(tab.id)}
-                >
-                  <span>{tab.label}</span>
-                  {tab.phase && <small>{tab.phase}</small>}
-                </button>
-              ))}
-            </nav>
+            <StudioWorkspaceNavigation
+              tabs={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+              activeTab={activeTab}
+              onChange={(tabId) => switchTab(tabId as TabId)}
+              tone="architecture"
+              ariaLabel="Architecture project sections"
+              className="mt-0"
+            />
 
             {message && <div className="success-message">{message}</div>}
             {error && <div className="workspace-error">{error}</div>}
@@ -2553,30 +2556,33 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
               />
             )}
 
+            {activeTab === "materials" && (
+              <MaterialsTab
+                project={projectDraft}
+                materials={materials}
+                documents={documents}
+                saving={saving}
+                uploading={uploading}
+                extractingDocumentId={extractingMaterial}
+                onToggle={toggleMaterialSelection}
+                onUpload={(files) => uploadDocuments(files, "material-reference")}
+                onAnalyse={analyseMaterialReference}
+                onDownload={downloadDocument}
+                onDelete={deleteDocument}
+                onToggleSaved={toggleSavedMaterial}
+                onUpdate={updateArchitectureMaterial}
+                onCreateCustom={createCustomMaterial}
+                onDeleteMaterial={deleteArchitectureMaterial}
+              />
+            )}
+
             {activeTab === "design-direction" && (
               <section className="architecture-merged-stage">
                 <div className="merged-stage-intro surface-card">
                   <p className="eyebrow">Design Direction</p>
-                  <h2>Choose how the approved concept should feel</h2>
-                  <p>Materials and architectural direction shape the concept imagery. The approved Plan Foundation remains the layout reference.</p>
+                  <h2>Choose the architectural route</h2>
+                  <p>Your Materials & Palette are already set. Compare three focused architectural routes, select one, then generate only the visual you want to develop.</p>
                 </div>
-                <MaterialsTab
-                  project={projectDraft}
-                  materials={materials}
-                  documents={documents}
-                  saving={saving}
-                  uploading={uploading}
-                  extractingDocumentId={extractingMaterial}
-                  onToggle={toggleMaterialSelection}
-                  onUpload={(files) => uploadDocuments(files, "material-reference")}
-                  onAnalyse={analyseMaterialReference}
-                  onDownload={downloadDocument}
-                  onDelete={deleteDocument}
-                  onToggleSaved={toggleSavedMaterial}
-                  onUpdate={updateArchitectureMaterial}
-                  onCreateCustom={createCustomMaterial}
-                  onDeleteMaterial={deleteArchitectureMaterial}
-                />
                 <DirectionsTab
                   project={projectDraft}
                   site={siteDraft}
@@ -2786,13 +2792,13 @@ function OverviewTab({
   ];
 
   return (
-    <div className="workspace-content-grid">
+    <div>
       <section className="workspace-main-column">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Project Overview</p>
             <h2>Your architecture project at a glance</h2>
-            <p>Set up the project, approve one coordinated Plan Foundation, then develop a Design Direction and a focused concept-visual set.</p>
+            <p>Set up the project, choose a project-specific Materials & Palette system, approve one coordinated Plan Foundation, then develop a Design Direction and focused concept boards.</p>
           </div>
         </div>
 
@@ -2807,15 +2813,17 @@ function OverviewTab({
         <div className="surface-card next-stage-card">
           <div>
             <p className="eyebrow">Next Major Stage</p>
-            <h3>{sourceWorkflow ? "Lock the source geometry" : "Create the Plan Foundation"}</h3>
+            <h3>{materials.length < (sourceWorkflow ? 1 : 3) ? "Set the Materials & Palette" : sourceWorkflow ? "Lock the source geometry" : "Create the Plan Foundation"}</h3>
             <p>
-              {sourceWorkflow
-                ? "Organize the uploaded plans first so every later Design Direction and concept visual starts from the same source geometry."
-                : "The coordinated multi-floor Plan Foundation establishes the layout before materials, architectural character or concept imagery are explored."}
+              {materials.length < (sourceWorkflow ? 1 : 3)
+                ? "Start with project-aware material and colour recommendations, then edit, replace or upload your own selections before plan and direction development."
+                : sourceWorkflow
+                  ? "Organize the uploaded plans so every later Design Direction and concept board starts from the same source geometry."
+                  : "The coordinated multi-floor Plan Foundation establishes the layout using the program and selected material context before architectural direction and imagery are developed."}
             </p>
           </div>
-          <button type="button" onClick={() => onOpen("plans")} className="primary-action">
-            Open Plan Foundation →
+          <button type="button" onClick={() => onOpen(materials.length < (sourceWorkflow ? 1 : 3) ? "materials" : "plans")} className="primary-action">
+            {materials.length < (sourceWorkflow ? 1 : 3) ? "Open Materials & Palette →" : "Open Plan Foundation →"}
           </button>
         </div>
 
@@ -2840,37 +2848,26 @@ function OverviewTab({
             ))}
           </div>
         </div>
-      </section>
 
-      <aside className="workspace-side-column">
-        <div className="surface-card sticky-card">
-          <p className="eyebrow">Current Direction</p>
-          <h3>{selectedDirection?.title || project.architectural_style || "Not selected"}</h3>
-          <SummaryLine
-            label="Selected route"
-            value={
-              selectedDirection
-                ? `Direction ${String.fromCharCode(64 + selectedDirection.direction_number)}`
-                : "Not selected"
-            }
-          />
-          <SummaryLine label="Workflow" value={workflowLabel(project.workflow_mode)} />
-          <SummaryLine label="Working mode" value={project.working_mode === "professional" ? "Professional" : "Guided"} />
-          <SummaryLine label="Program spaces" value={String(spaceProgram.length)} />
-          <SummaryLine label="Selected materials" value={String(materials.length)} />
-          <SummaryLine label="Project" value={project.project_type || "Not added"} />
-          <SummaryLine label="Scope" value={project.scope || "Not added"} />
-          <SummaryLine label="Location" value={[project.city, project.country].filter(Boolean).join(", ") || "Not added"} />
-          {project.working_mode === "professional" && (
-            <>
-              <SummaryLine label="Planning" value={site.land_start === "owned" ? planning.verification_status || "Needs verification" : "Available after land is added"} />
-              <div className="planning-notice">
-                Concept guidance only. Local professionals and authorities must verify all planning and compliance information.
-              </div>
-            </>
+        <div className="surface-card p-5 sm:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="eyebrow">Current Direction</p>
+              <h3 className="mt-2 text-2xl font-black tracking-[-.04em]">{selectedDirection?.title || project.architectural_style || "Not selected"}</h3>
+              <p className="mt-2 text-xs font-semibold leading-6 text-[var(--text-secondary)]">
+                {selectedDirection ? `Direction ${String.fromCharCode(64 + selectedDirection.direction_number)} · ` : ""}
+                {project.working_mode === "professional" ? "Professional" : "Guided"} · {spaceProgram.length} spaces · {materials.length} selected materials
+              </p>
+            </div>
+            <button type="button" onClick={() => onOpen("directions")} className="secondary-action">Open Design Direction →</button>
+          </div>
+          {project.working_mode === "professional" && site.land_start === "owned" && (
+            <div className="planning-notice">
+              Planning status: {planning.verification_status || "Needs verification"}. Local professionals and authorities must verify planning and compliance information.
+            </div>
           )}
         </div>
-      </aside>
+      </section>
     </div>
   );
 }
@@ -3364,13 +3361,14 @@ function SpaceProgramTab({ project, items, setItems, calculations, saving, onSug
   const total = items.reduce((sum, item) => sum + Math.max(0, Number(item.quantity || 0) * Number(item.area_each_m2 || 0)), 0);
   const target = numberOrNull(calculations.totalFloorArea) || (typeof project.professional_brief?.target_gross_area_m2 === "number" ? project.professional_brief.target_gross_area_m2 as number : null);
   const difference = target ? total - target : null;
+  const [confirmSuggestions, setConfirmSuggestions] = useState(false);
   function update(index: number, field: keyof SpaceProgramItem, value: string | number) {
     setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value, total_area_m2: field === "quantity" || field === "area_each_m2" ? Number(field === "quantity" ? value : item.quantity) * Number(field === "area_each_m2" ? value : item.area_each_m2) : item.total_area_m2 } : item));
   }
   function addRow() { setItems([...items, { project_id: project.id, user_id: project.user_id, space_name: "New space", zone: "Flexible", level: "Ground", quantity: 1, area_each_m2: 16, total_area_m2: 16, priority: "Required", notes: null, is_ai_suggested: false, sort_order: items.length }]); }
   function removeRow(index: number) { setItems(items.filter((_, itemIndex) => itemIndex !== index)); }
   return <section className="smart-stage">
-    <div className="stage-header surface-card"><div><p className="eyebrow">Smart Space Program</p><h2>Turn room wishes into an editable architectural schedule</h2><p>{project.working_mode === "professional" ? "Edit quantities, areas, levels, zones and priorities for a professional project program." : "Start with smart suggestions, then adjust the rooms and approximate sizes in simple language."}</p></div><div className="stage-actions"><button type="button" className="secondary-action" onClick={onSuggest}>Prepare Smart Suggestions</button><button type="button" className="primary-action" disabled={saving} onClick={() => onSave(items)}>{saving ? "Saving..." : "Save Space Program"}</button></div></div>
+    <div className="stage-header surface-card"><div><p className="eyebrow">Smart Space Program</p><h2>Turn room wishes into an editable architectural schedule</h2><p>{project.working_mode === "professional" ? "Edit quantities, areas, levels, zones and priorities for a professional project program." : "Start with smart suggestions, then adjust the rooms and approximate sizes in simple language."}</p></div><div className="stage-actions"><button type="button" className="secondary-action" onClick={() => items.length ? setConfirmSuggestions(true) : onSuggest()}>Prepare Smart Suggestions</button><button type="button" className="primary-action" disabled={saving} onClick={() => onSave(items)}>{saving ? "Saving..." : "Save Space Program"}</button></div></div>
     <div className="program-intelligence-grid">
       <MetricCard label="Program Total" value={`${Math.round(total)} m²`} />
       <MetricCard label="Estimated Capacity" value={target ? `${Math.round(target)} m²` : "Add planning data"} />
@@ -3410,6 +3408,19 @@ function SpaceProgramTab({ project, items, setItems, calculations, saving, onSug
       </div>
     )}
     <div className="concept-disclaimer">Area recommendations are conceptual. A qualified architect must verify circulation, structure, code, accessibility, services and local measurement rules.</div>
+    {confirmSuggestions && (
+      <div className="architecture-confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmSuggestions(false); }}>
+        <div className="architecture-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="space-program-confirm-title">
+          <p className="eyebrow">Space Program</p>
+          <h3 id="space-program-confirm-title">Replace the current draft?</h3>
+          <p>Smart Suggestions will replace the current draft Space Program with a new project-aware starting schedule. You can edit every room, quantity and size afterwards.</p>
+          <div className="architecture-confirm-actions">
+            <button type="button" className="secondary-action" onClick={() => setConfirmSuggestions(false)}>Keep current program</button>
+            <button type="button" className="primary-action" onClick={() => { setConfirmSuggestions(false); onSuggest(); }}>Replace with suggestions</button>
+          </div>
+        </div>
+      </div>
+    )}
   </section>;
 }
 
@@ -3483,14 +3494,38 @@ function MaterialsTab({
   const referenceImages = documents.filter(
     (document) => document.category === "material-reference" && document.mime_type?.startsWith("image/"),
   );
+  const recommendationContext = [
+    project.project_type,
+    project.scope,
+    project.architectural_style,
+    project.country,
+    project.region,
+    project.city,
+    project.notes,
+    ...(project.selected_spaces || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const recommendationTokens = Array.from(new Set(recommendationContext.split(/[^a-z0-9]+/).filter((token) => token.length > 3)));
+  const rankedRecommendedMaterials = materialLibrary
+    .map((item) => {
+      const haystack = [item.name, item.category, item.finish, item.application, item.climate, item.sustainability, ...item.tags].join(" ").toLowerCase();
+      const projectTypeScore = materialKeywords.reduce((score, keyword) => score + (haystack.includes(keyword.toLowerCase()) ? 5 : 0), 0);
+      const projectContextScore = recommendationTokens.reduce((score, token) => score + (haystack.includes(token) ? 2 : 0), 0);
+      const selectedBoost = materials.some((material) => material.material_key === item.key && material.is_selected) ? 20 : 0;
+      return { item, score: projectTypeScore + projectContextScore + selectedBoost };
+    })
+    .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name));
+  const recommendedKeys = new Set(rankedRecommendedMaterials.slice(0, 12).map(({ item }) => item.key));
   const filtered = materialLibrary.filter((item) => {
     const categoryMatch = category === "All" || item.category === category;
     const haystack = [item.name, item.category, item.finish, item.application, ...item.tags]
       .join(" ")
       .toLowerCase();
     const searchMatch = haystack.includes(search.trim().toLowerCase());
-    const industryMatch = libraryMode === "all" || materialKeywords.some((keyword) => haystack.includes(keyword.toLowerCase()));
-    return categoryMatch && searchMatch && industryMatch;
+    const recommendationMatch = libraryMode === "all" || recommendedKeys.has(item.key);
+    return categoryMatch && searchMatch && recommendationMatch;
   });
 
   function openEditor(material: ArchitectureMaterial) {
@@ -3639,8 +3674,7 @@ function MaterialsTab({
           <p className="eyebrow">Material Studio</p>
           <h2>Build an editable material system for the project</h2>
           <p>
-            Choose from the expanded library, upload a custom material and define exactly where it should be used.
-            Every saved material remains editable, selectable and removable after the workspace is created.
+            Heyy Studio starts from one professional master library, but the Recommended view is ranked separately for this project's type, style, location, spaces and brief. Nothing is automatically selected: use the recommendations, browse the full library or upload your own material.
           </p>
         </div>
         <div className="material-stage-actions">
@@ -3770,7 +3804,7 @@ function MaterialsTab({
 
       <div className="surface-card material-library-panel">
         <div className="section-heading compact">
-          <div><p className="eyebrow">Industry-Aware Material Library</p><h3>{libraryMode === "recommended" ? `Recommended for ${project.project_type || "this project"}` : "All architecture materials"}</h3><p>The recommended view changes automatically with the project industry. Switch to All Materials whenever you need the complete library.</p></div>
+          <div><p className="eyebrow">Project-Aware Material Library</p><h3>{libraryMode === "recommended" ? `Recommended for ${project.project_type || "this project"}` : "All architecture materials"}</h3><p>The full library is shared, but this recommended shortlist is re-ranked from this project's type, style, location, spaces and brief. Switch to All Materials whenever you want the complete catalogue.</p></div>
           <input className="material-search-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search stone, acoustic, commercial kitchen, timber..." />
         </div>
         <div className="material-industry-toggle"><button type="button" data-active={libraryMode === "recommended"} onClick={() => setLibraryMode("recommended")}>Recommended for {project.project_type || "Project"}</button><button type="button" data-active={libraryMode === "all"} onClick={() => setLibraryMode("all")}>All Materials</button></div>
@@ -3973,7 +4007,7 @@ function DirectionsTab({
         </div>
 
         <div className="directions-action-stack">
-          <div className="directions-material-note">Plan Foundation first. Then select at least {minimumMaterials} material{minimumMaterials === 1 ? "" : "s"}; Directions style the approved building instead of inventing new geometry.</div>
+          <div className="directions-material-note">Choose at least {minimumMaterials} material{minimumMaterials === 1 ? "" : "s"} in Materials & Palette, then approve the Plan Foundation. Directions style that approved building instead of inventing new geometry.</div>
         <button
           type="button"
           className="primary-action directions-generate-all"
@@ -4083,6 +4117,9 @@ function DirectionsTab({
               direction.generation_status === "image_failed" ||
               Boolean(direction.generation_error && !direction.image_url);
             const expanded = expandedDirections.includes(direction.id);
+            const generationJson = recordValue(direction.generation_json);
+            const directionAssets = recordValue(generationJson.final_assets).master_url ? generationJson.final_assets : generationJson.preview_assets;
+            const directionMaster = assetMasterUrl(directionAssets) || direction.image_url || null;
 
             return (
               <article
@@ -4092,10 +4129,11 @@ function DirectionsTab({
               >
                 <div className="direction-card-visual">
                   {direction.image_url ? (
-                    <button type="button" className="image-zoom-trigger" onClick={() => setLightbox({ url: assetPreviewUrl(recordValue(direction.generation_json).preview_assets) || direction.image_url || "", title: direction.title })} aria-label={`Enlarge ${direction.title}`}>
+                    <button type="button" className="image-zoom-trigger" onClick={() => directionMaster && setLightbox({ url: directionMaster, title: direction.title })} aria-label={`Enlarge ${direction.title}`}>
                       <img
                         src={
-                          assetThumbnailUrl(recordValue(direction.generation_json).preview_assets) ||
+                          assetThumbnailUrl(directionAssets) ||
+                          assetPreviewUrl(directionAssets) ||
                           direction.image_url
                         }
                         alt={`${direction.title} architecture concept`}
@@ -4199,46 +4237,51 @@ function DirectionsTab({
                   )}
 
                   <div className="direction-actions">
-                    <button
-                      type="button"
-                      className="direction-secondary-action"
-                      disabled={generatingDirection !== null}
-                      onClick={() => onGenerate(direction.direction_number)}
-                    >
-                      {isGenerating
-                        ? "Regenerating Direction..."
-                        : `Regenerate Direction ${directionLetter} Text · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
-                    </button>
+                    <div className="direction-primary-actions">
+                      <button
+                        type="button"
+                        className="direction-secondary-action"
+                        disabled={generatingDirection !== null || regeneratingImage !== null || !direction.is_selected}
+                        onClick={() => onRegenerateImage(direction.id, "final")}
+                      >
+                        {regeneratingImage === `direction-${direction.id}`
+                          ? "Generating Visual..."
+                          : direction.is_selected ? `${direction.image_url ? "Regenerate" : "Generate"} Visual · ${ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits` : "Select Direction First"}
+                      </button>
 
-                    <button
-                      type="button"
-                      className="direction-secondary-action"
-                      disabled={generatingDirection !== null || regeneratingImage !== null || !direction.is_selected}
-                      onClick={() => onRegenerateImage(direction.id, "final")}
-                    >
-                      {regeneratingImage === `direction-${direction.id}`
-                        ? "Generating Visual..."
-                        : direction.is_selected ? `${direction.image_url ? "Regenerate" : "Generate"} Visual · ${ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits` : "Select Direction First"}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="direction-select-action"
-                      data-selected={direction.is_selected ? "true" : "false"}
-                      disabled={
-                        isSelecting ||
-                        generatingDirection !== null ||
-                        regeneratingImage !== null ||
-                        direction.generation_status === "generating_image"
-                      }
-                      onClick={() => onSelect(direction)}
-                    >
-                      {isSelecting
-                        ? "Selecting..."
-                        : direction.is_selected
-                          ? "Selected Direction"
-                          : "Select Direction"}
-                    </button>
+                      <button
+                        type="button"
+                        className="direction-select-action"
+                        data-selected={direction.is_selected ? "true" : "false"}
+                        disabled={
+                          isSelecting ||
+                          generatingDirection !== null ||
+                          regeneratingImage !== null ||
+                          direction.generation_status === "generating_image"
+                        }
+                        onClick={() => onSelect(direction)}
+                      >
+                        {isSelecting
+                          ? "Selecting..."
+                          : direction.is_selected
+                            ? "Selected Direction"
+                            : "Select Direction"}
+                      </button>
+                    </div>
+                    <div className="direction-utility-actions">
+                      <button
+                        type="button"
+                        disabled={generatingDirection !== null}
+                        onClick={() => onGenerate(direction.direction_number)}
+                      >
+                        {isGenerating ? "Regenerating Text..." : `Regenerate Text · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
+                      </button>
+                      {directionMaster && (
+                        <button type="button" onClick={() => void downloadRemoteAsset(directionMaster, `${direction.title}-direction-visual`)}>
+                          <Download size={13} /> Download visual
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </article>
@@ -5039,9 +5082,23 @@ function PlanVisualCard({
     setViewMode(savedActiveMode);
   }, [savedActiveMode]);
 
+  const technicalMasterUrl = assetMasterUrl(metadata.technical_assets) || technicalUrl;
+  const renderedMasterUrl = assetMasterUrl(metadata.rendered_final_assets) || assetMasterUrl(metadata.rendered_preview_assets) || renderedUrl;
   const displayUrl = viewMode === "rendered"
     ? renderedUrl || visual.image_url
     : technicalUrl || (!renderedUrl ? visual.image_url : null);
+  const highResolutionUrl = viewMode === "rendered"
+    ? renderedMasterUrl || displayUrl
+    : technicalMasterUrl || displayUrl;
+  const downloadName = `${(visual.title || visual.visual_type || "architecture-plan")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "architecture-plan"}-${viewMode === "rendered" ? "rendered" : "technical"}.png`;
+
+  async function handleDownload() {
+    if (!highResolutionUrl) return;
+    await downloadRemoteAsset(highResolutionUrl, downloadName);
+  }
 
   return (
     <article className="plan-visual-card generation-image-card" data-selected={selected}>
@@ -5053,7 +5110,7 @@ function PlanVisualCard({
         <button type="button" className="plan-select-toggle" data-selected={selected} disabled={lockedCanonicalPlanView || Boolean(generationLockReason)} onClick={onToggleSelected}>{lockedCanonicalPlanView ? "Foundation locked" : generationLockReason ? "Locked" : selected ? "Selected for batch ✓" : "Select for batch"}</button>
       </div>
       {displayUrl ? (
-        <button type="button" className="plan-image-zoom" onClick={() => setLightbox(displayUrl)} aria-label={`Enlarge ${visual.title || visual.visual_type}`}><img src={displayUrl} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" /><span>Click to enlarge</span></button>
+        <button type="button" className="plan-image-zoom" onClick={() => setLightbox(highResolutionUrl || displayUrl)} aria-label={`Enlarge ${visual.title || visual.visual_type}`}><img src={displayUrl} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" /><span>Click to enlarge</span></button>
       ) : (
         <div className="generation-image-placeholder compact"><ArchitectureIcon /><strong>Plan not generated</strong><span>{visual.prompt || "The coordinated plan data is ready."}</span></div>
       )}
@@ -5086,6 +5143,11 @@ function PlanVisualCard({
         {canonicalFloor && technicalUrl && <button type="button" className="visual-approve-button" data-approved={visual.is_approved ? "true" : "false"} disabled={anyGenerating || approving} onClick={onApprove}>
           {approving ? "Saving..." : visual.is_approved ? "Approved Foundation Floor ✓" : "Approve Foundation Floor"}
         </button>}
+        {displayUrl && (
+          <button type="button" className="secondary-action" onClick={() => void handleDownload()}>
+            Download plan
+          </button>
+        )}
         {!lockedCanonicalPlanView && !renderedOnly && technicalUrl && <button type="button" className="visual-approve-button" data-approved={visual.is_approved ? "true" : "false"} disabled={anyGenerating || approving} onClick={onApprove}>
           {approving ? "Saving..." : visual.is_approved ? (sourceLocked ? "Redraw approved ✓" : "Approved Plan ✓") : (sourceLocked ? "Approve Redraw" : "Approve Plan")}
         </button>}
@@ -5137,6 +5199,7 @@ function VisualsTab({
   onRegenerateImage: (visualId: string, quality: ImageGenerationTier) => void;
 }) {
   const [expandedVisualBriefs, setExpandedVisualBriefs] = useState<string[]>([]);
+  const [lightbox, setLightbox] = useState<{ url: string; title: string } | null>(null);
 
   function toggleVisualBrief(visualId: string) {
     setExpandedVisualBriefs((current) =>
@@ -5195,7 +5258,7 @@ function VisualsTab({
       <section className="stage-empty surface-card">
         <div className="stage-empty-copy">
           <p className="eyebrow">Concept Visualization</p>
-          <h2>Create a focused concept visualization set</h2>
+          <h2>Prepare a focused concept-board set</h2>
           <p>
             {existingDesignSource
               ? "Turn the uploaded existing plans into coordinated architectural visuals while keeping the source geometry fixed."
@@ -5209,7 +5272,7 @@ function VisualsTab({
           </div>
         </div>
         <button type="button" className="primary-action" disabled={generating} onClick={onGenerate}>
-          {generating ? "Preparing Concept Visuals..." : `Prepare Concept Visuals · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+          {generating ? "Preparing Concept Visual Briefs..." : `Prepare Concept Visual Briefs · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
         </button>
         {generating && <StageGenerationLoading title="Preparing Concept Visuals" detail="Preparing one hero exterior concept and one supporting outdoor-living concept from the approved project references." />}
       </section>
@@ -5221,17 +5284,17 @@ function VisualsTab({
       <div className="stage-header surface-card">
         <div>
           <p className="eyebrow">Concept Visualization</p>
-          <h2>{direction.title} Concept Views</h2>
+          <h2>{direction.title} Concept Boards</h2>
           <p>{existingDesignSource
             ? "Source plans/elevations define the building. The selected direction controls style only. Regenerate any older view that was created before the source drawings were organised."
-            : "Approve the concept images that best communicate the project intent. These are not exact elevations or measured architectural views."}</p>
+            : "Approve the concept boards that best communicate the project intent. Each board combines several visual studies and is not an exact elevation or measured architectural view."}</p>
         </div>
         <button type="button" className="secondary-action" disabled={generating} onClick={onGenerate}>
-          {generating ? "Refreshing..." : `Refresh Concept Briefs · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
+          {generating ? "Refreshing..." : `Refresh Concept Briefs · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
         </button>
       </div>
 
-      {generating && <StageGenerationLoading title="Refreshing Concept Visuals" detail="Updating the two focused concept-image briefs without generating images." />}
+      {generating && <StageGenerationLoading title="Refreshing Concept Visual Briefs" detail={`Updating the two focused concept-board briefs. ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits are reserved; images are generated separately.`} />}
       <div className="visual-gallery-grid">
         {gallery.map((visual) => {
           const visualMetadata = recordValue(visual.metadata);
@@ -5239,11 +5302,17 @@ function VisualsTab({
             visualMetadata.source_geometry_locked !== true ||
             visualMetadata.source_geometry_stale === true
           );
+          const visualAssets = recordValue(visualMetadata.final_assets).master_url ? visualMetadata.final_assets : visualMetadata.preview_assets;
+          const visualMaster = assetMasterUrl(visualAssets) || visual.image_url || null;
+          const visualPreview = assetPreviewUrl(visualAssets) || visual.image_url || null;
           return (
             <article key={visual.id} className="visual-gallery-card" data-approved={visual.is_approved ? "true" : "false"}>
               <div className="visual-gallery-image">
-                {visual.image_url ? (
-                  <img src={visual.image_url} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" />
+                {visualPreview ? (
+                  <button type="button" className="concept-board-zoom" onClick={() => visualMaster && setLightbox({ url: visualMaster, title: visual.title || visual.visual_type })} aria-label={`Enlarge ${visual.title || visual.visual_type}`}>
+                    <img src={visualPreview} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" />
+                    <span>Click to enlarge</span>
+                  </button>
                 ) : (
                   <div className="generation-image-placeholder compact">
                     <ArchitectureIcon />
@@ -5290,7 +5359,7 @@ function VisualsTab({
                   >
                     {regeneratingImage === `visual-${visual.id}`
                       ? "Generating Visual..."
-                      : `${existingDesignSource ? (sourceStale ? "Generate from Source Plans" : "Regenerate from Source Plans") : (visual.image_url ? "Regenerate" : "Generate") + " Concept Visual"} · ${ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits`}
+                      : `${existingDesignSource ? (sourceStale ? "Generate from Source Plans" : "Regenerate from Source Plans") : (visual.image_url ? "Regenerate" : "Generate") + " Concept Board"} · ${ARCHITECTURE_CREDIT_COSTS.professionalFinal} credits`}
                   </button>
                   <button
                     type="button"
@@ -5299,8 +5368,13 @@ function VisualsTab({
                     disabled={sourceStale || approvingVisual === visual.id || !visual.image_url || regeneratingImage !== null}
                     onClick={() => onApprove(visual)}
                   >
-                    {sourceStale ? "Regenerate first" : approvingVisual === visual.id ? "Saving..." : visual.is_approved ? "Remove Approval" : "Approve Concept"}
+                    {sourceStale ? "Regenerate first" : approvingVisual === visual.id ? "Saving..." : visual.is_approved ? "Remove Approval" : "Approve Board"}
                   </button>
+                  {visualMaster && (
+                    <button type="button" className="concept-download-button" onClick={() => void downloadRemoteAsset(visualMaster, visual.title || "architecture-concept-board")}>
+                      <Download size={13} /> Download
+                    </button>
+                  )}
                 </div>
               </div>
             </article>
@@ -5312,6 +5386,7 @@ function VisualsTab({
         <strong>AI concept imagery.</strong>
         <span>These images interpret the approved Plan Foundation and selected Design Direction, but minor architectural differences can occur. {ARCHITECTURE_AI_CONCEPT_NOTICE}</span>
       </div>
+      {lightbox && <ImageLightbox url={lightbox.url} title={lightbox.title} onClose={() => setLightbox(null)} />}
     </section>
   );
 }
@@ -5402,7 +5477,7 @@ function DesignPackTab({
           <p>Version {designPack.version} · Prepared {formatDate(designPack.generated_at)}</p>
         </div>
         <div className="pack-actions">
-          <button type="button" className="secondary-action" disabled={generating} onClick={onPrepare}>
+          <button type="button" className="pack-update-action" disabled={generating} onClick={onPrepare}>
             {generating ? "Updating..." : "Update Concept Pack"}
           </button>
           <ArchitecturePresentationExport
@@ -6222,7 +6297,11 @@ const workspaceStyles = `
   .section-navigation > div:first-child span { color:#1769d2; font-size:8px; font-weight:950; letter-spacing:.14em; text-transform:uppercase; }
   .section-navigation > div:first-child strong { color:#1f2937; font-size:12px; }
   .section-navigation-actions { display:flex; align-items:center; gap:10px; }
-  .workspace-tabs { display: flex; gap: 8px; overflow-x: auto; margin-top: 0; border: 1px solid #d7e0eb; border-radius: 19px; background: rgba(255,255,255,.89); padding: 8px; box-shadow: 0 10px 25px rgba(45,68,94,.06); scrollbar-width: thin; }
+  .workspace-tabs-shell { display:grid; width:100%; grid-template-columns:42px minmax(0,1fr) 42px; align-items:center; gap:4px; margin-top:0; border:1px solid #d7e0eb; border-radius:19px; background:rgba(255,255,255,.89); padding:5px; box-shadow:0 10px 25px rgba(45,68,94,.06); }
+  .workspace-tabs { display:flex; gap:8px; min-width:0; overflow-x:auto; border:0; border-radius:14px; background:transparent; padding:3px; box-shadow:none; scrollbar-width:none; scroll-behavior:smooth; }
+  .workspace-tabs::-webkit-scrollbar { display:none; }
+  .workspace-tabs-arrow { display:grid; width:38px; height:38px; place-items:center; border:0; border-radius:12px; background:transparent; color:#1769d2; box-shadow:none; transition:all 160ms ease; }
+  .workspace-tabs-arrow:hover { background:#eff6ff; color:#0d5eba; }
   .workspace-tabs button { display: inline-flex; min-height: 42px; flex: 0 0 auto; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 13px; background: transparent; color: #626d7d; padding: 0 14px; font-size: 11px; font-weight: 900; transition: all 180ms ease; }
   .workspace-tabs button:hover { border-color: #a7c5ef; background: #eff6ff; color: #1769d2; }
   .workspace-tabs button[data-active="true"] { border-color: #1769d2; background: linear-gradient(135deg,#1769d2,#1769d2); color: #fff; box-shadow: 0 8px 18px rgba(54,72,190,.20); }
@@ -6430,6 +6509,9 @@ const workspaceStyles = `
   .direction-select-action[data-selected="true"] { border-color: #9bd6b4; background: #e8f8ef; color: #087944; box-shadow: none; }
   .direction-secondary-action:disabled,
   .direction-select-action:disabled { cursor: wait; opacity: .58; }
+  .direction-primary-actions { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; }
+  .direction-utility-actions { display:flex; flex-wrap:wrap; gap:7px; }
+  .direction-utility-actions button { display:inline-flex; min-height:34px; align-items:center; justify-content:center; gap:6px; border:1px solid var(--arch-border); border-radius:10px; background:var(--surface); padding:0 10px; color:var(--text-secondary); font-size:8px; font-weight:900; }
   .direction-disclaimer { display: flex; align-items: flex-start; gap: 10px; border: 1px solid #e8ca72; border-radius: 16px; background: #fff8dc; padding: 14px 16px; color: #6e4b00; }
   .direction-disclaimer strong { flex: 0 0 auto; font-size: 10px; }
   .direction-disclaimer span { font-size: 10px; line-height: 1.6; }
@@ -6458,7 +6540,11 @@ const workspaceStyles = `
   .stage-locked h2, .stage-empty h2, .stage-header h2 { margin: 7px 0 0; color: #172130; font-size: clamp(28px,4vw,44px); font-weight: 950; letter-spacing: -.05em; line-height: 1.03; }
   .stage-locked > p:not(.eyebrow), .stage-empty-copy > p, .stage-header > div > p:not(.eyebrow) { max-width: 780px; margin: 12px 0 0; color: #667487; font-size: 12px; line-height: 1.75; }
   .stage-empty-copy { min-width: 0; }
-  .stage-empty-actions, .pack-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .stage-empty-actions, .pack-actions { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:flex-end; gap:10px; }
+  .pack-actions { max-width:520px; }
+  .pack-update-action { display:inline-flex; min-height:40px; height:40px; width:auto; flex:0 0 auto; align-items:center; justify-content:center; border:1px solid #c9d5e4; border-radius:12px; background:#fff; color:#1769d2; padding:0 14px; font-size:9px; font-weight:950; white-space:nowrap; transition:all 180ms ease; }
+  .pack-update-action:hover:not(:disabled) { border-color:#1769d2; background:#eaf3ff; color:#1769d2; transform:translateY(-1px); }
+  .pack-update-action:disabled { cursor:wait; opacity:.55; }
   .demo-explanation { display: grid; gap: 5px; max-width: 720px; margin-top: 18px; border: 1px solid #d8c7ff; border-radius: 15px; background: #f8f3ff; padding: 13px 14px; }
   .demo-explanation strong { color: #5b00cf; font-size: 10px; }
   .demo-explanation span { color: #6d6480; font-size: 10px; line-height: 1.55; }
@@ -6514,7 +6600,7 @@ const workspaceStyles = `
   .visual-gallery-image { position: relative; }
   .visual-gallery-image img { display: block; width: 100%; aspect-ratio: 1.5; object-fit: cover; }
   .approved-visual-chip { position: absolute; top: 12px; right: 12px; display: inline-flex; min-height: 27px; align-items: center; border-radius: 999px; background: #0b9b59; color: #fff; padding: 0 10px; font-size: 8px; font-weight: 950; text-transform: uppercase; letter-spacing: .09em; }
-  .visual-gallery-body { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 15px 16px; }
+  .visual-gallery-body { display: block; padding: 18px; }
   .visual-gallery-body span { color: #1769d2; font-size: 8px; font-weight: 950; text-transform: uppercase; letter-spacing: .1em; }
   .visual-gallery-body h3 { margin: 5px 0 0; color: #1d2734; font-size: 14px; font-weight: 950; }
   .visual-approve-button { display: inline-flex; min-height: 36px; flex: 0 0 auto; align-items: center; border: 1px solid #1769d2; border-radius: 999px; background: #fff; color: #1769d2; padding: 0 12px; font-size: 8px; font-weight: 950; }
@@ -6616,9 +6702,16 @@ const workspaceStyles = `
   .plan-image-zoom { position:relative; display:grid; width:100%; min-height:260px; place-items:center; border:0; background:#f8fbff; padding:14px; cursor:zoom-in; }
   .plan-image-zoom > span { position:absolute; right:12px; bottom:12px; border-radius:999px; background:rgba(15,23,42,.78); color:#fff; padding:7px 10px; opacity:0; font-size:8px; font-weight:900; transition:all 180ms ease; }
   .plan-image-zoom:hover > span { opacity:1; }
-  @media (max-width: 980px) { .program-intelligence-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .material-library-grid, .material-reference-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+  
+  .concept-board-zoom { position:relative; display:block; width:100%; height:100%; border:0; background:transparent; padding:0; cursor:zoom-in; overflow:hidden; }
+  .concept-board-zoom img { width:100%; height:100%; object-fit:cover; display:block; }
+  .concept-board-zoom > span { position:absolute; right:12px; bottom:12px; border-radius:999px; background:rgba(12,24,42,.76); padding:7px 10px; color:#fff; font-size:8px; font-weight:900; opacity:0; transition:opacity 160ms ease; }
+  .concept-board-zoom:hover > span { opacity:1; }
+  .concept-download-button { display:inline-flex; min-height:38px; align-items:center; justify-content:center; gap:6px; border:1px solid #cfd8e6; border-radius:999px; background:#fff; padding:0 13px; color:#34455a; font-size:8px; font-weight:900; }
+  .concept-download-button:hover { border-color:#8db8ed; color:#1769d2; }
+@media (max-width: 980px) { .program-intelligence-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .material-library-grid, .material-reference-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
   @media (max-width: 640px) { .program-intelligence-grid, .material-library-grid, .material-reference-grid, .pack-material-grid, .paint-preset-grid { grid-template-columns: minmax(0,1fr); } .selected-material-row { grid-template-columns: 46px minmax(0,1fr); } .selected-material-row b { grid-column: 2; } .guided-program-fields,.custom-paint-builder { grid-template-columns:1fr; } .custom-paint-preview { width:100%; height:90px; } .section-navigation,.section-navigation-actions { align-items:stretch; flex-direction:column; } .section-navigation-actions button,.section-navigation-actions a { width:100%; } }
-  .architecture-presentation-export { display: flex; align-items: flex-start; }
+  .architecture-presentation-export { display: grid; align-items: start; gap: 8px; }
   .architecture-presentation-export .heyy-presentation-export-message { max-width: 360px; }
 
 
@@ -6694,6 +6787,15 @@ const workspaceStyles = `
   .smart-stage { display: grid; gap: 18px; }
   .program-intelligence-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
   .smart-warning { border: 1px solid #f3c86a; border-radius: 16px; background: #fff8dc; color: #755000; padding: 14px 16px; font-size: 12px; font-weight: 800; line-height: 1.6; }
+  .concept-disclaimer { border: 1px solid #f3c86a; border-radius: 16px; background: #fff8dc; color: #755000; padding: 14px 16px; font-size: 11px; font-weight: 800; line-height: 1.7; }
+  .architecture-confirm-backdrop { position: fixed; inset: 0; z-index: 520; display: grid; place-items: center; padding: 20px; background: rgba(8,12,20,.62); backdrop-filter: blur(8px); }
+  .architecture-confirm-dialog { width: min(520px, 100%); border: 1px solid rgba(46,124,246,.22); border-radius: 24px; background: #fff; padding: 26px; box-shadow: 0 30px 90px rgba(12,29,54,.28); }
+  .architecture-confirm-dialog h3 { margin: 7px 0 0; color: #172033; font-size: 24px; font-weight: 950; letter-spacing: -.035em; }
+  .architecture-confirm-dialog > p:not(.eyebrow) { margin: 12px 0 0; color: #64748b; font-size: 13px; font-weight: 650; line-height: 1.7; }
+  .architecture-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+  [data-theme="dark"] .architecture-confirm-dialog { border-color: rgba(96,165,250,.22); background: #111827; }
+  [data-theme="dark"] .architecture-confirm-dialog h3 { color: #fff; }
+  [data-theme="dark"] .architecture-confirm-dialog > p:not(.eyebrow) { color: #cbd5e1; }
   .program-table { overflow: auto; padding: 16px; }
   .program-head, .program-row { display: grid; grid-template-columns: minmax(150px,1.4fr) minmax(125px,1fr) minmax(120px,1fr) 70px 90px 85px 105px 38px; gap: 8px; align-items: center; min-width: 930px; }
   .program-head { padding: 0 8px 10px; color: #64748b; font-size: 9px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
@@ -6764,7 +6866,9 @@ const workspaceStyles = `
   .editable-material-summary small { color: #2e7cf6; font-size: 8px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
   .editable-material-summary strong { font-size: 14px; }
   .editable-material-summary span { color: #64748b; font-size: 10px; line-height: 1.5; }
-  .editable-material-actions, .visual-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+  .editable-material-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+  .visual-card-actions { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; margin-top: 16px; align-items: stretch; }
+  .visual-card-actions > button { min-height: 42px; }
   .editable-material-actions button, .image-regenerate-button { border: 1px solid #67a0ff; border-radius: 999px; background: #eff6ff; color: #1769d2; padding: 8px 11px; font-size: 9px; font-weight: 900; }
   .editable-material-actions .danger-button { border-color: #fecdd3; background: #fff1f2; color: #be123c; }
   .material-edit-grid { border-top: 1px solid #e2e8f0; background: #fafbff; padding: 16px; }
@@ -6857,6 +6961,7 @@ const workspaceStyles = `
   .workspace-tabs button,
   .chip-list button,
   .secondary-action,
+  .pack-update-action,
   .direction-secondary-action,
   .visual-approve-button,
   .material-industry-toggle button,
@@ -6872,6 +6977,7 @@ const workspaceStyles = `
   .workspace-tabs button:hover,
   .chip-list button:hover,
   .secondary-action:hover,
+  .pack-update-action:hover,
   .direction-secondary-action:hover,
   .material-category-filter button:hover {
     border-color:var(--arch-accent-border);
@@ -7030,6 +7136,7 @@ const workspaceStyles = `
     box-shadow:0 20px 44px rgba(23,105,210,.24) !important;
   }
   .architecture-production-panel .heyy-production-card { border-color:var(--border) !important; }
+  .architecture-production-panel textarea { color:#17151f !important; }
   .architecture-production-panel .heyy-production-panel button[class*="violet"],
   .architecture-production-panel .heyy-production-panel [class*="text-violet"],
   .architecture-production-panel .heyy-production-panel [class*="border-violet"] { color:var(--blue) !important; border-color:var(--arch-accent-border) !important; }
@@ -7189,6 +7296,7 @@ const workspaceStyles = `
     .directions-generate-all { width: 100%; min-width: 0; }
     .direction-title-row { display: block; }
     .direction-cost { display: inline-flex; margin-top: 10px; }
+    .direction-primary-actions { grid-template-columns:1fr; }
     .direction-disclaimer { flex-direction: column; }
     .document-row { align-items: flex-start; flex-wrap: wrap; }
     .document-row .min-w-0 { min-width: calc(100% - 52px); }
@@ -7209,6 +7317,9 @@ const workspaceStyles = `
     .material-search-input { width: 100%; min-width: 0; }
     .stage-actions, .material-stage-actions, .plan-card-toolbar, .plan-workflow-card { width:100%; align-items:stretch; flex-direction:column; }
     .stage-actions button, .material-stage-actions > *, .plan-card-toolbar > *, .plan-workflow-card .credit-legend { width:100%; }
+    .workspace-tabs-shell { grid-template-columns:36px minmax(0,1fr) 36px; padding:4px; }
+    .workspace-tabs-arrow { width:34px; height:34px; }
+    .direction-primary-actions { grid-template-columns:1fr; }
     .plan-view-tabs { justify-content:stretch; }
     .plan-view-tabs button { flex:1; }
   }
@@ -7243,12 +7354,11 @@ function ImageGenerationOverlay({
   detail: string;
 }) {
   return (
-    <div className="image-generation-overlay" role="status" aria-live="polite">
-      <span className="image-generation-spinner" aria-hidden="true" />
-      <strong>{title}</strong>
-      <span>{detail}</span>
-      <div className="image-generation-progress"><i /></div>
-    </div>
+    <StudioVisualGenerationLoader
+      tone="architecture"
+      title={title}
+      detail={detail}
+    />
   );
 }
 

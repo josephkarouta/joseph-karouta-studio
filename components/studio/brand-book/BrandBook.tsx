@@ -1,13 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  ClipboardCheck,
-  Compass,
-  LayoutTemplate,
-  Palette,
-  type LucideIcon,
-} from "lucide-react";
 import BrandOverview from "@/components/studio/brand-book/BrandOverview";
 import BrandIdentitySystem from "@/components/studio/brand-book/BrandIdentitySystem";
 import BrandApplications from "@/components/studio/brand-book/BrandApplications";
@@ -18,7 +11,6 @@ type BrandBookTab = {
   id: string;
   label: string;
   helper: string;
-  Icon: LucideIcon;
 };
 
 export default function BrandBook({
@@ -42,34 +34,12 @@ export default function BrandBook({
   );
   const tabs = useMemo<BrandBookTab[]>(
     () => [
-      {
-        id: "foundation",
-        label: "Foundation",
-        helper: "Strategy and voice",
-        Icon: Compass,
-      },
-      {
-        id: "identity",
-        label: "Identity",
-        helper: "Visual rules",
-        Icon: Palette,
-      },
+      { id: "foundation", label: "Foundation", helper: "Strategy and voice" },
+      { id: "identity", label: "Identity", helper: "Visual rules" },
       ...(hasApplications
-        ? [
-            {
-              id: "applications",
-              label: "Applications",
-              helper: "Selected touchpoints",
-              Icon: LayoutTemplate,
-            },
-          ]
+        ? [{ id: "applications", label: "Applications", helper: "Selected touchpoints" }]
         : []),
-      {
-        id: "checklist",
-        label: "Checklist",
-        helper: "Readiness and handoff",
-        Icon: ClipboardCheck,
-      },
+      { id: "checklist", label: "Checklist", helper: "Readiness and handoff" },
     ],
     [hasApplications],
   );
@@ -83,42 +53,24 @@ export default function BrandBook({
 
   return (
     <div className="brand-book-workspace w-full min-w-0 overflow-hidden text-[#17151f]">
-      <nav className="relative z-10 mb-5 rounded-[22px] border border-violet-200 bg-white p-2 shadow-[0_12px_30px_rgba(55,30,83,.07)]">
-        <div className="flex gap-2 overflow-x-auto pb-0.5">
+      <nav className="relative z-10 mb-5 rounded-[18px] border border-slate-200 bg-white p-1.5 shadow-[0_10px_26px_rgba(55,30,83,.05)]">
+        <div className="flex gap-1.5 overflow-x-auto">
           {tabs.map((tab) => {
             const selected = activeTab === tab.id;
-            const Icon = tab.Icon;
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`group flex min-h-[58px] min-w-[185px] flex-1 items-center gap-3 rounded-[16px] border px-4 text-left transition-colors duration-150 ${
+                className={`min-h-[54px] min-w-[165px] flex-1 rounded-[13px] border px-4 text-left transition-colors duration-150 ${
                   selected
-                    ? "border-violet-700 bg-violet-700 text-white shadow-lg shadow-violet-700/20"
-                    : "border-transparent bg-slate-50 text-slate-600 hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+                    ? "border-violet-700 bg-violet-700 text-white"
+                    : "border-transparent bg-white text-slate-600 hover:border-violet-200 hover:bg-violet-50/60 hover:text-violet-700"
                 }`}
               >
-                <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] transition-colors duration-150 ${
-                    selected
-                      ? "bg-white/16 text-white"
-                      : "bg-white text-violet-700 shadow-sm"
-                  }`}
-                >
-                  <Icon size={17} strokeWidth={2.1} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[11px] font-black">
-                    {tab.label}
-                  </span>
-                  <span
-                    className={`mt-0.5 block truncate text-[9px] font-bold ${
-                      selected ? "text-white/70" : "text-slate-400"
-                    }`}
-                  >
-                    {tab.helper}
-                  </span>
+                <span className="block text-[11px] font-black">{tab.label}</span>
+                <span className={`mt-0.5 block text-[9px] font-bold ${selected ? "text-white/70" : "text-slate-400"}`}>
+                  {tab.helper}
                 </span>
               </button>
             );

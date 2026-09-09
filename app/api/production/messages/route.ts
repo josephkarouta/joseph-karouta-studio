@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
 
     if (unreadError) throw unreadError;
 
+    if (request.nextUrl.searchParams.get("summary") === "1") {
+      return NextResponse.json({ success: true, unreadCount: unreadCount || 0 });
+    }
+
     const now = new Date().toISOString();
     const { error: readError } = await admin
       .from("production_messages")
@@ -62,7 +66,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       messages,
-      unreadCount: unreadCount || 0,
+      unreadCount: 0,
     });
   } catch (error) {
     console.error("Load client production messages error:", error);

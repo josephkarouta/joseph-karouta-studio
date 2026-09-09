@@ -161,7 +161,7 @@ export const GUIDED_STUDIOS: Record<GuidedStudioId, GuidedStudioConfig> = {
         fields: [
           { id: "campaignName", label: "Campaign name", type: "text", required: true, placeholder: "e.g. Summer launch campaign" },
           { id: "business", label: "Business or brand", type: "text", required: true, placeholder: "Business name and what it sells" },
-          { id: "objective", label: "Primary objective", type: "select", required: true, options: ["Brand awareness", "Product launch", "Lead generation", "Online sales", "Store visits", "App installs", "Event registrations", "Customer retention"] },
+          { id: "objective", label: "Primary objective", type: "select", required: true, options: ["Brand awareness", "Product launch", "Lead generation", "Online sales", "Store visits", "App installs", "Event registrations", "Customer retention", "Other"] },
           { id: "offer", label: "Offer or key proposition", type: "textarea", required: true, placeholder: "What exactly are people being asked to consider, buy, book or do?" },
         ],
       },
@@ -194,7 +194,7 @@ export const GUIDED_STUDIOS: Record<GuidedStudioId, GuidedStudioConfig> = {
         fields: [
           { id: "campaignName", label: "Campaign name", type: "text", required: true, placeholder: "e.g. North America product launch" },
           { id: "business", label: "Business or brand", type: "text", required: true, placeholder: "Business name, category and offer" },
-          { id: "objective", label: "Primary objective", type: "select", required: true, options: ["Brand awareness", "Product launch", "Lead generation", "Online sales", "Store visits", "App installs", "Event registrations", "Customer retention"] },
+          { id: "objective", label: "Primary objective", type: "select", required: true, options: ["Brand awareness", "Product launch", "Lead generation", "Online sales", "Store visits", "App installs", "Event registrations", "Customer retention", "Other"] },
           { id: "offer", label: "Offer architecture", type: "textarea", required: true, placeholder: "The proposition, price or incentive, urgency, exclusions and the exact customer action." },
           { id: "market", label: "Markets and regions", type: "text", required: true, placeholder: "Countries, cities or service areas" },
           { id: "timeline", label: "Campaign timeline", type: "text", required: true, placeholder: "Launch date, phases and campaign duration" },

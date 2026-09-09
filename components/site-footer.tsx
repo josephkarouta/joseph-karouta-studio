@@ -21,7 +21,7 @@ const columns = [
       ["Pricing", "/#pricing"],
       ["Credit guide", "/credit-guide"],
       ["About", "/about"],
-      ["Careers", "/careers"],
+      ["Expert Network", "/expertsnetwork"],
     ],
   },
   {

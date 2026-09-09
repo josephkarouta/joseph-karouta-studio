@@ -115,7 +115,7 @@ export async function POST(request: Request) {
 }
 
 function testCtaPath(templateKey: string) {
-  if (templateKey === "career.application.received.client") return "/careers";
+  if (templateKey === "career.application.received.client" || templateKey === "expert.application.received.client") return "/expertsnetwork";
   if (templateKey === "career.application.received.admin") return "/admin/platform/applications";
   return "/dashboard";
 }

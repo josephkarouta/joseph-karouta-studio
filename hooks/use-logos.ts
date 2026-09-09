@@ -22,7 +22,7 @@ function latestAsset(assets: any[], types: string[]) {
 
 export function useLogos({ project, brand }: { project: any; brand: any }) {
   const { refreshAccount } = useAuth();
-  const { assets, addAsset } = useAssets();
+  const { assets, addAsset, refreshAssets } = useAssets();
   const { addActivity } = useActivity();
   const [loadingDirection, setLoadingDirection] = useState<number | null>(null);
   const [variationLoading, setVariationLoading] = useState<number | null>(null);
@@ -122,6 +122,10 @@ export function useLogos({ project, brand }: { project: any; brand: any }) {
         ? { id: uploaded.assetId }
         : await save(next, "logo_concept", `Logo Concept - ${direction.title || `Direction ${index + 1}`}`, index);
       addActivity({ id: saved.id, title: "Logo concept generated", description: `${direction.title || `Direction ${index + 1}`} now has a ${tier} logo concept.`, createdAt: "Now" });
+      // Server-side logo generation can create the project asset directly. Refresh
+      // the shared asset store immediately so Applications can use the selected
+      // logo without making the user click "Selected Direction" a second time.
+      await refreshAssets();
       await refreshAccount();
     } catch (generationError) {
       console.error(generationError);
@@ -153,6 +157,7 @@ export function useLogos({ project, brand }: { project: any; brand: any }) {
       if (!uploaded.assetId) {
         await save(next, "logo_variation", `Logo Variation - ${direction.title || `Direction ${index + 1}`}`, selectedLogoDirection);
       }
+      await refreshAssets();
       await refreshAccount();
     } catch (variationError) {
       console.error(variationError);

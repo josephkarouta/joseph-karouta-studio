@@ -12,7 +12,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-import BrandGenerationState from "@/components/studio/brand/common/BrandGenerationState";
+import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
 import BrandImageModal from "@/components/studio/brand/common/BrandImageModal";
 import { useActivity } from "@/hooks/use-activity";
 import { useAssets } from "@/hooks/use-assets";
@@ -112,9 +112,12 @@ function logoUrlFromAsset(asset: any) {
       : typeof payload?.directionIndex === "number"
         ? payload.directionIndex
         : 0;
-  const selectedConcept = Array.isArray(payload?.conceptsByDirection)
-    ? payload.conceptsByDirection[selectedIndex]
-    : null;
+  const conceptsByDirection = payload?.conceptsByDirection;
+  const selectedConcept = Array.isArray(conceptsByDirection)
+    ? conceptsByDirection[selectedIndex]
+    : conceptsByDirection && typeof conceptsByDirection === "object"
+      ? (conceptsByDirection[selectedIndex] ?? conceptsByDirection[String(selectedIndex)] ?? null)
+      : null;
 
   return firstNonEmptyUrl(
     assetUrl(asset),
@@ -205,8 +208,13 @@ function resolveApplicationReferences(
 
   let logoReferenceUrl: string | null = null;
   for (const type of logoPriority) {
-    const asset = assets.find((item) => item?.asset_type === type);
-    logoReferenceUrl = logoUrlFromAsset(asset);
+    // A project can contain older selection records without a file URL. Walk
+    // every matching asset newest-first and keep the first usable visual
+    // instead of stopping on a stale selection row.
+    for (const asset of assets.filter((item) => item?.asset_type === type)) {
+      logoReferenceUrl = logoUrlFromAsset(asset);
+      if (logoReferenceUrl) break;
+    }
     if (logoReferenceUrl) break;
   }
 
@@ -242,7 +250,7 @@ export default function BrandApplicationsWorkspace({
   brand: any;
 }) {
   const { refreshAccount } = useAuth();
-  const { assets, addAsset } = useAssets();
+  const { assets, addAsset, refreshAssets } = useAssets();
   const { addActivity } = useActivity();
   const journey = normaliseBrandJourney(brand, project);
   const selectedApplications = useMemo(
@@ -415,6 +423,15 @@ export default function BrandApplicationsWorkspace({
         ...current,
         [active.id]: { ...nextVisual, assetId: saved.id },
       }));
+
+      // The background generation route can persist the visual directly. Refresh the
+      // shared workspace asset store so Guidelines/Export see the new asset immediately
+      // instead of waiting for a full project reload.
+      try {
+        await refreshAssets();
+      } catch (refreshError) {
+        console.warn("Application visual saved but asset refresh failed:", refreshError);
+      }
 
       addActivity({
         id: saved.id,
@@ -711,16 +728,11 @@ export default function BrandApplicationsWorkspace({
                 <div className="grid min-w-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,.8fr)]">
                   <div className="relative min-h-[360px] bg-gradient-to-br from-slate-100 via-white to-violet-100 p-4">
                     {loadingId === active.id ? (
-                      <div className="flex h-full min-h-[330px] items-center justify-center rounded-[18px] border border-violet-200 bg-white">
-                        <BrandGenerationState
+                      <div className="relative h-full min-h-[330px] overflow-hidden rounded-[18px] border border-violet-200 bg-white">
+                        <StudioVisualGenerationLoader
+                          tone="brand"
                           title={`Generating ${active.label}`}
-                          steps={[
-                            "Reading the saved brand system",
-                            "Applying the application brief",
-                            "Using the selected logo or direction",
-                            "Generating the visual concept",
-                            "Saving it to project assets",
-                          ]}
+                          detail="Applying the saved brand system, selected direction and application brief."
                         />
                       </div>
                     ) : activeOutputs.length ? (

@@ -10,6 +10,8 @@ import { CreditPill, Eyebrow, PageContainer } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
+import StudioHero from "@/components/studio/common/StudioHero";
+import StudioCreationSummary from "@/components/studio/common/StudioCreationSummary";
 import { ClipboardList, DraftingCompass, HousePlus, PanelsTopLeft, PencilRuler, Upload } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { CREDIT_COSTS } from "@/lib/credits/config";
@@ -329,7 +331,7 @@ export default function ArchitectureStudioPage() {
     setStep((current) => Math.max(1, current - 1));
   }
 
-  async function uploadProjectFiles(projectId: string, userId: string) {
+  async function uploadProjectFiles(projectId: string, userId: string, uploadedPaths: string[]) {
     for (let index = 0; index < uploads.length; index += 1) {
       const item = uploads[index];
       const safeName = item.file.name
@@ -363,6 +365,8 @@ export default function ArchitectureStudioPage() {
         await supabase.storage.from("architecture-files").remove([storagePath]);
         throw documentError;
       }
+
+      uploadedPaths.push(storagePath);
     }
   }
 
@@ -394,6 +398,32 @@ export default function ArchitectureStudioPage() {
     };
   }
 
+  async function callWorkspaceCredit(
+    accessToken: string,
+    operation: "reserve" | "commit" | "refund" | "status",
+    input: { reservationId?: string; projectId?: string; reason?: string } = {},
+  ) {
+    const response = await fetch("/api/architecture/workspace-credits", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ operation, ...input }),
+    });
+    const payload = await response.json().catch(() => ({})) as {
+      success?: boolean;
+      error?: string;
+      reservationId?: string;
+      amount?: number;
+      status?: string;
+    };
+    if (!response.ok || payload.success === false) {
+      throw new Error(payload.error || "Architecture workspace credits could not be updated.");
+    }
+    return payload;
+  }
+
   async function createWorkspace() {
     const validationError = validateCurrentStep();
     if (validationError) {
@@ -411,8 +441,21 @@ export default function ArchitectureStudioPage() {
     setCreateMessage("Creating the architecture project...");
 
     let createdProjectId: string | null = null;
+    let creditReservationId: string | null = null;
+    const createdStoragePaths: string[] = [];
+    let accessToken = "";
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      accessToken = sessionData.session?.access_token || "";
+      if (!accessToken) throw new Error("Your session expired. Please sign in again.");
+
+      setCreateMessage(`Reserving ${CREDIT_COSTS.architectureWorkspace} workspace credits...`);
+      const creditReservation = await callWorkspaceCredit(accessToken, "reserve");
+      creditReservationId = String(creditReservation.reservationId || "");
+      if (!creditReservationId) throw new Error("Workspace credits could not be reserved.");
+
+      setCreateMessage("Creating the architecture project...");
       const workflowMode = mode === "build"
         ? "build_from_scratch"
         : inferUploadedWorkflow(sourceBrief.sourceType);
@@ -503,13 +546,48 @@ export default function ArchitectureStudioPage() {
 
       if (uploads.length > 0) {
         setCreateMessage(`Uploading ${uploads.length} project file${uploads.length === 1 ? "" : "s"}...`);
-        await uploadProjectFiles(project.id, user.id);
+        await uploadProjectFiles(project.id, user.id, createdStoragePaths);
       }
+
+      setCreateMessage("Confirming workspace credits...");
+      await callWorkspaceCredit(accessToken, "commit", {
+        reservationId: creditReservationId,
+        projectId: project.id,
+      });
+      window.dispatchEvent(new Event("heyy:credits-changed"));
 
       setCreateMessage("Opening the architecture workspace...");
       window.location.href = `/dashboard/architecture/${project.id}`;
     } catch (error) {
       console.error("Architecture project creation error:", error);
+
+      let reservationCommitted = false;
+      if (creditReservationId && accessToken) {
+        try {
+          const creditStatus = await callWorkspaceCredit(accessToken, "status", { reservationId: creditReservationId });
+          reservationCommitted = creditStatus.status === "committed";
+          if (creditStatus.status === "reserved") {
+            await callWorkspaceCredit(accessToken, "refund", {
+              reservationId: creditReservationId,
+              reason: error instanceof Error ? error.message : "Architecture workspace creation did not complete.",
+            });
+            window.dispatchEvent(new Event("heyy:credits-changed"));
+          }
+        } catch (creditCleanupError) {
+          console.error("Architecture workspace credit cleanup error:", creditCleanupError);
+        }
+      }
+
+      // If the server already committed the charge, the workspace itself completed.
+      // Keep the project rather than deleting paid work because of a lost client response.
+      if (reservationCommitted && createdProjectId) {
+        window.location.href = `/dashboard/architecture/${createdProjectId}`;
+        return;
+      }
+
+      if (createdStoragePaths.length) {
+        await supabase.storage.from("architecture-files").remove(createdStoragePaths);
+      }
 
       if (createdProjectId) {
         await supabase
@@ -552,32 +630,23 @@ export default function ArchitectureStudioPage() {
           )}
 
           <PageContainer className="architecture-wrap" aria-busy={creating}>
-            <section className="architecture-hero">
-              <div className="architecture-hero-ring" />
-              <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
-                <div className="max-w-4xl">
-                  <Eyebrow style={{ color: "#1676e8" }}>Site planning & architecture direction</Eyebrow>
-                  <h1 className="mt-4 text-4xl font-black leading-[.94] tracking-[-.06em] sm:text-6xl">Architecture Studio</h1>
-                  <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base">Start a new design or develop a sketch, plan, drawing, photo or model you already have. Guided and Professional modes share one connected project workspace.</p>
-                </div>
-                <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 backdrop-blur-xl">
-                  <StudioModeToggle
-                    value={workingMode}
-                    onChange={setWorkingMode}
-                    tone="architecture"
-                    compact
-                  />
+            <StudioHero
+              tone="architecture"
+              eyebrow="Site planning & architecture direction"
+              title="Architecture Studio"
+              description="Start a new design or develop a sketch, plan, drawing, photo or model you already have. Guided and Professional modes share one connected project workspace."
+              controls={(
+                <>
+                  <StudioModeToggle value={workingMode} onChange={setWorkingMode} tone="architecture" compact />
                   <div className="mt-3 flex items-center justify-between gap-3 px-1">
                     <span className="text-xs font-bold text-[var(--text-secondary)]">
-                      {workingMode === "guided"
-                        ? "Simple language and smart recommendations"
-                        : "Areas, structure, schedules and technical controls"}
+                      {workingMode === "guided" ? "Simple language and smart recommendations" : "Areas, structure, schedules and technical controls"}
                     </span>
                     <CreditPill credits={CREDIT_COSTS.architectureConcept} />
                   </div>
-                </div>
-              </div>
-            </section>
+                </>
+              )}
+            />
 
 
             <div ref={builderSectionRef} className="builder-grid scroll-mt-28">
@@ -701,68 +770,39 @@ export default function ArchitectureStudioPage() {
                       ? createMessage || "Creating workspace..."
                       : step === totalSteps
                         ? user
-                          ? "Create Architecture Workspace →"
+                          ? `Create Architecture Workspace · ${CREDIT_COSTS.architectureWorkspace} credits →`
                           : "Sign in to Create Workspace →"
                         : "Continue →"}
                   </button>
                 </div>
               </section>
 
-              <aside className="summary-panel">
-                <div className="summary-head">
-                  <div className="summary-icon">
-                    <SummaryIcon />
-                  </div>
-                  <p className="mt-5 text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">
-                    Project Summary
-                  </p>
-                  <h3 className="mt-2 text-2xl font-black tracking-[-0.035em]">
-                    {form.projectName || "New Architecture Project"}
-                  </h3>
-                </div>
-
-                <div className="summary-body">
-                  <SummaryRow label="Workflow" value={modeLabel(mode)} />
-                  <SummaryRow label="Working Mode" value={workingMode === "professional" ? "Professional Mode" : "Guided Mode"} />
-                  <SummaryRow
-                    label="Project Type"
-                    value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"}
-                  />
-                  <SummaryRow label="Scope" value={scope || "Not selected"} />
-                  <SummaryRow
-                    label="Location"
-                    value={[form.city, form.country].filter(Boolean).join(", ") || "Not added"}
-                  />
-                  <SummaryRow
-                    label="Land"
-                    value={
-                      landStart === "owned"
-                        ? form.plotArea
-                          ? `${form.plotArea} m²`
-                          : "Land selected"
-                        : landStart === "looking"
-                          ? "Looking for land"
-                          : "Exploring"
-                    }
-                  />
-                  <SummaryRow label="Style" value={selectedStyle || "Not selected"} />
-                  {mode === "upload" && (
-                    <SummaryRow label="Source Type" value={sourceBrief.sourceType || "Not selected"} />
-                  )}
-                  {mode === "upload" && (
-                    <SummaryRow label="Development Goal" value={sourceBrief.renderTarget || "Not selected"} />
-                  )}
-                  <SummaryRow
-                    label="Files"
-                    value={uploads.length ? `${uploads.length} selected` : "No files selected"}
-                  />
-
-                  <div className="warning">
-                    Planning and buildable-area information is conceptual guidance.
-                    Local authorities and licensed professionals must verify zoning,
-                    setbacks, compliance and approvals.
-                  </div>
-                </div>
+              <aside className="xl:sticky xl:top-[104px] xl:self-start">
+                <StudioCreationSummary
+                  tone="architecture"
+                  eyebrow="Project summary"
+                  title={form.projectName || "New Architecture Project"}
+                  subtitle={workingMode === "professional" ? "Professional architecture workspace" : "Guided architecture workspace"}
+                  progress={progress}
+                  rows={[
+                    { label: "Workflow", value: modeLabel(mode) },
+                    { label: "Working mode", value: workingMode === "professional" ? "Professional Mode" : "Guided Mode" },
+                    { label: "Project type", value: projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected" },
+                    { label: "Scope", value: scope || "Not selected" },
+                    { label: "Location", value: [form.city, form.country].filter(Boolean).join(", ") || "Not added" },
+                    { label: "Land", value: landStart === "owned" ? (form.plotArea ? `${form.plotArea} m²` : "Land selected") : landStart === "looking" ? "Looking for land" : "Exploring" },
+                    { label: "Style", value: selectedStyle || "Not selected" },
+                    ...(mode === "upload" ? [
+                      { label: "Source type", value: sourceBrief.sourceType || "Not selected" },
+                      { label: "Development goal", value: sourceBrief.renderTarget || "Not selected" },
+                    ] : []),
+                    { label: "Files", value: uploads.length ? `${uploads.length} selected` : "No files selected" },
+                  ]}
+                  note={{
+                    eyebrow: "Planning note",
+                    text: "Planning and buildable-area information is conceptual guidance. Local authorities and licensed professionals must verify zoning, setbacks, compliance and approvals.",
+                  }}
+                />
               </aside>
             </div>
           </PageContainer>
@@ -1255,7 +1295,7 @@ const architectureStyles = `
   [data-theme="dark"] .architecture-studio-page :is(input,textarea)::placeholder { color:var(--text-muted) !important; opacity:1; }
   [data-theme="dark"] .architecture-studio-page select option { background:#17141f; color:var(--text-primary); }
   @media (min-width:780px) { .working-mode-panel { grid-template-columns:minmax(240px,.7fr) minmax(0,1.3fr); align-items:center; } .working-mode-toggle { grid-template-columns:repeat(2,minmax(0,1fr)); } .mode-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .choice-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-  @media (min-width:1080px) { .builder-grid { grid-template-columns:minmax(0,1fr) 330px; align-items:start; } .summary-panel { position:sticky; top:104px; } }
+  @media (min-width:1080px) { .builder-grid { grid-template-columns:minmax(0,1fr) 340px; align-items:start; } }
   @media (max-width:720px) { .architecture-start-toggle { grid-template-columns:1fr; } .architecture-studio-page { padding:24px 0 56px; } .architecture-hero { padding:25px 20px; } .builder-panel { padding:20px 16px; } .primary-button, .secondary-button { width:100%; } }
 `;
 

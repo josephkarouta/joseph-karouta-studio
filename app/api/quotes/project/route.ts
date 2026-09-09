@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await admin
       .from("workspace_quotes")
-      .select("*")
+      .select("id,project_id,production_job_id,studio,title,description,amount,subtotal_amount,discount_amount,discount_label,currency,estimated_days,included_revisions,extra_revision_fee,status,service_id,service,studio_request_id,stripe_session_id,created_at,updated_at,paid_at")
       .eq("project_id", projectId)
       .in("studio_request_id", requestIds)
       .order("created_at", { ascending: false });

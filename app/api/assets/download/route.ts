@@ -35,9 +35,14 @@ function assetImages(asset: any) {
   output?.directions?.forEach((item: any) => add(item?.imageUrl || item?.image_url));
   output?.variations?.forEach((item: any) => add(item?.imageUrl || item?.image_url));
   output?.logos?.forEach((item: any) => add(item?.imageUrl || item?.image_url));
-  output?.conceptsByDirection?.forEach((item: any) =>
-    add(item?.imageUrl || item?.image_url),
-  );
+  const conceptsByDirection = output?.conceptsByDirection;
+  if (Array.isArray(conceptsByDirection)) {
+    conceptsByDirection.forEach((item: any) => add(item?.imageUrl || item?.image_url));
+  } else if (conceptsByDirection && typeof conceptsByDirection === "object") {
+    Object.values(conceptsByDirection).forEach((item: any) => add(item?.imageUrl || item?.image_url));
+  }
+  add(output?.selectedConcept?.imageUrl || output?.selectedConcept?.image_url);
+  add(output?.selectedLogo?.imageUrl || output?.selectedLogo?.image_url);
   output?.outputs?.forEach((item: any) =>
     add(item?.imageUrl || item?.image_url),
   );

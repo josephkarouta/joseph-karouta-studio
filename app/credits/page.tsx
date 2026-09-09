@@ -26,6 +26,50 @@ type Event = {
   metadata?: Record<string, unknown>;
 };
 
+
+function formatCreditAction(action: string, metadata?: Record<string, unknown>) {
+  const raw = String(action || "").trim();
+  const normalized = raw.replaceAll("_", "").replaceAll("-", "").toLowerCase();
+  const target = String(metadata?.target || "").trim().toLowerCase();
+  const stage = String(metadata?.stage || "").trim().toLowerCase();
+  const tool = String(metadata?.tool || "").trim().toLowerCase();
+  const planMode = String(metadata?.plan_mode || "").trim().toLowerCase();
+
+  const labels: Record<string, string> = {
+    architectureworkspace: "Architecture workspace setup",
+    architecturetext: stage === "plans" ? "Architecture Plan Foundation" : "Architecture text generation",
+    architecturedirection: "Architecture direction visual",
+    architectureconcept: tool === "directions" ? "Architecture direction text" : stage === "visuals" ? "Architecture concept visual briefs" : "Architecture concept brief",
+    architectureprofessionalfinal: planMode === "rendered" ? "Architecture rendered plan" : target === "direction" ? "Architecture direction visual" : target === "concept" ? "Architecture concept board" : "Architecture concept visual",
+    architecturevisual: "Architecture visual",
+    architecturetechnicalplan: "Architecture plan",
+    brandsystemtext: "Brand system",
+    branddirectiontext: "Brand creative directions",
+    brandlogoconcept: "Brand logo concept",
+    brandguidelines: "Brand guidelines",
+    brandapplicationvisual: "Brand application visual",
+    interiorconcept: "Interior concept",
+    interiorprofessionalconcept: "Interior concept",
+    interiortechnicalplan: "Interior plan",
+    interiorvisual: "Interior visual",
+    marketingcampaign: "Marketing campaign strategy",
+    marketingcreativepack: "Marketing creative strategy",
+    marketingprofessionalfinal: "Marketing visual",
+    texttoimagehigh: "Text to Image",
+    texttoimagepreview: "Text to Image",
+    imagetovideohigh: "Image to Video",
+    imagetovideopreview: "Image to Video",
+    digitaladaptationfamily: "Digital adaptation",
+    aiupscale2x: "AI Upscaler · 2×",
+    aiupscale4x: "AI Upscaler · 4×",
+    pdfutility: "PDF Tools",
+    fileconversion: "File Converter",
+  };
+
+  if (labels[normalized]) return labels[normalized];
+  return raw.replaceAll("_", " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
 export default function CreditsPage() {
   const { user, credits, refreshAccount } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
@@ -198,7 +242,7 @@ export default function CreditsPage() {
                     </span>
                     <div>
                       <p className="text-sm font-black capitalize">
-                        {event.action.replaceAll("_", " ")}
+                        {formatCreditAction(event.action, event.metadata)}
                       </p>
                       <p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">
                         {new Date(event.created_at).toLocaleString("en-US")}

@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
         questionMessage: String(currentQuestion.message || "").trim(),
         replyId: reply.id,
         replyMessage: reply.message,
+        productionOnly: Boolean(studioRequest.metadata?.production_only),
       },
     });
 

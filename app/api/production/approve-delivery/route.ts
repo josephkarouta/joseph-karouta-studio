@@ -1,8 +1,145 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
+import { Notifications } from "@/lib/notifications";
+import {
+  notifyAdminOperationalEvent,
+  notifyExpertOperationalEvent,
+} from "@/lib/expert-network/operational-notifications";
 
 const BLOCKING_REVISION_STATUSES = ["Requested", "In Progress"];
+
+async function reconcileExpertCompletion(admin: any, jobId: string, now = new Date().toISOString()) {
+  const { data: assignment, error } = await admin
+    .from("expert_assignments")
+    .select("id,status,payout_status,completed_at,payout_eligible_at")
+    .eq("production_job_id", jobId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!assignment || assignment.status === "cancelled") return assignment || null;
+
+  const update: Record<string, unknown> = {
+    status: "completed",
+    completed_at: assignment.completed_at || now,
+    updated_at: now,
+  };
+
+  if (assignment.payout_status === "pending") {
+    update.payout_status = "eligible";
+    update.payout_eligible_at = assignment.payout_eligible_at || now;
+  }
+
+  const { data: updated, error: updateError } = await admin
+    .from("expert_assignments")
+    .update(update)
+    .eq("id", assignment.id)
+    .select("id,status,payout_status,completed_at,payout_eligible_at")
+    .single();
+
+  if (updateError) throw updateError;
+  return updated;
+}
+
+async function sendFinalApprovalNotifications(
+  admin: any,
+  job: any,
+  finalDeliverableId?: string | null,
+) {
+  const metadata =
+    job?.metadata && typeof job.metadata === "object" && !Array.isArray(job.metadata)
+      ? job.metadata
+      : {};
+
+  const clientNotification = Notifications.emit({
+    event: "project.completed",
+    projectId: job.project_id,
+    projectName: job.project_name,
+    service: job.service,
+    studio: job.studio || job.assigned_studio,
+    userId: job.user_id,
+    clientName: job.client_name || null,
+    clientEmail: job.client_email || null,
+    metadata: {
+      serviceId: job.service_id || metadata.service_id || metadata.serviceId || null,
+      productionJobId: job.id,
+      status: "Completed",
+      finalDeliverableId: finalDeliverableId || null,
+      selectedScopes:
+        metadata.selected_production_scopes ||
+        metadata.project_context?.selected_production_scopes ||
+        null,
+      productionOnly: Boolean(metadata.production_only),
+    },
+  });
+
+  const { data: assignment, error: assignmentError } = await admin
+    .from("expert_assignments")
+    .select("id,expert_profile_id")
+    .eq("production_job_id", job.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (assignmentError) {
+    console.error("Final approval Expert assignment lookup failed:", assignmentError);
+  }
+
+  const adminNotification = notifyAdminOperationalEvent(admin, {
+    key: `client-final-approval-admin:${job.id}`,
+    type: "production.client_approved.admin",
+    projectName: job.project_name || null,
+    service: job.service || null,
+    studio: job.studio || job.assigned_studio || null,
+    title: "Client approved the final production package",
+    message: "The client approved the delivered files. The production review is complete and the project can move to final handoff and Expert payout tracking.",
+    status: "Client approved",
+    href: `/admin/production/${encodeURIComponent(job.id)}?tab=Expert&expertView=payout`,
+  });
+
+  let expertNotification: Promise<unknown> = Promise.resolve();
+  if (assignment?.expert_profile_id) {
+    const { data: expert, error: expertError } = await admin
+      .from("expert_profiles")
+      .select("user_id,email,full_name")
+      .eq("id", assignment.expert_profile_id)
+      .maybeSingle();
+
+    if (expertError) {
+      console.error("Final approval Expert profile lookup failed:", expertError);
+    } else if (expert) {
+      expertNotification = notifyExpertOperationalEvent(admin, {
+        key: `client-final-approval-expert:${job.id}`,
+        type: "expert.project.client_approved",
+        expertUserId: expert.user_id || null,
+        expertEmail: expert.email || null,
+        expertName: expert.full_name || "Expert",
+        projectName: job.project_name || null,
+        service: job.service || null,
+        studio: job.studio || job.assigned_studio || null,
+        title: "Client approved the final delivery",
+        message: "The client approved the final production package. Heyy Studio will now complete the project and handle payout tracking.",
+        status: "Client approved",
+        href: `/expert?section=projects&assignment=${encodeURIComponent(assignment.id)}&panel=files`,
+      });
+    }
+  }
+
+  const results = await Promise.allSettled([
+    clientNotification,
+    adminNotification,
+    expertNotification,
+  ]);
+
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error(
+        ["Client", "Admin", "Expert"][index] + " final approval notification failed:",
+        result.reason,
+      );
+    }
+  });
+}
 
 async function acceptWaitingRevision(
   admin: any,
@@ -50,13 +187,6 @@ async function acceptWaitingRevision(
     throw new Error("The revised production file could not be found.");
   }
 
-  const { error: clearFinalError } = await admin
-    .from("production_deliverables")
-    .update({ is_final: false })
-    .eq("production_job_id", jobId);
-
-  if (clearFinalError) throw clearFinalError;
-
   const { error: publishError } = await admin
     .from("production_deliverables")
     .update({
@@ -66,25 +196,6 @@ async function acceptWaitingRevision(
     .in("id", deliverableIds);
 
   if (publishError) throw publishError;
-
-  const finalFile = [...revisionFiles].sort((a: any, b: any) => {
-    const aDate = new Date(a.uploaded_at || 0).getTime();
-    const bDate = new Date(b.uploaded_at || 0).getTime();
-    if (aDate !== bDate) return bDate - aDate;
-    return Number(b.version || 1) - Number(a.version || 1);
-  })[0];
-
-  const { error: finalError } = await admin
-    .from("production_deliverables")
-    .update({
-      is_final: true,
-      is_latest: true,
-      client_visible: true,
-      published_at: now,
-    })
-    .eq("id", finalFile.id);
-
-  if (finalError) throw finalError;
 
   const { error: approveRevisionError } = await admin
     .from("workspace_revisions")
@@ -112,7 +223,7 @@ async function acceptWaitingRevision(
 
   return {
     revision: waitingRevision,
-    finalFile,
+    revisionFiles,
   };
 }
 
@@ -146,6 +257,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (job.client_approved_at) {
+      // Self-heal both the operational completion state and communication fan-out
+      // without changing the client's original approval timestamp.
+      await reconcileExpertCompletion(admin, job.id, job.client_approved_at);
+      await sendFinalApprovalNotifications(admin, job);
       return NextResponse.json({ success: true, job, alreadyApproved: true });
     }
 
@@ -172,24 +287,40 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString();
     const acceptedRevision = await acceptWaitingRevision(admin, job.id, now);
 
-    const { count: finalCount, error: finalError } = await admin
+    // The client's approved package is the source of truth for final files.
+    // Mark every latest client-visible deliverable as final so Admin does not
+    // have to manually "Mark Final" after the client already approved it.
+    const { data: approvedFiles, error: approvedFilesError } = await admin
       .from("production_deliverables")
-      .select("id", { count: "exact", head: true })
+      .select("id")
       .eq("production_job_id", job.id)
       .eq("client_visible", true)
-      .eq("is_final", true);
+      .eq("is_latest", true);
 
-    if (finalError) throw finalError;
+    if (approvedFilesError) throw approvedFilesError;
+    const approvedFileIds = (approvedFiles || []).map((item: any) => item.id).filter(Boolean);
 
-    if (!finalCount) {
+    if (!approvedFileIds.length) {
       return NextResponse.json(
         {
           success: false,
-          error: "A delivered final file is required before approving the project.",
+          error: "Delivered client files are required before approving the project.",
         },
         { status: 400 },
       );
     }
+
+    const { error: clearFinalError } = await admin
+      .from("production_deliverables")
+      .update({ is_final: false })
+      .eq("production_job_id", job.id);
+    if (clearFinalError) throw clearFinalError;
+
+    const { error: markFinalError } = await admin
+      .from("production_deliverables")
+      .update({ is_final: true })
+      .in("id", approvedFileIds);
+    if (markFinalError) throw markFinalError;
 
     const { data: updatedJob, error: updateError } = await admin
       .from("production_jobs")
@@ -215,6 +346,8 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (currentError) throw currentError;
+      await reconcileExpertCompletion(admin, currentJob.id, currentJob.client_approved_at || now);
+      await sendFinalApprovalNotifications(admin, currentJob);
       return NextResponse.json({
         success: true,
         job: currentJob,
@@ -252,11 +385,23 @@ export async function POST(request: NextRequest) {
 
     if (messageError) throw messageError;
 
+    // Final client approval closes the Expert assignment and makes a pending
+    // manual payout eligible. Paid/held payout states are never overwritten.
+    await reconcileExpertCompletion(admin, job.id, now);
+
+    // Completion communication is non-destructive and idempotent. It is sent
+    // only after the approval state, timeline, system message and Expert state are durable.
+    await sendFinalApprovalNotifications(
+      admin,
+      updatedJob,
+      approvedFileIds[0] || null,
+    );
+
     return NextResponse.json({
       success: true,
       job: updatedJob,
       acceptedRevisionId: acceptedRevision?.revision?.id || null,
-      finalDeliverableId: acceptedRevision?.finalFile?.id || null,
+      finalDeliverableId: approvedFileIds[0] || null,
     });
   } catch (error) {
     console.error("Approve final delivery error:", error);

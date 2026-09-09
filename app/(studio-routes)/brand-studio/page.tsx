@@ -28,6 +28,9 @@ import { CreditPill, Eyebrow, PageContainer } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import HeyyMultiSelect from "@/components/ui/heyy-multi-select";
 import StudioLoader from "@/components/ui/StudioLoader";
+import StudioModeToggle from "@/components/ui/StudioModeToggle";
+import StudioHero from "@/components/studio/common/StudioHero";
+import StudioCreationSummary from "@/components/studio/common/StudioCreationSummary";
 import AuthModal from "@/app/AuthModal";
 import StudioAccessGate from "@/components/studio-access-gate";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -433,6 +436,7 @@ export default function BrandStudioPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState("");
+  const [workMode, setWorkMode] = useState<"guided" | "professional">("guided");
 
   const [journeyId, setJourneyId] = useState<BrandJourneyId>("new-brand");
   const [businessName, setBusinessName] = useState("");
@@ -507,6 +511,7 @@ export default function BrandStudioPage() {
       website: businessWebsite.trim(),
     },
     projectName: businessName.trim() || "Brand Project",
+    workMode,
   });
   const activeLoadingSteps = shouldGenerateBrandBlueprint(draftJourney)
     ? BLUEPRINT_LOADING_STEPS
@@ -779,12 +784,14 @@ export default function BrandStudioPage() {
       return;
     }
 
-    for (const application of selectedApplications) {
-      const requiredFields = (BRAND_APPLICATION_FIELDS[application.id] || []).filter((field) => field.required);
-      const missing = requiredFields.find((field) => !applicationBriefs[application.id]?.[field.id]?.trim());
-      if (missing) {
-        setError(`Complete ${application.label}: ${missing.label}.`);
-        return;
+    if (workMode === "professional") {
+      for (const application of selectedApplications) {
+        const requiredFields = (BRAND_APPLICATION_FIELDS[application.id] || []).filter((field) => field.required);
+        const missing = requiredFields.find((field) => !applicationBriefs[application.id]?.[field.id]?.trim());
+        if (missing) {
+          setError(`Complete ${application.label}: ${missing.label}.`);
+          return;
+        }
       }
     }
 
@@ -822,6 +829,7 @@ export default function BrandStudioPage() {
           website: businessWebsite.trim(),
         },
         projectName: businessName.trim(),
+        workMode,
       });
 
       const requestPayload = {
@@ -946,27 +954,27 @@ export default function BrandStudioPage() {
     <main className="heyy-page brand-studio-v13 min-h-screen py-8 sm:py-10">
       <style>{`
         .brand-studio-v13 { --brand-accent:#a13df0; --brand-accent-strong:#c88cff; --brand-soft:rgba(190,89,235,.15); }
-        .brand-choice[data-selected="true"] {
+        .brand-studio-v13 .brand-choice[data-selected="true"] {
           border-color: var(--brand-accent) !important;
           background: linear-gradient(135deg,rgba(161,61,240,.18),var(--surface-strong)) !important;
-          box-shadow: 0 0 0 3px var(--brand-soft) !important;
+          box-shadow: 0 0 0 2px rgba(161,61,240,.22) !important;
         }
-        .brand-choice[data-selected="true"] .brand-choice-mark {
+        .brand-studio-v13 .brand-choice[data-selected="true"] .brand-choice-mark {
           background: var(--brand-accent) !important;
           color:#fff !important;
         }
-        .brand-choice[data-selected="true"] .brand-choice-mark svg {
+        .brand-studio-v13 .brand-choice[data-selected="true"] .brand-choice-mark svg {
           color:#fff !important;
           stroke:#fff !important;
         }
         .brand-choice:hover { border-color:var(--brand-accent) !important; background:var(--surface-hover) !important; }
-        .brand-compact-choice[data-selected="true"] {
+        .brand-studio-v13 .brand-compact-choice[data-selected="true"] {
           border-color: var(--brand-accent) !important;
           background: var(--brand-accent) !important;
           color: #fff !important;
           box-shadow: 0 0 0 3px var(--brand-soft) !important;
         }
-        .brand-compact-choice[data-selected="true"] span { color:#fff !important; }
+        .brand-studio-v13 .brand-compact-choice[data-selected="true"] span { color:#fff !important; }
         .brand-studio-v13 .bg-white { background:var(--surface-strong) !important; }
         .brand-studio-v13 .bg-slate-50 { background:var(--surface) !important; }
         .brand-studio-v13 .border-slate-100, .brand-studio-v13 .border-slate-200 { border-color:var(--border) !important; }
@@ -1001,22 +1009,23 @@ export default function BrandStudioPage() {
       `}</style>
 
       <PageContainer>
-        <section className="relative overflow-hidden rounded-[2rem] border p-6 shadow-[var(--shadow-card)] sm:p-9" style={{ borderColor:"rgba(190,89,235,.34)", background:"linear-gradient(120deg,rgba(190,89,235,.16),var(--surface-strong),rgba(239,63,180,.08))" }}>
-          <div className="absolute -right-14 -top-20 h-56 w-56 rounded-full border-[34px] border-white/20" />
-          <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-4xl">
-              <Eyebrow style={{ color:"#a13df0" }}>Strategy, identity & brand applications</Eyebrow>
-              <h1 className="mt-4 text-4xl font-black leading-[.94] tracking-[-.06em] sm:text-6xl">Brand Studio</h1>
-              <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base">Build a complete brand system or one focused deliverable inside a clear, connected workspace.</p>
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 backdrop-blur-xl">
-              <CreditPill credits={CREDIT_COSTS.brandSystemText} />
-              <span className="text-xs font-bold text-[var(--text-secondary)]">for a full brand blueprint</span>
-            </div>
-          </div>
-        </section>
+        <StudioHero
+          tone="brand"
+          eyebrow="Strategy, identity & brand applications"
+          title="Brand Studio"
+          description="Build a complete brand system or one focused deliverable inside a clear, connected workspace."
+          controls={(
+            <>
+              <StudioModeToggle value={workMode} onChange={setWorkMode} tone="brand" compact />
+              <div className="mt-3 flex items-center justify-between gap-3 px-1">
+                <span className="text-xs font-bold leading-5 text-[var(--text-secondary)]">{workMode === "guided" ? "Simple brand questions and a complete starting direction" : "Full brand intake with application and production details"}</span>
+                <CreditPill credits={CREDIT_COSTS.brandSystemText} />
+              </div>
+            </>
+          )}
+        />
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <section className="space-y-6">
             <Panel eyebrow="01 · Project Goal" title="What are you creating?" description="Choose one clear starting point. The next questions adapt to the goal, so you only see what this project needs.">
               <div className="grid gap-3 md:grid-cols-2">
@@ -1124,7 +1133,7 @@ export default function BrandStudioPage() {
                 </Field>
               </div>
 
-              <div className="brand-soft-panel rounded-[20px] border p-4 sm:p-5">
+              {workMode === "professional" && <div className="brand-soft-panel rounded-[20px] border p-4 sm:p-5">
                 <div>
                   <p className="brand-soft-eyebrow text-[8px] font-black uppercase tracking-[0.16em]">Shared application details</p>
                   <p className="brand-soft-copy mt-1 text-xs font-semibold leading-5">Add these once. Heyy Studio will automatically prefill matching Business Card, Letterhead, Envelope and Email Signature fields without overwriting your manual edits.</p>
@@ -1145,7 +1154,7 @@ export default function BrandStudioPage() {
                     </Field>
                   </div>
                 </div>
-              </div>
+              </div>}
 
               <Field label="What should the brand achieve?">
                 <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the business goal, what people should understand or feel, important competitors, preferences and anything the creative team should know." className="brand-input min-h-[118px] resize-y" />
@@ -1277,7 +1286,7 @@ export default function BrandStudioPage() {
               )}
             </Panel>
 
-            {selectedApplications.length > 0 && (
+            {workMode === "professional" && selectedApplications.length > 0 && (
               <Panel eyebrow={`${applicationStepNumber} · Application Details`} title={selectedApplications.length === 1 ? `Tell us what goes on the ${selectedApplications[0].label}` : "Add the content for each selected application"} description="These details stay attached to the exact item. They do not create a full rebrand or unrelated guideline project.">
                 <div className="grid gap-5">
                   {selectedApplications.map((application) => (
@@ -1320,7 +1329,7 @@ export default function BrandStudioPage() {
               <div>
                 <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-600">Ready</p>
                 <h2 className="mt-1 text-xl font-black text-slate-950">Create only the workspace this project needs</h2>
-                <p className="mt-1 text-sm text-slate-500">Text strategy is created first. Images are generated later only when requested.</p>
+                <p className="mt-1 text-sm text-slate-500">{workMode === "guided" ? "Start with the essentials. You can add application details later inside the project." : "Text strategy is created first. Images are generated later only when requested."}</p>
               </div>
               <button type="button" onClick={handleBuildBrand} disabled={isGenerating} className="min-h-12 rounded-full bg-violet-700 px-6 text-sm font-black text-white shadow-lg shadow-violet-700/20 transition hover:-translate-y-0.5 hover:bg-violet-800 disabled:cursor-wait disabled:opacity-50">
                 {isGenerating ? "Creating Workspace…" : `${selectedApplications.length === 1 ? `Create ${selectedApplications[0].label} Workspace` : "Create Brand Workspace"}${shouldGenerateBrandBlueprint(draftJourney) ? ` · ${CREDIT_COSTS.brandSystemText} credits` : ""}`}
@@ -1329,37 +1338,32 @@ export default function BrandStudioPage() {
           </section>
 
           <aside className="xl:sticky xl:top-28 xl:self-start">
-            <section className="overflow-hidden rounded-[28px] border border-violet-200 bg-white shadow-[0_20px_50px_rgba(63,30,94,.1)]">
-              <header className="bg-gradient-to-br from-violet-700 to-fuchsia-600 p-5 text-white">
-                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/70">Your selected journey</p>
-                <h2 className="mt-2 text-2xl font-black tracking-[-0.04em]">{journey.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-white/80">{journey.helper}</p>
-              </header>
-              <div className="p-5">
-                <div className="grid gap-2">
-                  <SummaryRow label="Creative direction" value={draftJourney.includeCreativeDirections ? "3 text directions first" : "Not included"} />
-                  <SummaryRow label="Logo" value={LOGO_DECISIONS.find((item) => item.id === logoAction)?.label || "No logo work"} />
-                  <SummaryRow label="Selected items" value={`${dynamicSummary.length} item${dynamicSummary.length === 1 ? "" : "s"}`} />
-                </div>
-
-                <div className="mt-5 border-t border-slate-100 pt-4">
-                  <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">Workspace includes</p>
-                  <div className="mt-3 grid gap-2">
-                    {workspaceSummary.length ? workspaceSummary.map((item) => (
-                      <div key={item} className="flex items-center gap-3 rounded-[13px] bg-slate-50 px-3 py-2.5">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-[8px] bg-violet-100 text-[10px] font-black text-violet-700">✓</span>
-                        <span className="text-xs font-bold text-slate-700">{item}</span>
-                      </div>
-                    )) : <p className="text-xs leading-5 text-slate-500">Add the exact custom scope to prepare the project journey.</p>}
+            <StudioCreationSummary
+              tone="brand"
+              eyebrow="Your selected journey"
+              title={journey.title}
+              subtitle={journey.helper}
+              rows={[
+                { label: "Mode", value: workMode === "guided" ? "Guided" : "Professional" },
+                { label: "Creative direction", value: draftJourney.includeCreativeDirections ? "3 text directions first" : "Not included" },
+                { label: "Logo", value: LOGO_DECISIONS.find((item) => item.id === logoAction)?.label || "No logo work" },
+                { label: "Selected items", value: `${dynamicSummary.length} item${dynamicSummary.length === 1 ? "" : "s"}` },
+              ]}
+              note={{
+                eyebrow: "Transparent workflow",
+                text: "AI creates strategy and concept previews. Final vector, editable and print-ready assets remain available through Heyy Studio Experts.",
+              }}
+            >
+              <p className="text-[.56rem] font-black uppercase tracking-[.16em] text-[var(--text-muted)]">Workspace includes</p>
+              <div className="mt-3 grid gap-2">
+                {workspaceSummary.length ? workspaceSummary.map((item) => (
+                  <div key={item} className="flex items-center gap-3 rounded-[13px] bg-[var(--surface)] px-3 py-2.5">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-[8px] bg-[var(--accent-soft)] text-[10px] font-black text-[var(--accent-strong)]">✓</span>
+                    <span className="text-xs font-bold text-[var(--text-primary)]">{item}</span>
                   </div>
-                </div>
-
-                <div className="mt-5 rounded-[16px] border border-amber-200 bg-amber-50 p-4">
-                  <p className="text-[8px] font-black uppercase tracking-[0.15em] text-amber-700">Transparent workflow</p>
-                  <p className="mt-1 text-xs leading-5 text-amber-800">AI creates strategy and concept previews. Final vector, editable and print-ready assets remain available through Heyy Studio Experts.</p>
-                </div>
+                )) : <p className="text-xs leading-5 text-[var(--text-secondary)]">Add the exact custom scope to prepare the project journey.</p>}
               </div>
-            </section>
+            </StudioCreationSummary>
           </aside>
         </div>
       </PageContainer>

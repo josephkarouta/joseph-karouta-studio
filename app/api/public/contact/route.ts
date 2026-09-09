@@ -21,7 +21,7 @@ const TOPIC_LABELS: Record<string, string> = {
   general: "General Inquiry",
   billing: "Billing & Payments",
   technical: "Technical Support",
-  careers: "Careers",
+  careers: "Expert Network",
   partnership: "Partnership / Business",
   other: "Other",
 };
@@ -60,6 +60,11 @@ export async function POST(request: Request) {
     const subject = cleanText(parsed.subject, 160);
     const message = cleanMultiline(parsed.message, 5000);
     const topicLabel = TOPIC_LABELS[topic];
+    const linkedProjectId = cleanText(parsed.projectId, 100);
+    const linkedProjectName = cleanText(parsed.projectName, 180);
+    const linkedStudio = cleanText(parsed.studio, 80);
+    const linkedServiceId = cleanText(parsed.serviceId, 120);
+    const sourceJobId = cleanText(parsed.sourceJobId, 100);
 
     if (!name) throw new ContactInputError("Enter your name before sending.");
     if (!isValidEmail(email)) throw new ContactInputError("Enter a valid email address before sending.");
@@ -78,6 +83,22 @@ export async function POST(request: Request) {
 
     admin = createClient(url, key, { auth: { persistSession: false } });
     const userId = await resolveAuthenticatedUserId(admin, request);
+    if (topic === "expert" && !userId) {
+      throw new ContactInputError("Sign in or create a Heyy Studio account before sending an Expert / Project Request.");
+    }
+
+    const baseMetadata = {
+      subject,
+      company: company || null,
+      topic_key: topic,
+      project_id: linkedProjectId || null,
+      project_name: linkedProjectName || null,
+      studio: linkedStudio || null,
+      service_id: linkedServiceId || null,
+      source_job_id: sourceJobId || null,
+      source: linkedProjectId ? "completed_production_contact" : "public_contact_page",
+      user_agent: request.headers.get("user-agent"),
+    };
 
     const { data, error } = await admin
       .from("contact_submissions")
@@ -88,15 +109,11 @@ export async function POST(request: Request) {
         topic: topicLabel,
         message,
         metadata: {
-          subject,
-          company: company || null,
-          topic_key: topic,
+          ...baseMetadata,
           attachment_count: attachments.length,
           attachment_names: attachments.map((attachment) => attachment.name),
           attachment_sizes: attachments.map((attachment) => attachment.size),
           attachments: [],
-          source: "public_contact_page",
-          user_agent: request.headers.get("user-agent"),
         },
       })
       .select("id")
@@ -115,15 +132,11 @@ export async function POST(request: Request) {
         .from("contact_submissions")
         .update({
           metadata: {
-            subject,
-            company: company || null,
-            topic_key: topic,
+            ...baseMetadata,
             attachment_count: storedAttachments.length,
             attachment_names: storedAttachments.map((attachment) => attachment.name),
             attachment_sizes: storedAttachments.map((attachment) => attachment.size),
             attachments: storedAttachments,
-            source: "public_contact_page",
-            user_agent: request.headers.get("user-agent"),
           },
         })
         .eq("id", submissionId);
@@ -141,6 +154,7 @@ export async function POST(request: Request) {
       topicLabel,
       subject,
       message,
+      linkedProjectName,
       attachments,
     });
 
@@ -183,6 +197,11 @@ async function parseRequest(request: Request) {
       subject: String(form.get("subject") || ""),
       message: String(form.get("message") || ""),
       website: String(form.get("website") || ""),
+      projectId: String(form.get("project_id") || ""),
+      projectName: String(form.get("project_name") || ""),
+      studio: String(form.get("studio") || ""),
+      serviceId: String(form.get("service_id") || ""),
+      sourceJobId: String(form.get("source_job_id") || ""),
       attachments: form.getAll("attachments").filter((value): value is File => value instanceof File && value.size > 0),
     };
   }
@@ -201,6 +220,11 @@ async function parseRequest(request: Request) {
     subject: String(body?.subject || body?.topic || "General inquiry"),
     message: String(body?.message || ""),
     website: String(body?.website || ""),
+    projectId: String(body?.project_id || body?.projectId || ""),
+    projectName: String(body?.project_name || body?.projectName || ""),
+    studio: String(body?.studio || ""),
+    serviceId: String(body?.service_id || body?.serviceId || ""),
+    sourceJobId: String(body?.source_job_id || body?.sourceJobId || ""),
     attachments: [] as File[],
   };
 }
@@ -310,6 +334,7 @@ async function sendContactEmails({
   topicLabel,
   subject,
   message,
+  linkedProjectName,
   attachments,
 }: {
   id: string;
@@ -319,6 +344,7 @@ async function sendContactEmails({
   topicLabel: string;
   subject: string;
   message: string;
+  linkedProjectName: string;
   attachments: PreparedAttachment[];
 }) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -342,6 +368,7 @@ async function sendContactEmails({
       company ? { label: "Company", value: company } : null,
       { label: "Inquiry type", value: topicLabel },
       { label: "Subject", value: subject },
+      linkedProjectName ? { label: "Linked project", value: linkedProjectName } : null,
       { label: "Message", value: message },
       { label: "Reference", value: reference },
       attachments.length ? { label: "Attachments", value: attachments.map((item) => item.name).join(", ") } : null,
@@ -361,6 +388,7 @@ async function sendContactEmails({
     details: [
       { label: "Inquiry type", value: topicLabel },
       { label: "Subject", value: subject },
+      linkedProjectName ? { label: "Linked project", value: linkedProjectName } : null,
       { label: "Reference", value: reference },
       attachments.length ? { label: "Files received", value: `${attachments.length} attachment${attachments.length === 1 ? "" : "s"}` } : null,
     ].filter((item): item is { label: string; value: string } => Boolean(item)),

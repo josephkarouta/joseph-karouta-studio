@@ -36,21 +36,90 @@ async function rowsForUser(admin: SupabaseClient, table: string, userId: string)
   return (data || []) as Row[];
 }
 
-async function hasProductionForProject(admin: SupabaseClient, projectId: string) {
-  for (const table of ["production_jobs", "workspace_quotes", "studio_requests"]) {
-    const { data, error } = await admin
-      .from(table)
-      .select("id")
-      .eq("project_id", projectId)
-      .limit(1);
-    if (error) {
-      if (ignoreMissing(error)) continue;
-      console.warn(`Production lookup failed for ${table}:`, error.message);
-      continue;
-    }
-    if (data?.length) return true;
+type ProductionOverview = {
+  hasHistory: boolean;
+  status: string | null;
+};
+
+function rowTime(row: Row | null | undefined) {
+  const value = row?.updated_at || row?.created_at;
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function requestStatusLabel(status: unknown) {
+  const value = String(status || "").trim().toLowerCase();
+  if (value.includes("paid") || value.includes("converted")) return "Payment confirmed";
+  if (value.includes("quote") && (value.includes("sent") || value.includes("ready"))) return "Awaiting payment";
+  if (value.includes("review") || value.includes("sourc") || value.includes("request")) return "Production requested";
+  return "Production requested";
+}
+
+function jobStatusLabel(job: Row) {
+  const combined = `${job.status || ""} ${job.delivery_status || ""}`.toLowerCase();
+  if (job.client_approved_at || combined.includes("client approved") || combined.includes("completed") || combined.includes("delivered")) {
+    return "Production completed";
   }
-  return false;
+  if (combined.includes("review") || combined.includes("ready for review") || combined.includes("submitted")) {
+    return "Client review";
+  }
+  if (combined.includes("progress") || combined.includes("started") || combined.includes("assigned") || combined.includes("active")) {
+    return "In production";
+  }
+  return "Production active";
+}
+
+async function productionOverviewForUser(admin: SupabaseClient, userId: string) {
+  const [jobsResult, requestsResult, quotesResult] = await Promise.all([
+    admin
+      .from("production_jobs")
+      .select("project_id,status,delivery_status,client_approved_at,created_at,updated_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    admin
+      .from("studio_requests")
+      .select("project_id,status,created_at,updated_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    admin
+      .from("workspace_quotes")
+      .select("project_id,created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const safeRows = (result: any) => {
+    if (result.error) {
+      if (ignoreMissing(result.error)) return [] as Row[];
+      console.warn("Project production overview lookup failed:", result.error.message);
+      return [] as Row[];
+    }
+    return (result.data || []) as Row[];
+  };
+
+  const jobs = safeRows(jobsResult);
+  const requests = safeRows(requestsResult);
+  const quotes = safeRows(quotesResult);
+  const projectIds = new Set<string>();
+  for (const row of [...jobs, ...requests, ...quotes]) {
+    if (row.project_id) projectIds.add(String(row.project_id));
+  }
+
+  const overview = new Map<string, ProductionOverview>();
+  for (const projectId of projectIds) {
+    const latestJob = jobs.find((row) => String(row.project_id || "") === projectId) || null;
+    const latestRequest = requests.find((row) => String(row.project_id || "") === projectId) || null;
+    const requestIsNewer = Boolean(latestRequest && rowTime(latestRequest) > rowTime(latestJob));
+
+    let status: string | null = null;
+    if (requestIsNewer) status = requestStatusLabel(latestRequest?.status);
+    else if (latestJob) status = jobStatusLabel(latestJob);
+    else if (latestRequest) status = requestStatusLabel(latestRequest.status);
+
+    overview.set(projectId, { hasHistory: true, status });
+  }
+
+  return overview;
 }
 
 export async function listAccountProjects(
@@ -93,16 +162,19 @@ export async function listAccountProjects(
       })),
   ];
 
-  const productionFlags = await Promise.all(
-    base.map((project) => hasProductionForProject(productionClient, project.id)),
-  );
+  const productionOverview = await productionOverviewForUser(productionClient, userId);
 
   return base
-    .map((project, index) => ({
-      ...project,
-      hasProductionHistory: productionFlags[index],
-      canDelete: !productionFlags[index],
-    }))
+    .map((project) => {
+      const production = productionOverview.get(project.id);
+      const hasProductionHistory = Boolean(production?.hasHistory);
+      return {
+        ...project,
+        status: production?.status || project.status,
+        hasProductionHistory,
+        canDelete: !hasProductionHistory,
+      };
+    })
     .sort((a, b) => {
       const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;

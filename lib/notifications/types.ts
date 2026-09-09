@@ -1,10 +1,13 @@
 export type NotificationEvent =
   | "production.requested"
   | "quote.ready"
+  | "quote.updated"
   | "quote.replied"
   | "production.message.client"
   | "production.message.studio"
   | "payment.received"
+  | "production.addon.ready"
+  | "production.addon.paid"
   | "production.assigned"
   | "production.started"
   | "production.review"

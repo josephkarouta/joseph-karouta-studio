@@ -54,6 +54,9 @@ type Props = {
   payments: any[];
   contacts: any[];
   applications: any[];
+  expertOpportunities: any[];
+  expertAssignments: any[];
+  expertSubmissions: any[];
   initialTab?: AdminTab;
 };
 
@@ -117,6 +120,9 @@ export default function AdminCommandCenter({
   payments,
   contacts,
   applications,
+  expertOpportunities,
+  expertAssignments,
+  expertSubmissions,
   initialTab = "overview",
 }: Props) {
   const router = useRouter();
@@ -142,6 +148,20 @@ export default function AdminCommandCenter({
     });
     return map;
   }, [quotes]);
+
+  const expertOpportunityByRequest = useMemo(() => {
+    const map = new Map<string, any>();
+    const rank: Record<string, number> = { selected: 4, quoted: 3, requested: 2, closed: 1 };
+    expertOpportunities.forEach((item) => {
+      const requestId = String(item.studio_request_id || "");
+      if (!requestId) return;
+      const current = map.get(requestId);
+      if (!current || (rank[String(item.status || "").toLowerCase()] || 0) > (rank[String(current.status || "").toLowerCase()] || 0)) {
+        map.set(requestId, item);
+      }
+    });
+    return map;
+  }, [expertOpportunities]);
 
   const requestServiceOptions = useMemo(() => uniqueOptions(
     requests.map((request) => request.service || request.metadata?.service),
@@ -243,6 +263,27 @@ export default function AdminCommandCenter({
     ),
   );
 
+  const expertQuotesWaiting = expertOpportunities.filter(
+    (item) => String(item.status || "").toLowerCase() === "requested" && item.studio_request_id,
+  );
+  const expertQuotesReady = expertOpportunities.filter(
+    (item) => String(item.status || "").toLowerCase() === "quoted" && item.studio_request_id,
+  );
+  const expertCostingRequestIds = new Set(
+    expertOpportunities
+      .filter((item) =>
+        ["requested", "quoted", "selected"].includes(String(item.status || "").toLowerCase()) &&
+        item.studio_request_id,
+      )
+      .map((item) => String(item.studio_request_id)),
+  );
+  const expertSubmissionsToReview = expertSubmissions.filter(
+    (item) => String(item.status || "").toLowerCase() === "submitted",
+  );
+  const expertPayoutsDue = expertAssignments.filter(
+    (item) => String(item.payout_status || "").toLowerCase() === "eligible",
+  );
+
   const paidPayments = payments.filter((payment) =>
     ["paid", "succeeded", "completed"].includes(
       String(payment.status || "").toLowerCase(),
@@ -270,7 +311,7 @@ export default function AdminCommandCenter({
           (unreadMessageCounts.get(String(job.id)) || 0) === 1 ? "" : "s"
         } waiting for a reply.`,
         eyebrow: "Client message",
-        href: `/admin/production/${job.id}?tab=Communication`,
+        href: `/admin/production/${job.id}?tab=Client`,
         action: "Open conversation",
         icon: MessageSquare,
         tone: "purple" as const,
@@ -284,7 +325,7 @@ export default function AdminCommandCenter({
       description:
         revision.message || "A client revision request needs a studio response.",
       eyebrow: "Revision requested",
-      href: `/admin/production/${revision.production_job_id}?tab=Workbench`,
+      href: `/admin/production/${revision.production_job_id}?tab=Expert&expertView=packages`,
       action: "Review revision",
       icon: FileCheck2,
       tone: "amber" as const,
@@ -322,13 +363,52 @@ export default function AdminCommandCenter({
         title: job.project_name || job.service || "Production review",
         description: "This job is at a review or approval stage.",
         eyebrow: "Review stage",
-        href: `/admin/production/${job.id}`,
-        action: "Open production",
+        href: `/admin/production/${job.id}?tab=Expert&expertView=packages`,
+        action: "Open review",
         icon: CheckCircle2,
         tone: "green" as const,
         studio: job.studio || job.assigned_studio,
         createdAt: job.updated_at || job.created_at,
       }));
+
+    const expertQuoteItems = expertQuotesReady
+      .filter((item) => item.studio_request_id)
+      .map((item) => ({
+        id: `expert-quote-${item.id}`,
+        title: item.shared_scope?.projectName || "Expert quote returned",
+        description: "An Expert has returned fee, turnaround and revision terms. Compare the quote before pricing the client.",
+        eyebrow: "Expert quote ready",
+        href: `/admin/studio-requests/${item.studio_request_id}`,
+        action: "Compare Expert quote",
+        icon: CircleDollarSign,
+        tone: "green" as const,
+        studio: item.shared_scope?.studio,
+        createdAt: item.quoted_at || item.updated_at || item.created_at,
+      }));
+
+    const expertSubmissionItems = expertSubmissionsToReview.map((item) => ({
+      id: `expert-submission-${item.id}`,
+      title: item.filename || "Expert submission",
+      description: "An Expert deliverable is waiting for Heyy Studio review before anything is published to the client.",
+      eyebrow: "Expert submission",
+      href: `/admin/production/${item.production_job_id}?tab=Expert`,
+      action: "Review submission",
+      icon: FileCheck2,
+      tone: "purple" as const,
+      createdAt: item.submitted_at || item.created_at,
+    }));
+
+    const payoutItems = expertPayoutsDue.map((item) => ({
+      id: `expert-payout-${item.id}`,
+      title: item.shared_scope?.projectName || "Expert payout",
+      description: "This Expert fee is marked eligible and needs manual payout tracking.",
+      eyebrow: "Expert payout due",
+      href: `/admin/production/${item.production_job_id}?tab=Expert`,
+      action: "Open payout",
+      icon: CircleDollarSign,
+      tone: "amber" as const,
+      createdAt: item.payout_eligible_at || item.updated_at || item.created_at,
+    }));
 
     const contactItems = newContacts.slice(0, 3).map((item) => ({
       id: `contact-${item.id}`,
@@ -346,6 +426,9 @@ export default function AdminCommandCenter({
       ...unreadJobs,
       ...revisionItems,
       ...requestItems,
+      ...expertQuoteItems,
+      ...expertSubmissionItems,
+      ...payoutItems,
       ...reviewJobs,
       ...contactItems,
     ]
@@ -357,6 +440,9 @@ export default function AdminCommandCenter({
     quoteNeeded,
     requestedRevisions,
     unreadMessageCounts,
+    expertQuotesReady,
+    expertSubmissionsToReview,
+    expertPayoutsDue,
   ]);
 
   const filteredRequests = useMemo(() => {
@@ -540,6 +626,10 @@ export default function AdminCommandCenter({
             outstandingQuoteValue={outstandingQuoteValue}
             attentionItems={attentionItems}
             unreadMessageCounts={unreadMessageCounts}
+            expertQuotesReady={expertQuotesReady}
+            expertQuotesWaiting={expertQuotesWaiting}
+            expertSubmissionsToReview={expertSubmissionsToReview}
+            expertPayoutsDue={expertPayoutsDue}
           />
         )}
 
@@ -563,9 +653,10 @@ export default function AdminCommandCenter({
             setClient={setRequestClient}
             clientOptions={requestClientOptions}
             total={requests.length}
-            open={openRequests.length}
+            expertCosting={expertCostingRequestIds.size}
             quoteNeeded={quoteNeeded.length}
             awaitingPayment={awaitingPaymentQuotes.length}
+            expertOpportunityByRequest={expertOpportunityByRequest}
           />
         )}
 
@@ -593,6 +684,7 @@ export default function AdminCommandCenter({
 
         {activeTab === "inbox" && (
           <InboxPanel
+            requests={requests}
             jobs={jobs}
             unreadMessageCounts={unreadMessageCounts}
             contacts={contacts}
@@ -618,6 +710,10 @@ function OverviewPanel({
   outstandingQuoteValue,
   attentionItems,
   unreadMessageCounts,
+  expertQuotesReady,
+  expertQuotesWaiting,
+  expertSubmissionsToReview,
+  expertPayoutsDue,
 }: {
   requests: any[];
   jobs: any[];
@@ -632,6 +728,10 @@ function OverviewPanel({
   outstandingQuoteValue: number;
   attentionItems: AttentionItem[];
   unreadMessageCounts: Map<string, number>;
+  expertQuotesReady: any[];
+  expertQuotesWaiting: any[];
+  expertSubmissionsToReview: any[];
+  expertPayoutsDue: any[];
 }) {
   const studioWorkload = VISIBLE_STUDIOS.map((studio) => ({
     ...studio,
@@ -645,9 +745,11 @@ function OverviewPanel({
   }));
 
   const pipeline = [
-    { label: "Requests", value: requests.length, icon: ClipboardList },
-    { label: "Quotes sent", value: quotes.length, icon: CreditCard },
+    { label: "Client requests", value: requests.length, icon: ClipboardList },
+    { label: "Expert quotes returned", value: expertQuotesReady.length, icon: CircleDollarSign },
+    { label: "Client quotes sent", value: quotes.length, icon: CreditCard },
     { label: "Active production", value: activeJobs.length, icon: Layers3 },
+    { label: "Expert submissions to review", value: expertSubmissionsToReview.length, icon: FileCheck2 },
     {
       label: "Delivered",
       value: jobs.filter((job) =>
@@ -665,45 +767,45 @@ function OverviewPanel({
       <section className="heyy-admin-metrics">
         <MetricCard
           icon={ClipboardList}
-          label="Quotes to prepare"
+          label="Requests to price"
           value={quoteNeeded.length}
-          note="New or reviewing requests"
+          note="New client requests needing commercial review"
           tone="blue"
         />
         <MetricCard
+          icon={CircleDollarSign}
+          label="Expert quotes ready"
+          value={expertQuotesReady.length}
+          note={`${expertQuotesWaiting.length} still waiting on Expert response`}
+          tone="green"
+        />
+        <MetricCard
           icon={Clock3}
-          label="Outstanding quotes"
-          value={formatMoney(outstandingQuoteValue)}
-          note={`${awaitingPaymentQuotes.length} quote${awaitingPaymentQuotes.length === 1 ? "" : "s"} awaiting payment`}
+          label="Awaiting client payment"
+          value={awaitingPaymentQuotes.length}
+          note={`${formatMoney(outstandingQuoteValue)} outstanding`}
           tone="amber"
         />
         <MetricCard
           icon={Layers3}
           label="Active production"
           value={activeJobs.length}
-          note="Jobs currently in the studio"
+          note="Paid jobs currently being produced"
           tone="orange"
         />
         <MetricCard
-          icon={MessageSquare}
-          label="Unread messages"
-          value={unreadMessages.length}
-          note="Client messages needing a reply"
+          icon={FileCheck2}
+          label="Expert submissions"
+          value={expertSubmissionsToReview.length}
+          note="Waiting for Heyy Studio review"
           tone="purple"
         />
         <MetricCard
-          icon={FileCheck2}
-          label="Revision requests"
-          value={requestedRevisions.length}
-          note="Client changes waiting for action"
+          icon={MessageSquare}
+          label="Client actions"
+          value={unreadMessages.length + requestedRevisions.length}
+          note={`${unreadMessages.length} messages · ${requestedRevisions.length} revisions · ${expertPayoutsDue.length} payouts due`}
           tone="pink"
-        />
-        <MetricCard
-          icon={CircleDollarSign}
-          label="Revenue this month"
-          value={formatMoney(currentMonthRevenue)}
-          note={`All-time paid production ${formatMoney(paidRevenue)}`}
-          tone="green"
         />
       </section>
 
@@ -826,8 +928,8 @@ function OverviewPanel({
             <QuickLink href="/admin/platform/clients" icon={Users} title="Client history" note="Projects, quotes and revenue" />
             <QuickLink href="/admin/platform/users" icon={Users} title="Users" note="Accounts and plans" />
             <QuickLink href="/admin/platform/contact" icon={Mail} title="Contact" note="Website enquiries" />
-            <QuickLink href="/admin/platform/careers" icon={BriefcaseBusiness} title="Careers" note="Open positions" />
-            <QuickLink href="/admin/platform/applications" icon={BriefcaseBusiness} title="Applications" note="Candidates and CVs" />
+            <QuickLink href="/admin/platform/careers" icon={BriefcaseBusiness} title="Expert roles" note="Published opportunities" />
+            <QuickLink href="/admin/platform/applications" icon={BriefcaseBusiness} title="Expert applications" note="Candidates, portfolios and CVs" />
             <QuickLink href="/admin/platform/pages" icon={Palette} title="Public pages" note="Policies and content" />
             <QuickLink href="/admin/platform/help" icon={BellRing} title="Help centre" note="Support articles" />
             <QuickLink href="/admin/platform/generations" icon={WandSparkles} title="Generations" note="AI job monitoring" />
@@ -857,9 +959,10 @@ function RequestsPanel({
   setClient,
   clientOptions,
   total,
-  open,
+  expertCosting,
   quoteNeeded,
   awaitingPayment,
+  expertOpportunityByRequest,
 }: {
   requests: any[];
   quoteByRequest: Map<string, any>;
@@ -879,17 +982,18 @@ function RequestsPanel({
   setClient: (value: string) => void;
   clientOptions: Array<{ value: string; label: string }>;
   total: number;
-  open: number;
+  expertCosting: number;
   quoteNeeded: number;
   awaitingPayment: number;
+  expertOpportunityByRequest: Map<string, any>;
 }) {
   return (
     <div className="heyy-admin-stack">
       <section className="heyy-admin-metrics four">
         <MetricCard icon={ClipboardList} label="All requests" value={total} note="Across every Studio" tone="purple" />
-        <MetricCard icon={CircleGauge} label="Open requests" value={open} note="Still in the quote workflow" tone="blue" />
-        <MetricCard icon={AlertCircle} label="Quote required" value={quoteNeeded} note="Needs admin review" tone="amber" />
-        <MetricCard icon={CreditCard} label="Awaiting payment" value={awaitingPayment} note="Quote sent to client" tone="green" />
+        <MetricCard icon={AlertCircle} label="Quote required" value={quoteNeeded} note="Needs Admin review or pricing" tone="blue" />
+        <MetricCard icon={CircleDollarSign} label="Expert costing" value={expertCosting} note="Requests in private Expert sourcing" tone="amber" />
+        <MetricCard icon={CreditCard} label="Awaiting payment" value={awaitingPayment} note="Heyy Studio quote sent to client" tone="green" />
       </section>
 
       <Panel
@@ -917,6 +1021,7 @@ function RequestsPanel({
               key={request.id}
               request={request}
               quote={quoteByRequest.get(String(request.id))}
+              expertOpportunity={expertOpportunityByRequest.get(String(request.id))}
             />
           ))}
           {!requests.length && (
@@ -1029,11 +1134,13 @@ function ProductionPanel({
 }
 
 function InboxPanel({
+  requests,
   jobs,
   unreadMessageCounts,
   contacts,
   applications,
 }: {
+  requests: any[];
   jobs: any[];
   unreadMessageCounts: Map<string, number>;
   contacts: any[];
@@ -1042,15 +1149,38 @@ function InboxPanel({
   const messageJobs = jobs.filter(
     (job) => (unreadMessageCounts.get(String(job.id)) || 0) > 0,
   );
+  const newRequests = requests.filter((request) => ["new", "pending", "submitted"].includes(String(request.status || "new").toLowerCase()));
 
   return (
     <div className="heyy-admin-stack">
       <section className="heyy-admin-metrics four">
+        <MetricCard icon={ClipboardList} label="New requests" value={newRequests.length} note="Production requests awaiting review" tone="blue" />
         <MetricCard icon={MessageSquare} label="Client messages" value={messageJobs.length} note="Production conversations" tone="purple" />
         <MetricCard icon={Mail} label="Contact forms" value={contacts.filter((item) => String(item.status || "new").toLowerCase() === "new").length} note="New website submissions" tone="pink" />
-        <MetricCard icon={BriefcaseBusiness} label="Applications" value={applications.filter((item) => String(item.status || "new").toLowerCase() === "new").length} note="New career applicants" tone="blue" />
-        <MetricCard icon={Inbox} label="Total inbox" value={messageJobs.length + contacts.length + applications.length} note="All live communication records" tone="green" />
+        <MetricCard icon={Inbox} label="Total inbox" value={newRequests.length + messageJobs.length + contacts.length + applications.length} note="All live communication records" tone="green" />
       </section>
+
+      <Panel
+        eyebrow="New production requests"
+        title="Requests awaiting review"
+        description="New Studio production requests appear here as soon as a client submits them."
+        action={<Link href="/admin?tab=requests">Open Requests & quotes <ArrowRight size={14} /></Link>}
+      >
+        <div className="heyy-submission-grid">
+          {newRequests.slice(0, 8).map((request) => (
+            <SubmissionRow
+              key={request.id}
+              icon={ClipboardList}
+              title={request.project_name || request.projectName || "Production request"}
+              description={request.service || request.production_type || request.studio || "Studio production"}
+              status={request.status || "New"}
+              date={request.created_at}
+              href={`/admin/studio-requests/${request.id}`}
+            />
+          ))}
+          {!newRequests.length && <EmptyState icon={ClipboardList} title="No new production requests" description="New client production requests will appear here." />}
+        </div>
+      </Panel>
 
       <section className="heyy-admin-two-column">
         <Panel
@@ -1100,8 +1230,8 @@ function InboxPanel({
 
       <Panel
         eyebrow="People"
-        title="Career applications"
-        description="Review genuine applications from the public Careers page."
+        title="Expert Network applications"
+        description="Review candidates from the public Heyy Studio Expert Network."
         action={<Link href="/admin/platform/applications">View applications <ArrowRight size={14} /></Link>}
       >
         <div className="heyy-submission-grid">
@@ -1118,7 +1248,7 @@ function InboxPanel({
           ))}
           {!applications.length && (
             <div className="heyy-grid-empty">
-              <EmptyState icon={BriefcaseBusiness} title="No career applications" description="New candidate submissions will appear here." />
+              <EmptyState icon={BriefcaseBusiness} title="No Expert Network applications" description="New expert candidate submissions will appear here." />
             </div>
           )}
         </div>
@@ -1216,10 +1346,17 @@ function AdminFilter({
   );
 }
 
-function RequestCard({ request, quote }: { request: any; quote?: any }) {
+function RequestCard({ request, quote, expertOpportunity }: { request: any; quote?: any; expertOpportunity?: any }) {
   const studio = getStudioIdentity(request.studio || request.metadata?.studio);
   const requestStatus = request.status || "New";
   const quoteStatus = quote?.status || "Not sent";
+  const expertStatus = expertOpportunity
+    ? String(expertOpportunity.status || "").toLowerCase() === "selected"
+      ? "Preferred selected"
+      : String(expertOpportunity.status || "").toLowerCase() === "quoted"
+        ? "Quote ready"
+        : "Waiting quote"
+    : "Not sourced";
 
   return (
     <Link
@@ -1245,6 +1382,7 @@ function RequestCard({ request, quote }: { request: any; quote?: any }) {
         <SmallMeta label="Client" value={request.client_name || request.metadata?.client_name || "Logged-in user"} />
         <SmallMeta label="Quote" value={quoteStatus} />
         <SmallMeta label="Amount" value={quote ? formatMoney(toNumber(quote.amount), quote.currency) : "—"} />
+        <SmallMeta label="Expert" value={expertStatus} />
         <SmallMeta label="Requested" value={formatDate(request.created_at)} />
       </div>
       <div className="heyy-card-action">Review request <ArrowRight size={15} /></div>

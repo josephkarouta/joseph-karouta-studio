@@ -1047,10 +1047,12 @@ export async function executeArchitectureImageGeneration(args: {
             relatedReference,
           ]),
       targetRole: sourceGeometryLocked
-        ? `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. The selected Direction may affect materials, facade character, landscape and lighting only.`
+        ? group === "visuals"
+          ? `Create the ${String(visual.title || visual.visual_type)} as a premium multi-study CONCEPT BOARD for the EXACT EXISTING uploaded design. SOURCE GEOMETRY references define the building and must remain recognizable. Combine one main perspective with smaller coordinated material/detail, sketch/diagram, lighting and landscape/spatial studies. The selected Direction may affect materials, facade character, landscape and lighting only. Keep generated text minimal.`
+          : `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. The selected Direction may affect materials, facade character, landscape and lighting only.`
         : group === "tour"
           ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the APPROVED PLAN FOUNDATION. Approved plans define geometry; the selected Direction defines architectural expression.`
-          : `Generate only the ${String(visual.title || visual.visual_type)} CONCEPT image using the APPROVED PLAN FOUNDATION as the major layout reference and the selected Design Direction as the visual-language reference. Preserve the number of levels and major entry, garage, pool and outdoor-living relationships. Do not present the output as a measured elevation or exact construction visualization.`,
+          : `Create the ${String(visual.title || visual.visual_type)} as a premium multi-study ARCHITECTURE CONCEPT BOARD using the APPROVED PLAN FOUNDATION as the major layout reference and the selected Design Direction as the visual-language reference. It must not look like another single Direction hero render. Combine one main atmospheric perspective with smaller coordinated studies such as material/details, loose sketch or diagram fragments, landscape/lighting moments and spatial vignettes. Preserve the number of levels and major entry, garage, pool and outdoor-living relationships. Keep generated text minimal and do not present the output as a measured elevation or exact construction visualization.`,
       tier: quality,
     }));
     imageUrl = generated.imageUrl;

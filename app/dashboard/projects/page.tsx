@@ -18,6 +18,7 @@ import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { ButtonLink, Eyebrow, GlassCard, PageContainer, StatusPill } from "@/components/ui/heyy";
+import HeyySelect from "@/components/ui/heyy-select";
 
 type Project = {
   id: string;
@@ -40,6 +41,7 @@ const studioConfig: Record<Project["studio"], { label: string; accent: string; i
 export default function ProjectsPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { user, loading: authLoading } = useAuth();
+  const userId = user?.id || null;
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,12 +71,12 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
+    if (!userId) {
       window.location.href = `/login?next=${encodeURIComponent("/dashboard/projects")}`;
       return;
     }
     void loadProjects();
-  }, [authLoading, user]);
+  }, [authLoading, userId]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -119,10 +121,16 @@ export default function ProjectsPage() {
               <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"/>
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search projects" className="h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] pl-11 pr-4 text-sm font-semibold outline-none focus:border-[var(--accent-strong)]"/>
             </label>
-            <select value={studio} onChange={(event) => setStudio(event.target.value)} className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 text-sm font-bold outline-none focus:border-[var(--accent-strong)]">
-              <option value="all">All Studios</option>
-              {(Object.keys(studioConfig) as Project["studio"][]).map((key) => <option key={key} value={key}>{studioConfig[key].label}</option>)}
-            </select>
+            <HeyySelect
+              value={studio}
+              onChange={setStudio}
+              ariaLabel="Filter projects by Studio"
+              options={[
+                { value: "all", label: "All Studios" },
+                ...(Object.keys(studioConfig) as Project["studio"][]).map((key) => ({ value: key, label: studioConfig[key].label })),
+              ]}
+              triggerClassName="!min-h-12 !rounded-2xl !px-4 !py-3 !text-sm"
+            />
           </div>
         </GlassCard>
 
@@ -151,6 +159,7 @@ export default function ProjectsPage() {
 function ProjectCard({ project }: { project: Project }) {
   const config = studioConfig[project.studio];
   const Icon = config.icon;
+  const statusTone = projectStatusTone(project.status);
   return (
     <Link href={projectHref(project)} className="group rounded-[1.4rem] border p-5 transition hover:-translate-y-1 hover:shadow-[var(--shadow-card-hover)]" style={{ borderColor: `${config.accent}32`, background: `linear-gradient(145deg,var(--surface-strong),${config.accent}0d)` }}>
       <div className="flex items-start gap-3">
@@ -158,9 +167,17 @@ function ProjectCard({ project }: { project: Project }) {
         <span className="min-w-0 flex-1"><span className="block text-[.58rem] font-black uppercase tracking-[.14em]" style={{ color: config.accent }}>{config.label} Studio</span><strong className="mt-1.5 block truncate text-base font-black">{project.name}</strong></span>
         <ArrowRight size={15} className="mt-1 shrink-0 text-[var(--text-muted)] transition group-hover:translate-x-1 group-hover:text-[var(--accent-strong)]"/>
       </div>
-      <div className="mt-6 flex items-center justify-between gap-3"><StatusPill>{project.status || "Active"}</StatusPill><span className="text-[.64rem] font-bold text-[var(--text-muted)]">Updated {formatDate(project.updatedAt)}</span></div>
+      <div className="mt-6 flex items-center justify-between gap-3"><StatusPill tone={statusTone}>{project.status || "Active"}</StatusPill><span className="text-[.64rem] font-bold text-[var(--text-muted)]">Updated {formatDate(project.updatedAt)}</span></div>
     </Link>
   );
+}
+
+function projectStatusTone(status: string): "neutral" | "success" | "warning" | "info" {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("completed") || value.includes("approved")) return "success";
+  if (value.includes("payment") || value.includes("requested") || value.includes("awaiting")) return "warning";
+  if (value.includes("production") || value.includes("review")) return "info";
+  return "neutral";
 }
 
 function Metric({ label, value }: { label: string; value: number }) {

@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import ClientDeliverablesManager from "@/components/studio/production/ClientDeliverablesManager";
 import ClientProductionMessages from "@/components/studio/production/ClientProductionMessages";
@@ -39,19 +40,50 @@ type ProductionStage = {
 type RevisionPolicy = {
   enforced: boolean;
   included: number | null;
+  purchasedExtraRevisions?: number;
+  totalAllowance?: number | null;
   used: number;
   remaining: number | null;
   extraRevisionFee: number | null;
   currency: string | null;
 };
 
+type ClientProductionAddon = {
+  id: string;
+  kind: "extra_revision" | "additional_scope";
+  status: string;
+  title: string;
+  description: string | null;
+  currency: string;
+  client_amount_cents: number | null;
+  sent_to_client_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
+function clientMoneyCents(cents: number | null | undefined, currency: string | null | undefined) {
+  const code = String(currency || "USD").toUpperCase();
+  const amount = Number(cents || 0) / 100;
+  try { return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(amount); }
+  catch { return `${code} ${amount.toFixed(2)}`; }
+}
+
+function clientMoneyAmount(amount: number | null | undefined, currency: string | null | undefined) {
+  const code = String(currency || "USD").toUpperCase();
+  try { return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(Number(amount || 0)); }
+  catch { return `${code} ${Number(amount || 0).toFixed(2)}`; }
+}
+
 const STAGES: ProductionStage[] = [
-  { label: "Requested", description: "Scope received" },
   { label: "Paid", description: "Production confirmed" },
-  { label: "In production", description: "Studio work" },
-  { label: "Review", description: "Feedback & approval" },
-  { label: "Delivered", description: "Final files" },
+  { label: "In production", description: "Heyy Studio is working" },
+  { label: "Your review", description: "Files ready for feedback" },
+  { label: "Complete", description: "Final files approved" },
 ];
+
+type ClientWorkspaceTab = "Overview" | "Messages" | "Files & Review";
+
+const CLIENT_TABS: ClientWorkspaceTab[] = ["Overview", "Messages", "Files & Review"];
 
 export default function ClientProductionWorkspace({
   job,
@@ -65,14 +97,103 @@ export default function ClientProductionWorkspace({
   onRefresh,
 }: ClientProductionWorkspaceProps) {
   const [refreshing, setRefreshing] = useState(false);
+  const [activeSection, setActiveSection] = useState<ClientWorkspaceTab>("Overview");
   const [messageCount, setMessageCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [revisionComposerSignal, setRevisionComposerSignal] = useState(0);
+  const [revisionTargets, setRevisionTargets] = useState<any[]>([]);
   const [revisionCount, setRevisionCount] = useState(0);
   const [revisionPolicy, setRevisionPolicy] = useState<RevisionPolicy | null>(null);
+  const [reviewPane, setReviewPane] = useState<"files" | "revisions">("files");
   const [approvingDelivery, setApprovingDelivery] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [addons, setAddons] = useState<ClientProductionAddon[]>([]);
+  const [buyingExtraRevision, setBuyingExtraRevision] = useState(false);
+  const [payingAddonId, setPayingAddonId] = useState<string | null>(null);
+  const [reconcilingAddon, setReconcilingAddon] = useState(false);
   const revisionSectionRef = useRef<HTMLDivElement | null>(null);
+  const reconciledAddonSessionRef = useRef<string | null>(null);
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get("productionView");
+  const addonSessionId = searchParams.get("session_id");
+  const extraRevisionCheckout = searchParams.get("extraRevision");
+  const addonPaymentState = searchParams.get("addonPayment");
+
+  useEffect(() => {
+
+    if (requestedView === "messages") {
+      setActiveSection("Messages");
+      return;
+    }
+
+    if (requestedView === "review" || requestedView === "revisions") {
+      setActiveSection("Files & Review");
+      setReviewPane(requestedView === "revisions" ? "revisions" : "files");
+
+      if (requestedView === "revisions") {
+        window.setTimeout(() => {
+          revisionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 120);
+      }
+    }
+  }, [job?.id, requestedView]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAddons() {
+      if (!job?.id) return;
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) return;
+        const response = await fetch(`/api/production/addons?jobId=${encodeURIComponent(job.id)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const payload = await response.json();
+        if (!cancelled && response.ok && payload.success) setAddons(payload.addons || []);
+      } catch {
+        // Add-ons are supplemental to the core production workspace.
+      }
+    }
+    void loadAddons();
+    return () => { cancelled = true; };
+  }, [job?.id, timeline]);
+
+  useEffect(() => {
+    if (!addonSessionId || reconcilingAddon || reconciledAddonSessionRef.current === addonSessionId || (extraRevisionCheckout !== "paid" && addonPaymentState !== "paid")) return;
+    reconciledAddonSessionRef.current = addonSessionId;
+    let cancelled = false;
+    async function reconcileAddon() {
+      setReconcilingAddon(true);
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) return;
+        const response = await fetch("/api/production/addons/reconcile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ sessionId: addonSessionId }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) throw new Error(payload.error || "Payment could not be confirmed.");
+        if (!cancelled && typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("session_id");
+          url.searchParams.delete("extraRevision");
+          url.searchParams.delete("addonPayment");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+          window.location.reload();
+        }
+      } catch (error) {
+        reconciledAddonSessionRef.current = null;
+        if (!cancelled) console.error("Production add-on reconciliation failed:", error);
+      } finally {
+        if (!cancelled) setReconcilingAddon(false);
+      }
+    }
+    void reconcileAddon();
+    return () => { cancelled = true; };
+  }, [addonSessionId, extraRevisionCheckout, addonPaymentState, reconcilingAddon]);
 
   const deliveryApproved = Boolean(
     job?.client_approved_at ||
@@ -80,6 +201,36 @@ export default function ClientProductionWorkspace({
   );
   const currentStage = getCurrentStage(status);
   const action = getClientAction(status, deliverableGroups.length, deliveryApproved);
+  const latestReviewNote = useMemo(() => {
+    const entries = Array.isArray(timeline) ? [...timeline] : [];
+    return entries
+      .sort((a: any, b: any) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime())
+      .find((item: any) => /review package ready|ready for review/i.test(String(item?.title || "")) && String(item?.description || "").trim()) || null;
+  }, [timeline]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function loadUnreadSummary() {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token || !job?.id) return;
+        const response = await fetch(`/api/production/messages?jobId=${encodeURIComponent(job.id)}&summary=1`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const payload = await response.json();
+        if (!cancelled && response.ok && payload.success) setUnreadMessageCount(Number(payload.unreadCount || 0));
+      } catch {
+        // Attention badges are helpful but must never block the production workspace.
+      }
+    }
+
+    void loadUnreadSummary();
+    timer = window.setInterval(() => { if (document.visibilityState === "visible") void loadUnreadSummary(); }, 20_000);
+    return () => { cancelled = true; if (timer) window.clearInterval(timer); };
+  }, [job?.id, activeSection]);
+
   const activity = useMemo(
     () => [
       {
@@ -136,12 +287,58 @@ export default function ClientProductionWorkspace({
     }
   }
 
+  async function buyExtraRevision() {
+    if (buyingExtraRevision) return;
+    setBuyingExtraRevision(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Your session expired. Sign in again.");
+      const response = await fetch("/api/production/addons/extra-revision/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ jobId: job.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success || !payload.url) throw new Error(payload.error || "Could not open checkout.");
+      window.location.assign(payload.url);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not open the additional revision checkout.");
+      setBuyingExtraRevision(false);
+    }
+  }
+
+  async function payProductionAddon(addonId: string) {
+    if (payingAddonId) return;
+    setPayingAddonId(addonId);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Your session expired. Sign in again.");
+      const response = await fetch("/api/production/addons/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ addonId }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success || !payload.url) throw new Error(payload.error || "Could not open checkout.");
+      window.location.assign(payload.url);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not open checkout.");
+      setPayingAddonId(null);
+    }
+  }
+
   const revisionLimitReached = Boolean(
     revisionPolicy?.enforced && Number(revisionPolicy.remaining || 0) <= 0,
   );
 
-  function openRevisionComposer() {
+  function openRevisionComposer(targets: any[] = []) {
     if (!deliverableGroups.length || deliveryApproved || revisionLimitReached) return;
+    setRevisionTargets(targets);
+    setReviewPane("revisions");
     setRevisionComposerSignal((value) => value + 1);
     window.setTimeout(() => {
       revisionSectionRef.current?.scrollIntoView({
@@ -188,19 +385,17 @@ export default function ClientProductionWorkspace({
   }
 
   const showRevisionWorkspace =
-    deliverableGroups.length > 0 &&
-    !deliveryApproved &&
-    (revisionComposerSignal > 0 || revisionCount > 0);
+    deliverableGroups.length > 0 && !deliveryApproved;
 
   const productionFilesSection = deliverableGroups.length > 0 ? (
     <WorkspaceSection
       icon={<Files size={19} strokeWidth={2.15} />}
       eyebrow={deliveryApproved ? "Completed" : "Review files"}
-      title={deliveryApproved ? "Approved production files" : "Production files"}
+      title={deliveryApproved ? "Final files" : "Review package"}
       description={
         deliveryApproved
           ? "Your approved final files stay available here for download."
-          : "Download the latest file, request changes if needed, or approve the package once when it is final."
+          : "Review the latest package, download files, request changes or approve the delivery."
       }
       badge={`${deliverableGroups.length} file group${
         deliverableGroups.length === 1 ? "" : "s"
@@ -214,9 +409,23 @@ export default function ClientProductionWorkspace({
         approving={approvingDelivery}
         approved={deliveryApproved}
         revisionLimitReached={revisionLimitReached}
+        onBuyExtraRevision={revisionPolicy?.enforced && Number(revisionPolicy.extraRevisionFee || 0) > 0 ? buyExtraRevision : undefined}
+        extraRevisionPriceLabel={revisionPolicy?.enforced && Number(revisionPolicy.extraRevisionFee || 0) > 0 ? clientMoneyAmount(revisionPolicy.extraRevisionFee, revisionPolicy.currency) : null}
+        buyingExtraRevision={buyingExtraRevision}
       />
     </WorkspaceSection>
   ) : null;
+
+  const pendingClientAddons = addons.filter((addon) => addon.status === "sent");
+  const reviewAttentionCount = (!deliveryApproved && deliverableGroups.length > 0 ? 1 : 0) + pendingClientAddons.length;
+  const moreWorkHref = `/contact?${new URLSearchParams({
+    topic: "expert-production",
+    projectId: String(job?.project_id || project?.id || ""),
+    projectName: String(job?.project_name || project?.name || "Project"),
+    studio: String(job?.studio || project?.studio || "brand_studio"),
+    serviceId: String(job?.service_id || ""),
+    sourceJobId: String(job?.id || ""),
+  }).toString()}`;
 
   return (
     <div className="heyy-client-production-workspace">
@@ -262,6 +471,73 @@ export default function ClientProductionWorkspace({
         </div>
       </header>
 
+      {deliveryApproved && (
+        <section
+          className="mb-4 overflow-hidden rounded-[28px] border p-6 text-white shadow-[0_22px_60px_rgba(76,29,149,.18)] sm:p-7"
+          style={{
+            borderColor: "rgba(110, 231, 183, 0.5)",
+            background: "linear-gradient(135deg, #0f172a 0%, #2e1065 55%, #064e3b 100%)",
+          }}
+        >
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex max-w-3xl items-start gap-4">
+              <span
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl shadow-lg"
+                style={{ backgroundColor: "#34d399", color: "#0f172a", boxShadow: "0 10px 24px rgba(6,78,59,.28)" }}
+              >
+                <CheckCircle2 size={25} strokeWidth={2.6}/>
+              </span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[.2em]" style={{ color: "#6ee7b7" }}>Completed & approved</p>
+                <h5 className="mt-1 text-2xl font-black tracking-[-.04em] text-white sm:text-3xl">Production complete</h5>
+                <p className="mt-2 max-w-2xl text-sm font-semibold leading-6" style={{ color: "rgba(255,255,255,.78)" }}>
+                  Your approved final files are ready and remain available in this workspace. If you need more work later, start another production request on this same project — this completed job stays unchanged.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={() => { setActiveSection("Files & Review"); setReviewPane("files"); }}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full px-5 text-xs font-black transition hover:-translate-y-0.5"
+                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+              >
+                <Download size={15}/>Open final files
+              </button>
+              <a
+                href={moreWorkHref}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full px-5 text-xs font-black text-white backdrop-blur transition hover:-translate-y-0.5"
+                style={{ border: "1px solid rgba(255,255,255,.28)", backgroundColor: "rgba(255,255,255,.10)", color: "#ffffff" }}
+              >
+                <Sparkles size={15}/>Request more work
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {pendingClientAddons.length > 0 && (
+        <section className="mb-4 grid gap-3">
+          {pendingClientAddons.map((addon) => (
+            <div key={addon.id} className="rounded-[22px] border border-violet-200 bg-violet-50/70 p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-600">Additional project scope</p>
+                  <h5 className="mt-2 text-lg font-black text-slate-950">{addon.title || "Additional production work"}</h5>
+                  <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-600">{addon.description || "Heyy Studio prepared a separate proposal for work added after the original paid scope."}</p>
+                  <p className="mt-3 text-xs font-bold text-slate-500">This does not change your original paid quote. It is a separate addition.</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-black text-slate-950">{clientMoneyCents(addon.client_amount_cents, addon.currency)}</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">before tax</p>
+                  <button type="button" className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-violet-600 px-4 text-xs font-black text-white disabled:opacity-50" disabled={payingAddonId === addon.id} onClick={() => void payProductionAddon(addon.id)}>{payingAddonId === addon.id ? "Opening checkout…" : "Review & pay"}</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       <div className="heyy-client-stage-rail" aria-label="Production progress">
         {STAGES.map((stage, index) => {
           const complete = index < currentStage || currentStage === STAGES.length;
@@ -292,15 +568,116 @@ export default function ClientProductionWorkspace({
         })}
       </div>
 
-      <div className="heyy-client-workspace-grid">
-        <main className="heyy-client-workspace-main">
-          {productionFilesSection}
+      <nav className="heyy-client-workspace-tabs" aria-label="Production workspace sections">
+        {CLIENT_TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className="heyy-client-workspace-tab"
+            data-active={activeSection === tab ? "true" : "false"}
+            onClick={() => setActiveSection(tab)}
+          >
+            <span className="heyy-client-workspace-tab-title"><strong>{tab}</strong>{((tab === "Messages" ? unreadMessageCount : tab === "Files & Review" ? reviewAttentionCount : 0) > 0) && <b className="heyy-client-workspace-tab-badge">{tab === "Messages" ? unreadMessageCount : reviewAttentionCount}</b>}</span>
+            <span>{clientTabDescription(tab)}</span>
+          </button>
+        ))}
+      </nav>
 
+      {activeSection === "Overview" && (
+        <div className="heyy-client-workspace-grid">
+          <main className="heyy-client-workspace-main">
+            <section className="heyy-client-overview-card">
+              <div className="heyy-client-action-icon">
+                {status === "Delivered" ? (
+                  <Download size={21} strokeWidth={2.2} />
+                ) : (
+                  <Sparkles size={21} strokeWidth={2.2} />
+                )}
+              </div>
+              <p className="heyy-client-action-eyebrow">Current step</p>
+              <h5>{action.title}</h5>
+              <p>{action.description}</p>
+
+              <div className="heyy-client-action-meta">
+                <InfoRow label="Project" value={job?.project_name || "Project"} />
+                <InfoRow label="Service" value={service} />
+                <InfoRow label="Studio" value={studioLabel} />
+              </div>
+
+              <button
+                type="button"
+                className="heyy-client-overview-cta"
+                onClick={() =>
+                  setActiveSection(deliverableGroups.length > 0 ? "Files & Review" : "Messages")
+                }
+              >
+                {deliverableGroups.length > 0 ? "Open files & review" : "Message Heyy Studio"}
+              </button>
+            </section>
+          </main>
+
+          <aside className="heyy-client-workspace-sidebar">
+            <section className="heyy-client-activity-card">
+              <div className="heyy-client-activity-heading">
+                <span className="heyy-client-activity-icon">
+                  <Activity size={18} strokeWidth={2.2} />
+                </span>
+                <div>
+                  <p>Production activity</p>
+                  <span>
+                    {activity.length} update{activity.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="heyy-client-activity-list">
+                {activity.map((item, index) => (
+                  <div key={item.id || `${item.title}-${index}`} className="heyy-client-activity-item">
+                    <span className="heyy-client-activity-dot">
+                      {index === activity.length - 1 ? (
+                        <Clock3 size={12} strokeWidth={2.5} />
+                      ) : (
+                        <Check size={12} strokeWidth={3} />
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <strong>{item.title || "Production update"}</strong>
+                      {item.description && <p>{item.description}</p>}
+                      {item.created_at && <time>{formatDate(item.created_at)}</time>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="heyy-client-files-summary">
+              <span>
+                <FileCheck2 size={18} strokeWidth={2.2} />
+              </span>
+              <div>
+                <strong>
+                  {deliverableGroups.length > 0
+                    ? `${deliverableGroups.length} review package${deliverableGroups.length === 1 ? "" : "s"}`
+                    : "Files in production"}
+                </strong>
+                <p>
+                  {deliverableGroups.length > 0
+                    ? "Open Files & Review when you are ready to check the latest delivery."
+                    : "Files appear only when Heyy Studio publishes something for your review."}
+                </p>
+              </div>
+            </section>
+          </aside>
+        </div>
+      )}
+
+      {activeSection === "Messages" && (
+        <div className="heyy-client-single-section">
           <WorkspaceSection
             icon={<MessageSquareText size={19} strokeWidth={2.15} />}
             eyebrow="Communication"
-            title="Messages"
-            description="Questions, updates and reference files stay together here."
+            title="Messages with Heyy Studio"
+            description="Use this conversation for questions and project updates. Revision requests are handled separately in Files & Review."
             badge={
               unreadMessageCount > 0
                 ? `${unreadMessageCount} new`
@@ -316,21 +693,50 @@ export default function ClientProductionWorkspace({
               embedded
             />
           </WorkspaceSection>
+        </div>
+      )}
+
+      {activeSection === "Files & Review" && (
+        <div className="heyy-client-single-section">
+          {latestReviewNote && deliverableGroups.length > 0 && (
+            <section className="rounded-[22px] border border-violet-200 bg-violet-50/70 p-5">
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-600">Heyy Studio delivery note</p>
+              <h5 className="mt-2 text-lg font-black text-slate-950">{latestReviewNote.title || "Review package ready"}</h5>
+              <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-slate-600">{latestReviewNote.description}</p>
+            </section>
+          )}
 
           {showRevisionWorkspace && (
+            <nav className="heyy-client-review-tabs" aria-label="Files and review sections">
+              <button type="button" data-active={reviewPane === "files" ? "true" : "false"} onClick={() => setReviewPane("files")}>
+                <span>Review files</span>
+                <small>{deliverableGroups.length} file group{deliverableGroups.length === 1 ? "" : "s"}</small>
+              </button>
+              <button type="button" data-active={reviewPane === "revisions" ? "true" : "false"} onClick={() => setReviewPane("revisions")}>
+                <span>Revisions</span>
+                <small>{revisionPolicy?.enforced ? `${revisionPolicy.used}/${revisionPolicy.totalAllowance ?? revisionPolicy.included} used` : revisionCount ? `${revisionCount} round${revisionCount === 1 ? "" : "s"}` : "No revisions yet"}</small>
+              </button>
+            </nav>
+          )}
+
+          {reviewPane === "files" || !showRevisionWorkspace ? (
+            <div>
+              {productionFilesSection || (
+                <section className="heyy-client-empty-review">
+                  <FileCheck2 size={24} />
+                  <h5>Your files are being prepared</h5>
+                  <p>We’ll notify you when a review package is ready. Nothing needs your approval yet.</p>
+                </section>
+              )}
+            </div>
+          ) : (
             <div ref={revisionSectionRef} id="production-revisions">
               <WorkspaceSection
                 icon={<CheckCircle2 size={19} strokeWidth={2.15} />}
-                eyebrow="Feedback"
-                title="Revisions"
-                description="Revision requests and studio responses are kept here as one clear history."
-                badge={
-                  revisionPolicy?.enforced
-                    ? `${revisionPolicy.used}/${revisionPolicy.included} used`
-                    : revisionCount > 0
-                      ? `${revisionCount} revision${revisionCount === 1 ? "" : "s"}`
-                      : "New request"
-                }
+                eyebrow="Change request"
+                title="Revision rounds"
+                description="One revision round can cover one, several or all files in the current review package."
+                badge={revisionPolicy?.enforced ? `${revisionPolicy.used}/${revisionPolicy.totalAllowance ?? revisionPolicy.included} used` : `${revisionCount} round${revisionCount === 1 ? "" : "s"}`}
               >
                 <ClientRevisionRequest
                   productionJobId={job.id}
@@ -338,88 +744,17 @@ export default function ClientProductionWorkspace({
                   onCreated={onRefresh}
                   openComposerSignal={revisionComposerSignal}
                   onRevisionCountChange={setRevisionCount}
+                  onRevisionPolicyChange={setRevisionPolicy}
+                  reviewGroups={deliverableGroups}
+                  initialTargets={revisionTargets}
+                  onBuyExtraRevision={revisionPolicy?.enforced && Number(revisionPolicy.extraRevisionFee || 0) > 0 ? buyExtraRevision : undefined}
+                  buyingExtraRevision={buyingExtraRevision}
                 />
               </WorkspaceSection>
             </div>
           )}
-        </main>
-
-        <aside className="heyy-client-workspace-sidebar">
-          <section className="heyy-client-action-card">
-            <div className="heyy-client-action-icon">
-              {status === "Delivered" ? (
-                <Download size={21} strokeWidth={2.2} />
-              ) : (
-                <Sparkles size={21} strokeWidth={2.2} />
-              )}
-            </div>
-            <p className="heyy-client-action-eyebrow">What happens next</p>
-            <h5>{action.title}</h5>
-            <p>{action.description}</p>
-
-            <div className="heyy-client-action-meta">
-              <InfoRow label="Project" value={job?.project_name || "Project"} />
-              <InfoRow label="Service" value={service} />
-              <InfoRow label="Studio" value={studioLabel} />
-            </div>
-          </section>
-
-          <section className="heyy-client-activity-card">
-            <div className="heyy-client-activity-heading">
-              <span className="heyy-client-activity-icon">
-                <Activity size={18} strokeWidth={2.2} />
-              </span>
-              <div>
-                <p>Production activity</p>
-                <span>
-                  {activity.length} update{activity.length === 1 ? "" : "s"}
-                </span>
-              </div>
-            </div>
-
-            <div className="heyy-client-activity-list">
-              {activity.map((item, index) => (
-                <div key={item.id || `${item.title}-${index}`} className="heyy-client-activity-item">
-                  <span className="heyy-client-activity-dot">
-                    {index === activity.length - 1 ? (
-                      <Clock3 size={12} strokeWidth={2.5} />
-                    ) : (
-                      <Check size={12} strokeWidth={3} />
-                    )}
-                  </span>
-                  <div className="min-w-0">
-                    <strong>{item.title || "Production update"}</strong>
-                    {item.description && <p>{item.description}</p>}
-                    {item.created_at && (
-                      <time>{formatDate(item.created_at)}</time>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="heyy-client-files-summary">
-            <span>
-              <FileCheck2 size={18} strokeWidth={2.2} />
-            </span>
-            <div>
-              <strong>
-                {deliverableGroups.length > 0
-                  ? `${deliverableGroups.length} final file group${
-                      deliverableGroups.length === 1 ? "" : "s"
-                    }`
-                  : "Final files pending"}
-              </strong>
-              <p>
-                {deliverableGroups.length > 0
-                  ? "Your delivered files remain securely available in this workspace."
-                  : "Final files will appear automatically after the studio publishes them."}
-              </p>
-            </div>
-          </section>
-        </aside>
-      </div>
+        </div>
+      )}
 
       {showApprovalDialog && !deliveryApproved && (
         <div className="heyy-production-confirm-backdrop" role="presentation">
@@ -504,27 +839,28 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function clientTabDescription(tab: ClientWorkspaceTab) {
+  if (tab === "Overview") return "Status and what happens next";
+  if (tab === "Messages") return "Questions and updates with Heyy Studio";
+  return "Project files, revisions and final downloads";
+}
+
 function getCurrentStage(status: string): number {
   const normalized = String(status || "").toLowerCase();
 
   if (normalized === "delivered" || normalized === "completed") {
     return STAGES.length;
   }
-  if (normalized === "approved") return 4;
-  if (
-    normalized.includes("review") ||
-    normalized.includes("revision")
-  ) {
-    return 3;
-  }
+  if (normalized === "approved") return 3;
+  if (normalized.includes("review") || normalized.includes("revision")) return 2;
   if (
     normalized.includes("assigned") ||
     normalized.includes("progress") ||
     normalized.includes("production")
   ) {
-    return 2;
+    return 1;
   }
-  return 2;
+  return 1;
 }
 
 function getClientAction(
@@ -752,9 +1088,34 @@ const workspaceStyles = `
     transform: translateY(-1px);
   }
 
+  .heyy-production-complete-strip {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:space-between;
+    gap:18px;
+    margin:0 18px 14px;
+    border:1px solid #ccebdc;
+    border-radius:20px;
+    background:linear-gradient(110deg,#f2fbf7 0%,#ffffff 52%,#f6f1ff 100%);
+    padding:16px 18px;
+    box-shadow:0 8px 22px rgba(41,78,63,.06);
+  }
+  .heyy-production-complete-copy{display:flex;max-width:760px;align-items:flex-start;gap:13px}
+  .heyy-production-complete-icon{display:grid;width:38px;height:38px;flex:0 0 38px;place-items:center;border-radius:13px;background:#0d9655;color:#fff;box-shadow:0 7px 16px rgba(13,150,85,.18)}
+  .heyy-production-complete-eyebrow{margin:0;color:#087b45;font-size:8px;font-weight:950;letter-spacing:.16em;text-transform:uppercase}
+  .heyy-production-complete-pill{display:inline-flex;align-items:center;border-radius:999px;background:#efe7ff;padding:4px 8px;color:#6c00ff;font-size:8px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+  .heyy-production-complete-copy h5{margin:3px 0 0;color:#17131f;font-size:19px;font-weight:950;letter-spacing:-.035em}
+  .heyy-production-complete-copy p{margin:4px 0 0;color:#6c6575;font-size:11px;font-weight:650;line-height:1.65}
+  .heyy-production-complete-actions{display:flex;flex-wrap:wrap;gap:8px}
+  .heyy-production-complete-actions button,.heyy-production-complete-actions a{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:7px;border-radius:999px;padding:0 14px;font-size:10px;font-weight:900;text-decoration:none;transition:transform 160ms ease,box-shadow 160ms ease,background 160ms ease}
+  .heyy-production-complete-actions button{border:1px solid #d4c4ee;background:#fff;color:#4d176f;box-shadow:0 4px 12px rgba(89,49,119,.06)}
+  .heyy-production-complete-actions a{border:1px solid #d8d1df;background:#f7f5f9;color:#4e4757}
+  .heyy-production-complete-actions button:hover,.heyy-production-complete-actions a:hover{transform:translateY(-1px);box-shadow:0 7px 16px rgba(69,45,84,.10)}
+
   .heyy-client-stage-rail {
     display: grid;
-    grid-template-columns: repeat(5,minmax(0,1fr));
+    grid-template-columns: repeat(4,minmax(0,1fr));
     gap: 0;
     border-bottom: 1px solid #e4dfea;
     background: #fff;
@@ -834,6 +1195,160 @@ const workspaceStyles = `
     font-weight: 700;
   }
 
+  .heyy-client-workspace-tabs {
+    display: grid;
+    grid-template-columns: repeat(3,minmax(0,1fr));
+    gap: 5px;
+    border-bottom: 1px solid #e4dfea;
+    background: #f3f1f6;
+    padding: 8px 18px;
+  }
+
+  .heyy-client-workspace-tab {
+    min-height: 50px;
+    border: 0 !important;
+    border-radius: 11px !important;
+    background: transparent !important;
+    color: #5c5565 !important;
+    padding: 8px 12px !important;
+    text-align: left;
+    transition: border-color 160ms ease,background 160ms ease,color 160ms ease,transform 160ms ease;
+  }
+
+  .heyy-client-workspace-tab:hover {
+    transform: none;
+    background: #fff !important;
+  }
+
+  .heyy-client-workspace-tab[data-active="true"] {
+    background: var(--production-accent) !important;
+    color: #fff !important;
+    box-shadow: 0 7px 18px color-mix(in srgb,var(--production-accent) 18%,transparent);
+  }
+
+  .heyy-client-workspace-tab > span { display: block; }
+  .heyy-client-workspace-tab-title{
+    display:inline-flex !important;
+    width:auto !important;
+    align-items:center !important;
+    justify-content:flex-start !important;
+    gap:7px !important;
+    margin:0 !important;
+    opacity:1 !important;
+  }
+  .heyy-client-workspace-tab-badge{
+    display:inline-flex !important;
+    min-width:19px;
+    height:19px;
+    align-items:center;
+    justify-content:center;
+    border-radius:999px;
+    background:#ff3f86;
+    padding:0 5px;
+    color:#fff;
+    font-size:9px;
+    line-height:1;
+    font-weight:950;
+    box-shadow:0 5px 12px rgba(255,63,134,.26);
+  }
+  .heyy-client-workspace-tab[data-active="true"] .heyy-client-workspace-tab-badge{background:#ffcf3f;color:#2c1735;box-shadow:0 5px 12px rgba(255,207,63,.28)}
+  .heyy-client-workspace-tab strong { font-size: 11px; font-weight: 950; }
+  .heyy-client-workspace-tab > span:last-child { margin-top: 3px; font-size: 8px; font-weight: 750; opacity: .72; }
+
+  .heyy-client-review-tabs {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 5px;
+    border: 1px solid #ddd6e8;
+    border-radius: 16px;
+    background: #f2eff6;
+    padding: 5px;
+  }
+
+  .heyy-client-review-tabs button {
+    min-height: 52px;
+    border: 0 !important;
+    border-radius: 11px !important;
+    background: transparent !important;
+    color: #5d5666 !important;
+    padding: 9px 13px !important;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .heyy-client-review-tabs button:hover { background: #fff !important; }
+  .heyy-client-review-tabs button[data-active="true"] {
+    background: #fff !important;
+    color: #5b00d6 !important;
+    box-shadow: 0 7px 18px rgba(57,35,84,.09);
+  }
+  .heyy-client-review-tabs span { display:block;font-size:11px;font-weight:950; }
+  .heyy-client-review-tabs small { display:block;margin-top:3px;font-size:8px;font-weight:800;color:#81798a; }
+  .heyy-client-review-tabs button[data-active="true"] small { color:#7a51ad; }
+
+  @media (max-width: 650px) {
+    .heyy-client-review-tabs { grid-template-columns: minmax(0,1fr); }
+  }
+
+  .heyy-client-single-section {
+    display: grid;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .heyy-client-overview-card {
+    background:
+      radial-gradient(circle at 100% 0%,var(--production-accent-soft),transparent 44%),
+      #fff;
+    padding: 22px;
+  }
+
+  .heyy-client-overview-card h5 {
+    margin: 6px 0 0;
+    color: #17151f !important;
+    font-size: 24px;
+    font-weight: 950;
+    letter-spacing: -.04em;
+  }
+
+  .heyy-client-overview-card > p:not(.heyy-client-action-eyebrow) {
+    margin: 9px 0 0;
+    color: #696270 !important;
+    font-size: 11px;
+    line-height: 1.75;
+  }
+
+  .heyy-client-overview-cta {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 18px;
+    border: 1px solid var(--production-accent) !important;
+    border-radius: 999px !important;
+    background: var(--production-accent) !important;
+    color: #fff !important;
+    padding: 0 17px !important;
+    font-size: 10px;
+    font-weight: 950;
+  }
+
+  .heyy-client-empty-review {
+    display: grid;
+    min-height: 220px;
+    place-items: center;
+    align-content: center;
+    border: 1px dashed #d8d0e1;
+    border-radius: 21px;
+    background: #fff;
+    padding: 28px;
+    text-align: center;
+  }
+
+  .heyy-client-empty-review svg { color: var(--production-accent-strong); }
+  .heyy-client-empty-review h5 { margin: 10px 0 0; color: #17151f !important; font-size: 17px; font-weight: 950; }
+  .heyy-client-empty-review p { max-width: 520px; margin: 6px 0 0; color: #777080 !important; font-size: 10px; line-height: 1.65; }
+
   .heyy-client-workspace-grid {
     display: grid;
     grid-template-columns: minmax(0,1.55fr) minmax(300px,.7fr);
@@ -851,6 +1366,7 @@ const workspaceStyles = `
 
   .heyy-client-section-card,
   .heyy-client-action-card,
+  .heyy-client-overview-card,
   .heyy-client-activity-card,
   .heyy-client-files-summary {
     overflow: hidden;
@@ -905,12 +1421,23 @@ const workspaceStyles = `
 
   .heyy-client-section-body { padding: 17px; }
 
-  .heyy-client-section-body button {
+  .heyy-client-section-body .heyy-send-revision,
+  .heyy-client-section-body .heyy-download-all,
+  .heyy-client-section-body .heyy-history-toggle {
     border-color: var(--production-accent) !important;
   }
 
-  .heyy-client-section-body button:hover:not(:disabled) {
-    border-color: var(--production-accent-strong) !important;
+  .heyy-client-section-body .heyy-approve-delivery {
+    border-color:#0d9655 !important;
+    background:#0d9655 !important;
+    color:#fff !important;
+    box-shadow:0 9px 22px rgba(13,150,85,.20) !important;
+  }
+
+  .heyy-client-section-body .heyy-approve-delivery:hover:not(:disabled) {
+    border-color:#087b45 !important;
+    background:#087b45 !important;
+    box-shadow:0 12px 26px rgba(13,150,85,.24) !important;
   }
 
   .heyy-client-action-card {
@@ -1105,7 +1632,9 @@ const workspaceStyles = `
   [data-theme="dark"] .heyy-client-stage-rail,
   [data-theme="dark"] .heyy-client-section-card,
   [data-theme="dark"] .heyy-client-action-card,
-  [data-theme="dark"] .heyy-client-activity-card {
+  [data-theme="dark"] .heyy-client-overview-card,
+  [data-theme="dark"] .heyy-client-activity-card,
+  [data-theme="dark"] .heyy-client-empty-review {
     border-color: #463d50;
     background: #211c28;
   }
@@ -1118,6 +1647,8 @@ const workspaceStyles = `
   [data-theme="dark"] .heyy-client-workspace-title,
   [data-theme="dark"] .heyy-client-section-heading h5,
   [data-theme="dark"] .heyy-client-action-card h5,
+  [data-theme="dark"] .heyy-client-overview-card h5,
+  [data-theme="dark"] .heyy-client-empty-review h5,
   [data-theme="dark"] .heyy-client-stage strong,
   [data-theme="dark"] .heyy-client-info-row strong,
   [data-theme="dark"] .heyy-client-activity-heading p,
@@ -1128,6 +1659,8 @@ const workspaceStyles = `
   [data-theme="dark"] .heyy-client-workspace-subtitle,
   [data-theme="dark"] .heyy-client-section-heading > div > span,
   [data-theme="dark"] .heyy-client-action-card > p:not(.heyy-client-action-eyebrow),
+  [data-theme="dark"] .heyy-client-overview-card > p:not(.heyy-client-action-eyebrow),
+  [data-theme="dark"] .heyy-client-empty-review p,
   [data-theme="dark"] .heyy-client-activity-item p,
   [data-theme="dark"] .heyy-client-stage small {
     color: #bdb4c7 !important;
@@ -1159,6 +1692,23 @@ const workspaceStyles = `
     color: #a9cabb !important;
   }
 
+
+  [data-theme="dark"] .heyy-client-workspace-tabs {
+    border-color: #463d50;
+    background: #17131d;
+  }
+
+  [data-theme="dark"] .heyy-client-workspace-tab {
+    border-color: #5a4f65 !important;
+    background: #211c28 !important;
+    color: #ded6e5 !important;
+  }
+
+  [data-theme="dark"] .heyy-client-workspace-tab[data-active="true"] {
+    border-color: var(--production-accent) !important;
+    background: var(--production-accent) !important;
+    color: #fff !important;
+  }
 
   .heyy-production-confirm-backdrop {
     position: fixed;
@@ -1260,7 +1810,9 @@ const workspaceStyles = `
   [data-theme="dark"] .heyy-client-stage-rail,
   [data-theme="dark"] .heyy-client-section-card,
   [data-theme="dark"] .heyy-client-action-card,
-  [data-theme="dark"] .heyy-client-activity-card {
+  [data-theme="dark"] .heyy-client-overview-card,
+  [data-theme="dark"] .heyy-client-activity-card,
+  [data-theme="dark"] .heyy-client-empty-review {
     border-color: #664087;
     background: #2b1838;
   }
@@ -1306,12 +1858,18 @@ const workspaceStyles = `
     .heyy-client-workspace-header { flex-direction: column; padding: 19px; }
     .heyy-client-workspace-header-actions { justify-content: flex-start; }
     .heyy-client-stage-rail {
-      grid-template-columns: repeat(5,minmax(96px,1fr));
+      grid-template-columns: repeat(4,minmax(110px,1fr));
       overflow-x: auto;
       padding: 14px 16px;
     }
     .heyy-client-stage small { display: none; }
+    .heyy-client-workspace-tabs {
+      grid-template-columns: minmax(150px,1fr) minmax(150px,1fr) minmax(170px,1fr);
+      overflow-x: auto;
+      padding: 10px 12px;
+    }
     .heyy-client-workspace-grid { padding: 12px; }
+    .heyy-client-single-section { padding: 12px; }
     .heyy-client-workspace-sidebar { grid-template-columns: minmax(0,1fr); }
     .heyy-client-section-header { flex-direction: column; }
     .heyy-client-section-badge { align-self: flex-start; }

@@ -25,7 +25,7 @@ export const CREDIT_COSTS = {
   interiorPlan: 80,
   interiorVisual: 60,
   marketingCampaign: 10,
-  marketingCreativePack: 20,
+  marketingCreativePack: 10,
   marketingVisualPreview: 20,
   marketingProfessionalFinal: 20,
   brandSystemText: 10,
@@ -36,12 +36,13 @@ export const CREDIT_COSTS = {
   brandApplicationVisual: 20,
   brandProfessionalFinal: 20,
   brandVariation: 20,
+  architectureWorkspace: 10,
   architectureConcept: 10,
   architectureText: 20,
   architectureTechnicalPlan: 40,
-  architectureDirection: 60,
-  architectureVisual: 60,
-  architectureProfessionalFinal: 60,
+  architectureDirection: 20,
+  architectureVisual: 20,
+  architectureProfessionalFinal: 20,
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;

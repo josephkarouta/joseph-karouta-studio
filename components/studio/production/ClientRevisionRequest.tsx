@@ -11,11 +11,18 @@ type ClientRevisionRequestProps = {
   openComposerSignal?: number;
   disabled?: boolean;
   onRevisionCountChange?: (count: number) => void;
+  onRevisionPolicyChange?: (policy: RevisionPolicy | null) => void;
+  reviewGroups?: any[];
+  initialTargets?: any[];
+  onBuyExtraRevision?: () => void | Promise<void>;
+  buyingExtraRevision?: boolean;
 };
 
 type RevisionPolicy = {
   enforced: boolean;
   included: number | null;
+  purchasedExtraRevisions?: number;
+  totalAllowance?: number | null;
   used: number;
   remaining: number | null;
   extraRevisionFee: number | null;
@@ -24,6 +31,15 @@ type RevisionPolicy = {
 
 const MAX_REVISION_FILES = 5;
 
+function formatRevisionMoney(amount: number, currency: string | null) {
+  const code = String(currency || "USD").toUpperCase();
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(Number(amount || 0));
+  } catch {
+    return `${code} ${Number(amount || 0).toFixed(2)}`;
+  }
+}
+
 export default function ClientRevisionRequest({
   productionJobId,
   userId: _userId,
@@ -31,6 +47,11 @@ export default function ClientRevisionRequest({
   openComposerSignal = 0,
   disabled = false,
   onRevisionCountChange,
+  onRevisionPolicyChange,
+  reviewGroups = [],
+  initialTargets = [],
+  onBuyExtraRevision,
+  buyingExtraRevision = false,
 }: ClientRevisionRequestProps) {
   const [revisions, setRevisions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +65,19 @@ export default function ClientRevisionRequest({
   const [previousRevisionId, setPreviousRevisionId] = useState<string | null>(
     null,
   );
+  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
+
+  const availableTargets = useMemo(() =>
+    (reviewGroups || [])
+      .map((group: any) => group?.finalFile)
+      .filter(Boolean)
+      .map((file: any) => ({
+        id: String(file.id || ""),
+        filename: file.original_filename || file.filename || "Production file",
+        version: Number(file.version || 1),
+      }))
+      .filter((file: any) => file.id),
+  [reviewGroups]);
 
   async function loadRevisions() {
     if (!productionJobId) return;
@@ -75,6 +109,7 @@ export default function ClientRevisionRequest({
       const nextRevisions = data.revisions || [];
       setRevisions(nextRevisions);
       setRevisionPolicy(data.revisionPolicy || null);
+      onRevisionPolicyChange?.(data.revisionPolicy || null);
       setLoadError("");
       onRevisionCountChange?.(nextRevisions.length);
     } catch (error) {
@@ -91,24 +126,33 @@ export default function ClientRevisionRequest({
 
   const latestRevision = useMemo(() => {
     if (revisions.length === 0) return null;
-    return revisions[revisions.length - 1];
+    return revisions[0];
   }, [revisions]);
 
   const revisionLimitReached = Boolean(
     revisionPolicy?.enforced && Number(revisionPolicy.remaining || 0) <= 0,
   );
+  const activeRevision = revisions.find((revision) =>
+    ["Requested", "In Progress"].includes(String(revision?.status || "")),
+  ) || null;
 
   useEffect(() => {
-    if (openComposerSignal > 0 && !disabled && !revisionLimitReached) {
+    if (openComposerSignal > 0 && !disabled && !revisionLimitReached && !activeRevision) {
       setPreviousRevisionId(null);
       setMessage("");
       setFiles([]);
+      const preferredIds = (initialTargets || []).map((item: any) => String(item?.id || "")).filter(Boolean);
+      setSelectedTargetIds(preferredIds.length ? preferredIds : availableTargets.map((item: any) => item.id));
       setShowComposer(true);
     }
-  }, [openComposerSignal, disabled, revisionLimitReached]);
+  }, [openComposerSignal, disabled, revisionLimitReached, activeRevision, initialTargets, availableTargets]);
 
   async function requestRevision() {
     if (!message.trim()) return;
+    if (availableTargets.length > 0 && selectedTargetIds.length === 0) {
+      alert("Select at least one file for this revision round.");
+      return;
+    }
 
     setSubmitting(true);
 
@@ -124,6 +168,8 @@ export default function ClientRevisionRequest({
       const formData = new FormData();
       formData.set("production_job_id", productionJobId);
       formData.set("message", message.trim());
+      const selectedTargets = availableTargets.filter((item: any) => selectedTargetIds.includes(item.id));
+      formData.set("target_files", JSON.stringify(selectedTargets));
       if (previousRevisionId) {
         formData.set("previous_revision_id", previousRevisionId);
       }
@@ -206,6 +252,7 @@ export default function ClientRevisionRequest({
     setPreviousRevisionId(null);
     setMessage("");
     setFiles([]);
+    setSelectedTargetIds([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -698,6 +745,24 @@ export default function ClientRevisionRequest({
           padding: 16px !important;
         }
 
+        .heyy-revision-targets {
+          margin-bottom: 14px;
+          border: 1px solid #e2d6f5;
+          border-radius: 16px;
+          background: #faf7ff;
+          padding: 12px;
+        }
+        .heyy-revision-targets-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+        .heyy-revision-targets-head strong { color:#3f3550 !important; font-size:11px; }
+        .heyy-revision-targets-head p { margin:3px 0 0 !important; color:#766d80 !important; font-size:9px !important; line-height:1.5 !important; }
+        .heyy-revision-target-list { display:grid; gap:7px; margin-top:10px; }
+        .heyy-revision-target { display:flex !important; width:100%; align-items:center; gap:10px; border:1px solid #ded6e8 !important; border-radius:12px !important; background:#fff !important; padding:9px 10px !important; text-align:left !important; }
+        .heyy-revision-target[data-selected="true"] { border-color:#9b63ff !important; background:#f4edff !important; }
+        .heyy-revision-target-check { display:grid !important; width:24px; height:24px; flex:0 0 24px; place-items:center; border:1px solid #c8b6e6; border-radius:8px; color:#fff !important; font-size:11px; font-weight:950; }
+        .heyy-revision-target[data-selected="true"] .heyy-revision-target-check { border-color:#6c00ff; background:#6c00ff; }
+        .heyy-revision-target strong { display:block; color:#241d2c !important; font-size:10px !important; }
+        .heyy-revision-target small { display:block; margin-top:2px; color:#81788b !important; font-size:8px !important; }
+
         .heyy-revision-composer textarea {
           width: 100% !important;
           min-height: 112px !important;
@@ -819,13 +884,17 @@ export default function ClientRevisionRequest({
       {revisionPolicy?.enforced && (
         <div className="heyy-revision-policy" data-limit={revisionLimitReached ? "true" : "false"}>
           <span>
-            <strong>{revisionPolicy.used} of {revisionPolicy.included}</strong> included revision{revisionPolicy.included === 1 ? "" : "s"} used
+            <strong>{revisionPolicy.used} of {revisionPolicy.totalAllowance ?? revisionPolicy.included}</strong> revision round{(revisionPolicy.totalAllowance ?? revisionPolicy.included) === 1 ? "" : "s"} used
+            {Number(revisionPolicy.purchasedExtraRevisions || 0) > 0 ? ` · ${revisionPolicy.included} included + ${revisionPolicy.purchasedExtraRevisions} purchased` : ""}
           </span>
-          <span>
+          <span className="flex flex-wrap items-center justify-end gap-2">
             {revisionLimitReached
               ? revisionPolicy.extraRevisionFee && revisionPolicy.extraRevisionFee > 0
-                ? `Additional revision: ${revisionPolicy.currency || "USD"} ${revisionPolicy.extraRevisionFee}`
-                : "Included revision limit reached"
+                ? <>
+                    <span>Additional revision: {formatRevisionMoney(revisionPolicy.extraRevisionFee, revisionPolicy.currency)}</span>
+                    {onBuyExtraRevision && <button type="button" className="heyy-purple-action" disabled={buyingExtraRevision} onClick={() => void onBuyExtraRevision()}>{buyingExtraRevision ? "Opening checkout…" : "Buy another revision"}</button>}
+                  </>
+                : "Revision allowance reached — contact Heyy Studio"
               : `${revisionPolicy.remaining} remaining`}
           </span>
         </div>
@@ -851,12 +920,18 @@ export default function ClientRevisionRequest({
       ) : (
         !showComposer && (
           <div className="heyy-revision-loading">
-            Use the “Send revision” button beside a delivered file when you want to request a change.
+            Use “Request changes” in the review package. One revision round can cover one, several or all files.
           </div>
         )
       )}
 
-      {showComposer && !revisionLimitReached && (
+      {activeRevision && !showComposer && (
+        <div className="heyy-revision-loading">
+          <strong>Revision #{activeRevision.revision_number} is already in progress.</strong> One revision round can include changes to one, several or all files. Wait for the revised review package before starting the next included round.
+        </div>
+      )}
+
+      {showComposer && !revisionLimitReached && !activeRevision && (
         <section className="heyy-revision-composer">
           <div className="heyy-revision-composer-head">
             <p className="heyy-revision-composer-title">
@@ -866,12 +941,33 @@ export default function ClientRevisionRequest({
             </p>
 
             <p className="heyy-revision-composer-copy">
-              Explain what needs to change. The studio will review your request
-              and send the revised files here.
+              Select every file that needs work, then describe the changes together. This counts as one revision round, even when several files are selected.
             </p>
           </div>
 
           <div className="heyy-revision-composer-body">
+            {availableTargets.length > 0 && (
+              <div className="heyy-revision-targets">
+                <div className="heyy-revision-targets-head">
+                  <div><strong>Files included in this revision round</strong><p>Select one, several or all files. The round is counted once for the package.</p></div>
+                  <button type="button" className="heyy-secondary-action" disabled={submitting} onClick={() => setSelectedTargetIds(selectedTargetIds.length === availableTargets.length ? [] : availableTargets.map((item: any) => item.id))}>
+                    {selectedTargetIds.length === availableTargets.length ? "Clear" : "Select all"}
+                  </button>
+                </div>
+                <div className="heyy-revision-target-list">
+                  {availableTargets.map((item: any) => {
+                    const checked = selectedTargetIds.includes(item.id);
+                    return (
+                      <button key={item.id} type="button" className="heyy-revision-target" data-selected={checked ? "true" : "false"} disabled={submitting} onClick={() => setSelectedTargetIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}>
+                        <span className="heyy-revision-target-check">{checked ? "✓" : ""}</span>
+                        <span><strong>{item.filename}</strong><small>Version {item.version}</small></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
@@ -917,7 +1013,7 @@ export default function ClientRevisionRequest({
               <button
                 type="button"
                 onClick={requestRevision}
-                disabled={submitting || !message.trim()}
+                disabled={submitting || !message.trim() || (availableTargets.length > 0 && selectedTargetIds.length === 0)}
                 className="heyy-purple-action"
               >
                 {submitting
@@ -1004,6 +1100,22 @@ function ClientRevisionCard({
           <p className="heyy-revision-message">
             {revision.message || "No message provided."}
           </p>
+
+          {Array.isArray(revision.target_files) && revision.target_files.length > 0 && (
+            <div className="heyy-revision-files">
+              {revision.target_files.map((target: any) => (
+                <div key={target.id || target.filename} className="heyy-revision-file">
+                  <div className="heyy-revision-file-main">
+                    <span className="heyy-file-icon"><FileIcon />REF</span>
+                    <div style={{ minWidth: 0 }}>
+                      <p className="heyy-revision-file-name">{target.filename || "Production file"}</p>
+                      <p className="heyy-revision-file-version">Requested file · Version {target.version || 1}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <ClientRequestAttachments
             attachments={revision.client_message?.attachments || []}

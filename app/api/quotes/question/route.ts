@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
+import { notifyAdminOperationalEvent } from "@/lib/expert-network/operational-notifications";
 
 const serviceSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     const { data: quote, error: quoteError } = await serviceSupabase
       .from("workspace_quotes")
-      .select("id,studio_request_id,project_id,service")
+      .select("id,studio_request_id,project_id,service,studio")
       .eq("id", quoteId)
       .single();
 
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     const { data: studioRequest, error: requestError } = await serviceSupabase
       .from("studio_requests")
-      .select("id,user_id,metadata")
+      .select("id,user_id,project_name,service,studio,metadata")
       .eq("id", quote.studio_request_id)
       .single();
 
@@ -130,6 +131,19 @@ export async function POST(request: NextRequest) {
       .eq("id", studioRequest.id);
 
     if (updateError) throw updateError;
+
+    await notifyAdminOperationalEvent(serviceSupabase, {
+      key: `client-quote-question:${studioRequest.id}:${question.id}`,
+      type: "quote.question.client",
+      projectName: studioRequest.project_name || null,
+      service: studioRequest.service || quote.service || null,
+      studio: studioRequest.studio || quote.studio || null,
+      title: "Client asked a quote question",
+      message: message.length > 320 ? `${message.slice(0, 317)}…` : message,
+      status: "Reply needed",
+      href: `/admin/studio-requests/${encodeURIComponent(studioRequest.id)}?section=client-quote`,
+      ctaLabel: "Review quote question",
+    });
 
     return NextResponse.json({ success: true, question });
   } catch (error) {

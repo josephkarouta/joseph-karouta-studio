@@ -10,7 +10,7 @@ type BaseEmailProps = {
   title: string;
   intro: string;
   preheader?: string;
-  recipient?: "client" | "admin";
+  recipient?: "client" | "admin" | "expert";
   studio?: string | null;
   projectName?: string | null;
   service?: string | null;
@@ -22,6 +22,7 @@ type BaseEmailProps = {
   supportingCopy?: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  logoUrl?: string;
 };
 
 const studioThemes: Record<string, { accent: string; accentDark: string; soft: string; label: string }> = {
@@ -52,8 +53,10 @@ export function baseEmail({
   supportingCopy = "Manage your projects, messages, payments and account inside your Heyy Studio workspace.",
   ctaLabel = "Open Heyy Studio",
   ctaUrl,
+  logoUrl,
 }: BaseEmailProps) {
   const siteUrl = getSiteUrl();
+  const emailLogoUrl = logoUrl || getEmailLogoUrl(siteUrl);
   const theme = studioThemes[normaliseStudio(studio)] || {
     accent: "#7c3aed",
     accentDark: "#5721b8",
@@ -68,7 +71,7 @@ export function baseEmail({
     amount ? { label: "Amount", value: amount } : null,
     ...details,
   ].filter((item): item is EmailDetail => Boolean(item?.value !== undefined && item?.value !== null && String(item.value).trim()));
-  const recipientLabel = recipient === "admin" ? "Heyy Studio Admin" : theme.label;
+  const recipientLabel = recipient === "admin" ? "Heyy Studio Admin" : recipient === "expert" ? "Heyy Studio Expert" : theme.label;
 
   return `
 <!doctype html>
@@ -116,7 +119,7 @@ export function baseEmail({
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="vertical-align:middle;">
-                      <img src="cid:heyy-studio-logo" alt="Heyy Studio" width="148" class="heyy-email-brand-logo" style="display:block;width:148px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;background:#ffffff;" />
+                      <img src="${escapeAttribute(emailLogoUrl)}" alt="Heyy Studio" width="148" class="heyy-email-brand-logo" style="display:block;width:148px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;background:#ffffff;" />
                     </td>
                     <td align="right" class="heyy-email-brand-label" style="color:${theme.accentDark};font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;vertical-align:middle;">
                       ${escapeHtml(recipientLabel)}
@@ -189,7 +192,7 @@ export function baseEmail({
           </table>
 
           <p style="margin:16px 0 0;color:#8c8497;font-size:10px;line-height:1.6;text-align:center;">
-            ${recipient === "admin" ? "This operational notification was sent to the Heyy Studio administration team." : "This message was sent by Heyy Studio about your account, payment or project."}
+            ${recipient === "admin" ? "This operational notification was sent to the Heyy Studio administration team." : recipient === "expert" ? "This message was sent by Heyy Studio about your Expert Network opportunity or assigned project." : "This message was sent by Heyy Studio about your account, payment or project."}
           </p>
         </td>
       </tr>
@@ -221,6 +224,18 @@ function renderDetails(
         </table>
       </td>
     </tr>`;
+}
+
+function getEmailLogoUrl(siteUrl: string) {
+  const explicit = String(process.env.HEYY_EMAIL_LOGO_URL || "").trim();
+  if (explicit) return explicit;
+
+  // Email clients cannot load localhost assets. During local QA use the
+  // already-deployed beta asset; beta/production use their own public URL.
+  const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(siteUrl);
+  const useBetaAsset = process.env.NODE_ENV !== "production" || isLocal;
+  const assetBase = useBetaAsset ? "https://heyystudiobeta.netlify.app" : siteUrl;
+  return `${assetBase}/brand/heyy/heyy-full-colour-dark-export.png?v=20260909-0838`;
 }
 
 function normaliseStudio(studio?: string | null) {

@@ -1,15 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { createBrowserZip } from "@/lib/client/zip";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type ClientDeliverablesManagerProps = {
   groups: any[];
   onDownload: (path: string) => void;
-  onRequestRevision: () => void;
+  onRequestRevision: (targets?: any[]) => void;
   onApproveDelivery: () => void | Promise<void>;
   approving?: boolean;
   approved?: boolean;
   revisionLimitReached?: boolean;
+  onBuyExtraRevision?: () => void | Promise<void>;
+  extraRevisionPriceLabel?: string | null;
+  buyingExtraRevision?: boolean;
 };
 
 export default function ClientDeliverablesManager({
@@ -20,8 +25,63 @@ export default function ClientDeliverablesManager({
   approving = false,
   approved = false,
   revisionLimitReached = false,
+  onBuyExtraRevision,
+  extraRevisionPriceLabel = null,
+  buyingExtraRevision = false,
 }: ClientDeliverablesManagerProps) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const currentTargets = groups
+    .map((group: any) => group.finalFile)
+    .filter(Boolean)
+    .map((file: any) => ({
+      id: file.id,
+      filename: file.original_filename || file.filename || "Production file",
+      version: Number(file.version || 1),
+      storage_path: file.storage_path || null,
+    }));
+
+  async function downloadAll() {
+    if (downloadingAll || !currentTargets.length) return;
+    setDownloadingAll(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Your session expired. Sign in again.");
+
+      const files = [];
+      for (const target of currentTargets) {
+        if (!target.storage_path) continue;
+        const signedResponse = await fetch("/api/production/download-file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ path: target.storage_path }),
+        });
+        const signed = await signedResponse.json();
+        if (!signedResponse.ok || !signed.success || !signed.url) {
+          throw new Error(signed.error || `Could not prepare ${target.filename}.`);
+        }
+        const response = await fetch(signed.url);
+        if (!response.ok) throw new Error(`Could not download ${target.filename}.`);
+        files.push({ name: target.filename || signed.filename || "production-file", data: await response.arrayBuffer() });
+      }
+
+      const zip = createBrowserZip(files);
+      const url = URL.createObjectURL(zip);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Heyy-Studio-Production-Files-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not download the production package.");
+    } finally {
+      setDownloadingAll(false);
+    }
+  }
 
   if (!groups?.length) {
     return (
@@ -51,15 +111,46 @@ export default function ClientDeliverablesManager({
 
       <div className="heyy-deliverables-intro">
         <div>
-          <p className="heyy-deliverables-eyebrow">Production files</p>
+          <p className="heyy-deliverables-eyebrow">{approved ? "Approved final files" : "Production files"}</p>
           <p className="heyy-deliverables-copy">
-            Review the latest file, request changes if needed, or approve the package once when it is final.
+            {approved
+              ? "These are the files you approved. Download them individually or together as a ZIP; earlier delivered versions remain available in each file’s history."
+              : "Review the latest file, request changes if needed, or approve the package once when it is final."}
           </p>
         </div>
 
-        <span className="heyy-deliverables-count">
-          {groups.length} file group{groups.length === 1 ? "" : "s"}
-        </span>
+        <div className="heyy-deliverables-package-actions">
+          <span className="heyy-deliverables-count">
+            {groups.length} file group{groups.length === 1 ? "" : "s"}
+          </span>
+          <button type="button" className="heyy-download-all" disabled={downloadingAll} onClick={() => void downloadAll()}>{downloadingAll ? "Preparing ZIP…" : "Download all"}</button>
+          {!approved && (
+            <>
+              <button
+                type="button"
+                className="heyy-send-revision"
+                disabled={approving || buyingExtraRevision || (revisionLimitReached && !onBuyExtraRevision)}
+                onClick={() => revisionLimitReached ? void onBuyExtraRevision?.() : onRequestRevision(currentTargets)}
+              >
+                {revisionLimitReached
+                  ? buyingExtraRevision
+                    ? "Opening checkout…"
+                    : extraRevisionPriceLabel
+                      ? `Buy another revision · ${extraRevisionPriceLabel}`
+                      : "Request additional revision"
+                  : "Request changes"}
+              </button>
+              <button
+                type="button"
+                className="heyy-approve-delivery"
+                disabled={approving}
+                onClick={() => void onApproveDelivery()}
+              >
+                {approving ? "Approving..." : "Approve package"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {groups.map((group: any) => {
@@ -102,34 +193,10 @@ export default function ClientDeliverablesManager({
                   <p className="heyy-deliverable-name">{finalName}</p>
 
                   <div className="heyy-deliverable-meta">
-                    <span
-                      className="heyy-final-badge"
-                      data-review={isRevisionReview ? "true" : "false"}
-                    >
-                      {isRevisionReview ? "Review file" : "Final"}
-                    </span>
-
-                    <span className="heyy-version-text">
-                      Version {finalFile?.version || 1}
-                    </span>
-
-                    {isRevisionReview && (
-                      <span className="heyy-revision-badge">
-                        Revised file ready
-                      </span>
-                    )}
-
-                    {finalFile?.source === "approved_revision" && !approved && (
-                      <span className="heyy-revision-badge">
-                        Revised final
-                      </span>
-                    )}
-
-                    {approved && (
-                      <span className="heyy-complete-badge">
-                        ✓ Approved & complete
-                      </span>
-                    )}
+                    <span className="heyy-version-text">Version {finalFile?.version || 1}</span>
+                    {isRevisionReview && <span className="heyy-revision-badge">Revised</span>}
+                    {finalFile?.source === "approved_revision" && !approved && <span className="heyy-revision-badge">Revised</span>}
+                    {approved && <span className="heyy-complete-badge">✓ Approved</span>}
                   </div>
                 </div>
               </div>
@@ -148,28 +215,7 @@ export default function ClientDeliverablesManager({
                   Download
                 </button>
 
-                {!approved && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={onRequestRevision}
-                      disabled={approving || revisionLimitReached}
-                      className="heyy-send-revision"
-                      title={revisionLimitReached ? "Your included revision limit has been reached." : undefined}
-                    >
-                      {revisionLimitReached ? "Revision limit reached" : "Send revision"}
-                    </button>
 
-                    <button
-                      type="button"
-                      onClick={() => void onApproveDelivery()}
-                      disabled={approving}
-                      className="heyy-approve-delivery"
-                    >
-                      {approving ? "Approving..." : "Approve & complete"}
-                    </button>
-                  </>
-                )}
               </div>
             </div>
 
@@ -191,13 +237,14 @@ export default function ClientDeliverablesManager({
 
                   {isOpen
                     ? "Hide delivery history"
-                    : `${previousVersions.length} previous version${
+                    : `${previousVersions.length} previous delivered version${
                         previousVersions.length === 1 ? "" : "s"
                       }`}
                 </button>
 
                 {isOpen && (
                   <div className="heyy-history-list">
+                    <p className="px-1 pb-2 text-[10px] font-semibold leading-4 text-slate-500">Only versions that were previously sent to you are shown here.</p>
                     {previousVersions.map((file: any) => {
                       const previousName =
                         file.original_filename ||
@@ -281,6 +328,25 @@ const deliverablesStyles = `
     cursor: pointer;
   }
 
+  .heyy-deliverables-package-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .heyy-download-all {
+    min-height: 38px;
+    border: 1px solid #d8c5ff !important;
+    border-radius: 999px !important;
+    background: #fff !important;
+    padding: 0 13px !important;
+    color: #6413cd !important;
+    font-size: 9px !important;
+    font-weight: 950 !important;
+  }
+
   .heyy-deliverable-actions {
     display: flex;
     flex-wrap: wrap;
@@ -329,9 +395,7 @@ const deliverablesStyles = `
     gap: 12px;
     border: 1px solid #d7c2ff !important;
     border-radius: 18px !important;
-    background:
-      radial-gradient(circle at 100% 0%,rgba(227,198,255,.85),transparent 37%),
-      linear-gradient(135deg,#f3eaff,#ffffff) !important;
+    background: #faf8fd !important;
     padding: 14px 15px !important;
   }
 
@@ -369,10 +433,10 @@ const deliverablesStyles = `
 
   .heyy-deliverable-card {
     overflow: hidden;
-    border: 1px solid #d8c6ff !important;
-    border-radius: 20px !important;
+    border: 1px solid #ddd8e5 !important;
+    border-radius: 18px !important;
     background: #ffffff !important;
-    box-shadow: 0 14px 28px rgba(108,0,255,.08) !important;
+    box-shadow: 0 7px 18px rgba(45,27,70,.045) !important;
   }
 
   .heyy-deliverable-current {
@@ -381,10 +445,8 @@ const deliverablesStyles = `
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    background:
-      radial-gradient(circle at 100% 0%,rgba(230,211,255,.78),transparent 42%),
-      linear-gradient(135deg,#f7f1ff 0%,#ffffff 68%) !important;
-    padding: 16px !important;
+    background: #ffffff !important;
+    padding: 14px 15px !important;
   }
 
   .heyy-deliverable-card[data-approved="true"] {
@@ -503,7 +565,7 @@ const deliverablesStyles = `
     gap: 8px !important;
     border: 0 !important;
     border-radius: 999px !important;
-    background: linear-gradient(135deg,#6c00ff,#9d2aff) !important;
+    background: #6c00ff !important;
     color: #ffffff !important;
     padding: 0 17px !important;
     font-size: 9px !important;

@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const { data: job, error: jobError } = await supabase
       .from("production_jobs")
       .select(
-        "id,user_id,project_id,project_name,studio,assigned_studio,service,status",
+        "id,user_id,project_id,project_name,studio,assigned_studio,service,status,metadata",
       )
       .eq("id", jobId)
       .maybeSingle();
@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
           message: message || `${files.length} attachment${files.length === 1 ? "" : "s"}`,
           attachmentCount: files.length,
           senderName,
+          productionOnly: Boolean((job.metadata as any)?.production_only),
         },
       });
     }

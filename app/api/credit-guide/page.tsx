@@ -3,14 +3,13 @@ import SiteFooter from "@/components/site-footer";
 import SiteHeader from "@/components/site-header";
 import { ButtonLink, CreditPill, Eyebrow, GlassCard, PageContainer } from "@/components/ui/heyy";
 import { CUSTOMER_CREDIT_GUIDE } from "@/lib/credits/customer-catalog";
-import { CREDIT_COSTS } from "@/lib/credits/config";
 
 export const metadata = {
   title: "Credit Guide | Heyy Studio",
-  description: "See how Heyy Studio credits are used across AI tools, utilities, Brand Studio and Marketing Studio.",
+  description: "See how Heyy Studio credits are used across tools and Studios, including Architecture and Interior.",
 };
 
-const CATEGORIES = ["AI Tools", "Utilities", "Brand Studio", "Marketing Studio"] as const;
+const CATEGORIES = ["Brand Studio", "Marketing Studio", "Architecture Studio", "Interior Studio", "AI Tools", "Utilities"] as const;
 
 export default function CreditGuidePage() {
   return (
@@ -106,7 +105,7 @@ export default function CreditGuidePage() {
                 <span className="font-black text-[var(--text-primary)]">Some actions are variable.</span> Social Media Systems charge per selected generated format, Digital Adaptations charge per distinct AI composition, and longer PowerPoint decks use simple slide-count tiers.
               </p>
               <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-                <span className="font-black text-[var(--text-primary)]">Utility tools have a daily free allowance.</span> Free accounts get 5 PDF operations and 5 conversions each day, then pay {CREDIT_COSTS.pdfUtility} credits per successful action. Starter and Pro use these utilities without credit deductions.
+                <span className="font-black text-[var(--text-primary)]">Your balance is always visible.</span> The Credits page shows your subscription balance, purchased balance and usage history.
               </p>
             </div>
             <ButtonLink href="/pricing" className="mt-7">

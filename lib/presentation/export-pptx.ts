@@ -993,7 +993,7 @@ async function renderSlide({
   }
 }
 
-export async function exportPresentationPptx(document: PresentationDocument) {
+async function buildPresentationPptx(document: PresentationDocument) {
   const imported = await import("pptxgenjs");
   const PptxGenJS: any = imported.default;
   const pptx: any = new PptxGenJS();
@@ -1023,5 +1023,25 @@ export async function exportPresentationPptx(document: PresentationDocument) {
     });
   }
 
-  await pptx.writeFile({ fileName: `${document.filenameBase}.pptx` });
+  return pptx;
+}
+
+export async function createPresentationPptxBlob(document: PresentationDocument) {
+  const pptx = await buildPresentationPptx(document);
+  const output = await pptx.write({ outputType: "blob" });
+  return output instanceof Blob ? output : new Blob([output as BlobPart], {
+    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  });
+}
+
+export async function exportPresentationPptx(document: PresentationDocument) {
+  const blob = await createPresentationPptxBlob(document);
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${document.filenameBase}.pptx`;
+  window.document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

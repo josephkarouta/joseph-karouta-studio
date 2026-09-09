@@ -103,15 +103,17 @@ export async function GET(request: NextRequest) {
       admin
         .from("production_deliverables")
         .select("*")
-        .eq("production_job_id", job.id)
-        .eq("client_visible", true),
+        .eq("production_job_id", job.id),
       getRevisionFileMeta(admin, job.id),
     ]);
 
     if (deliverablesResult.error) throw deliverablesResult.error;
 
     const publishedDeliverables = (deliverablesResult.data || [])
-      .filter((file: any) => canAppearInFinalHandoff(revisionMeta.get(file.id)))
+      // Keep every version that was ever delivered to the client. Some older
+      // rows may no longer carry client_visible=true after later package
+      // curation, but published_at proves the client received that version.
+      .filter((file: any) => Boolean(file.client_visible || file.published_at))
       .map((file: any) => {
         const meta = revisionMeta.get(file.id);
 
@@ -120,10 +122,14 @@ export async function GET(request: NextRequest) {
           source: meta
             ? meta.status === "Waiting Approval"
               ? "revision_review"
-              : "approved_revision"
+              : meta.status === "Approved"
+                ? "approved_revision"
+                : "revision_history"
             : "production",
           revision_id: meta?.revisionId || null,
           revision_number: meta?.revisionNumber || null,
+          revision_status: meta?.status || null,
+          eligible_for_final_handoff: canAppearInFinalHandoff(meta),
         };
       })
       .sort((a: any, b: any) => {
@@ -142,28 +148,49 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const reviewCandidate = [...publishedDeliverables]
-      .reverse()
-      .find((file: any) => file.source === "revision_review");
+    const byOriginalFilename = new Map<string, any[]>();
+    for (const file of publishedDeliverables) {
+      const key = String(file.original_filename || file.filename || file.id || "deliverable");
+      const current = byOriginalFilename.get(key) || [];
+      current.push(file);
+      byOriginalFilename.set(key, current);
+    }
 
-    const finalFile =
-      reviewCandidate ||
-      publishedDeliverables.find((file: any) => file.is_final) ||
-      publishedDeliverables[publishedDeliverables.length - 1];
+    const groups = Array.from(byOriginalFilename.entries())
+      .map(([name, versions]) => {
+        const sortedVersions = [...versions].sort((a: any, b: any) => {
+          const aDate = new Date(a.published_at || a.uploaded_at || 0).getTime();
+          const bDate = new Date(b.published_at || b.uploaded_at || 0).getTime();
+          return aDate - bDate;
+        });
+        const eligibleVersions = sortedVersions.filter((file: any) => file.client_visible && file.eligible_for_final_handoff !== false);
+        const reviewCandidate = [...eligibleVersions]
+          .reverse()
+          .find((file: any) => file.source === "revision_review");
+        const finalFile =
+          reviewCandidate ||
+          [...eligibleVersions].reverse().find((file: any) => file.is_final) ||
+          eligibleVersions[eligibleVersions.length - 1] ||
+          sortedVersions[sortedVersions.length - 1];
 
-    const group = {
-      name:
-        finalFile.original_filename ||
-        finalFile.filename ||
-        "Final Deliverable",
-      finalFile,
-      versions: publishedDeliverables,
-    };
+        return {
+          name,
+          finalFile,
+          versions: sortedVersions,
+          revisionNumber: finalFile?.revision_number ?? null,
+          source: finalFile?.source || "production",
+        };
+      })
+      .sort((a: any, b: any) => {
+        const aDate = new Date(a.finalFile?.published_at || a.finalFile?.uploaded_at || 0).getTime();
+        const bDate = new Date(b.finalFile?.published_at || b.finalFile?.uploaded_at || 0).getTime();
+        return bDate - aDate;
+      });
 
     return NextResponse.json({
       success: true,
       deliverables: publishedDeliverables,
-      groups: [group],
+      groups,
       status: job.status,
     });
   } catch (error) {

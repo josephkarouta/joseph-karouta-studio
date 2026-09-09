@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { User } from "@supabase/supabase-js";
-import { getHeyyEmailLogoPng } from "@/lib/communications/brand-assets";
 import { resolveCommunicationTemplate } from "@/lib/communications/templates";
 import { buildEmail, buildPlainTextEmail } from "@/lib/notifications/templates";
 import { resend } from "@/lib/notifications/resend";
@@ -44,25 +43,14 @@ export async function sendGoodbyeEmail(user: User) {
       "If you decide to return later, you can create a new account. One-time signup promotions are not reissued to an email address that has already claimed them.",
   };
 
-  const logo = await getHeyyEmailLogoPng();
   const result = await resend.emails.send({
     from: FROM_EMAIL,
     to: user.email,
     subject: resolved.subject,
     html: buildEmail(template),
     text: buildPlainTextEmail(template),
-    ...(logo
-      ? {
-          attachments: [
-            {
-              filename: logo.filename,
-              content: logo.buffer.toString("base64"),
-              contentId: logo.contentId,
-            },
-          ],
-        }
-      : {}),
   });
 
+  if (result.error) throw new Error(String(result.error.message || "Goodbye email delivery failed."));
   return { sent: true, id: result.data?.id || null };
 }

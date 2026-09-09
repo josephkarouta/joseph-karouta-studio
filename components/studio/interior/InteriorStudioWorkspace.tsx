@@ -52,6 +52,11 @@ import {
 import HeyySelect from "@/components/ui/heyy-select";
 import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
+import StudioWorkspaceNavigation from "@/components/studio/common/StudioWorkspaceNavigation";
+import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
+import StudioHero from "@/components/studio/common/StudioHero";
+import StudioProjectHero from "@/components/studio/common/StudioProjectHero";
+import StudioCreationSummary from "@/components/studio/common/StudioCreationSummary";
 import { generationFetch } from "@/lib/client/generation-request";
 import { downloadInteriorDesignPack } from "@/lib/interior/design-pack-export";
 
@@ -276,6 +281,7 @@ export default function InteriorStudioWorkspace() {
 function InteriorExperience() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { user, refreshAccount } = useAuth();
+  const userId = user?.id || null;
   const [form, setForm] = useState<FormState>(() => initialState());
   const [step, setStep] = useState(0);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("overview");
@@ -292,6 +298,7 @@ function InteriorExperience() {
   const [lightbox, setLightbox] = useState<LightboxImage>(null);
   const [sourcePlanFiles, setSourcePlanFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
+  const [resolvingProject, setResolvingProject] = useState(true);
 
   const workMode: WorkMode = form.workMode === "professional" ? "professional" : "guided";
   const activeSteps = useMemo(
@@ -317,17 +324,22 @@ function InteriorExperience() {
     : Math.round(((step + completedInputs / Math.max(1, allFields.length)) / (activeSteps.length + 1)) * 100);
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     void loadArchitectureProjects();
     const projectId = new URLSearchParams(window.location.search).get("project");
-    if (projectId) void loadProject(projectId);
-  }, [user]);
+    if (!projectId) {
+      setResolvingProject(false);
+      return;
+    }
+    setResolvingProject(true);
+    void loadProject(projectId).finally(() => setResolvingProject(false));
+  }, [userId]);
 
   async function loadArchitectureProjects() {
     const { data } = await supabase
       .from("architecture_projects")
       .select("id,project_name,project_type,city,country,architectural_style,status,updated_at")
-      .eq("user_id", user?.id || "")
+      .eq("user_id", userId || "")
       .order("updated_at", { ascending: false })
       .limit(40);
     setArchitectureProjects((data || []) as ArchitectureRecord[]);
@@ -338,7 +350,7 @@ function InteriorExperience() {
       .from("studio_projects")
       .select("*")
       .eq("id", projectId)
-      .eq("user_id", user?.id || "")
+      .eq("user_id", userId || "")
       .eq("studio", config.databaseId)
       .maybeSingle();
 
@@ -696,6 +708,22 @@ function InteriorExperience() {
     }
   }
 
+  if (resolvingProject) {
+    return (
+      <main className="heyy-page min-h-screen py-8 sm:py-10" style={studioStyle}>
+        <PageContainer>
+          <StudioLoader
+            tone="interior"
+            eyebrow="Interior Design Studio"
+            title="Opening your interior workspace"
+            detail="Loading the project brief, saved concept and generated assets."
+            variant="inline"
+          />
+        </PageContainer>
+      </main>
+    );
+  }
+
   const loading = generatingConcept;
   const existingDesign = form.projectStartMode === "existing";
   const mainVisual = existingDesign
@@ -711,34 +739,34 @@ function InteriorExperience() {
       {lightbox && <ImageLightbox image={lightbox} onClose={() => setLightbox(null)} />}
 
       <PageContainer>
-        <section
-          className="relative overflow-hidden rounded-[2rem] border p-6 shadow-[var(--shadow-card)] sm:p-9"
-          style={{
-            borderColor: `${config.accent}66`,
-            background: `linear-gradient(120deg,${config.soft},var(--surface-strong),${config.soft})`,
-          }}
-        >
-          <div className="absolute -right-14 -top-20 h-56 w-56 rounded-full border-[34px] border-white/20" />
-          <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-4xl">
-              <Eyebrow style={{ color: config.accent }}>{config.eyebrow}</Eyebrow>
-              <h1 className="mt-4 text-4xl font-black leading-[.94] tracking-[-.06em] sm:text-6xl">{config.title}</h1>
-              <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base">{config.description}</p>
-            </div>
-            <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 backdrop-blur-xl">
-              <StudioModeToggle
-                value={workMode}
-                onChange={(mode) => void changeWorkMode(mode)}
-                tone="interior"
-                compact
-              />
-              <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple questions and a clear concept" : "Full fit-out, schedules and procurement package"}</span>
-                <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost} />
-              </div>
-            </div>
-          </div>
-        </section>
+        {result ? (
+          <StudioProjectHero
+            tone="interior"
+            eyebrow="Interior design project"
+            title={String(project?.project_name || form.projectName || "Untitled interior project")}
+            description={[String(form.roomType || form.projectScope || ""), String(form.location || "")].filter(Boolean).join(" · ") || "Interior design project"}
+            progress={progress}
+            statusLabel="Brief, plans, materials, furniture, lighting and concept visuals stay connected in one workspace."
+            mode={workMode}
+            onModeChange={(mode) => void changeWorkMode(mode)}
+          />
+        ) : (
+          <StudioHero
+            tone="interior"
+            eyebrow={config.eyebrow}
+            title={config.title}
+            description={config.description}
+            controls={(
+              <>
+                <StudioModeToggle value={workMode} onChange={(mode) => void changeWorkMode(mode)} tone="interior" compact />
+                <div className="mt-3 flex items-center justify-between gap-3 px-1">
+                  <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple questions and a clear concept" : "Full fit-out, schedules and procurement package"}</span>
+                  <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost} />
+                </div>
+              </>
+            )}
+          />
+        )}
 
         {result ? (
           <InteriorWorkspaceNavigation activeTab={activeTab} workMode={workMode} result={result} existingDesign={existingDesign} onChange={selectWorkspaceTab} />
@@ -910,25 +938,13 @@ function InteriorWorkspaceNavigation({
 }) {
   const tabs = workspaceTabs(workMode, result, existingDesign);
   return (
-    <GlassCard className="mt-5 overflow-x-auto p-2">
-      <div className="flex min-w-max gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onChange(tab.id)}
-            className={cx(
-              "rounded-2xl border px-4 py-3 text-xs font-black transition",
-              activeTab === tab.id
-                ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_0_0_3px_var(--accent-soft)]"
-                : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-    </GlassCard>
+    <StudioWorkspaceNavigation
+      tabs={tabs}
+      activeTab={activeTab}
+      onChange={(tabId) => onChange(tabId as WorkspaceTab)}
+      tone="interior"
+      ariaLabel="Interior Studio sections"
+    />
   );
 }
 
@@ -966,7 +982,7 @@ function OnboardingWorkspace({
   const conceptCredits = workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost;
 
   return (
-    <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_330px]">
+    <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
       <GlassCard className="p-5 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -1014,40 +1030,22 @@ function OnboardingWorkspace({
         </div>
       </GlassCard>
 
-      <aside className="space-y-5 xl:sticky xl:top-[calc(var(--header-height)+20px)] xl:self-start">
-        <GlassCard className="overflow-hidden p-0">
-          <div className="p-5 text-white" style={{ background: `linear-gradient(135deg,${config.accent},#8c3d07)` }}>
-            <p className="text-[.6rem] font-black uppercase tracking-[.17em] text-white/70">Project summary</p>
-            <h3 className="mt-2 truncate text-xl font-black">{String(form.projectName || "Untitled project")}</h3>
-            <p className="mt-1 text-xs font-semibold text-white/70">{workMode === "professional" ? "Professional fit-out package" : String(form.roomType || config.title)}</p>
-          </div>
-          <div className="p-5">
-            <div className="flex items-center justify-between text-xs font-black">
-              <span>Brief progress</span>
-              <span style={{ color: config.accent }}>{progress}%</span>
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-hover)]">
-              <div className="h-full rounded-full" style={{ width: `${progress}%`, background: config.accent }} />
-            </div>
-            <div className="mt-5 space-y-2">
-              {allFields
-                .filter((field) => !isEmpty(form[field.id]))
-                .slice(0, 8)
-                .map((field) => (
-                  <div key={field.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <p className="text-[.55rem] font-black uppercase tracking-[.13em] text-[var(--text-muted)]">{field.label}</p>
-                    <p className="mt-1 line-clamp-2 text-xs font-bold text-[var(--text-primary)]">
-                      {Array.isArray(form[field.id]) ? (form[field.id] as string[]).join(", ") : String(form[field.id])}
-                    </p>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </GlassCard>
-        <GlassCard className="p-5">
-          <p className="text-[.6rem] font-black uppercase tracking-[.16em] text-amber-600">Verification note</p>
-          <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{config.disclaimer}</p>
-        </GlassCard>
+      <aside className="xl:sticky xl:top-[calc(var(--header-height)+20px)] xl:self-start">
+        <StudioCreationSummary
+          tone="interior"
+          eyebrow="Project summary"
+          title={String(form.projectName || "Untitled project")}
+          subtitle={workMode === "professional" ? "Professional fit-out package" : String(form.roomType || "Guided interior concept")}
+          progress={progress}
+          rows={allFields
+            .filter((field) => !isEmpty(form[field.id]))
+            .slice(0, 8)
+            .map((field) => ({
+              label: field.label,
+              value: Array.isArray(form[field.id]) ? (form[field.id] as string[]).join(", ") : String(form[field.id]),
+            }))}
+          note={{ eyebrow: "Verification note", text: config.disclaimer }}
+        />
       </aside>
     </div>
   );
@@ -1071,7 +1069,7 @@ function OverviewSection({
   const approvedCount = assets.filter(isApprovedAsset).length;
   const conceptCredits = workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost;
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,.6fr)]">
+    <div>
       <GlassCard className="p-6 sm:p-8">
         <Eyebrow>{workMode === "professional" ? "Professional interior package" : "Interior concept"}</Eyebrow>
         <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">A connected interior workspace, not a disconnected prompt</h2>
@@ -1100,14 +1098,20 @@ function OverviewSection({
             <RefreshCcw size={15} /> Regenerate {workMode === "professional" ? "package" : "concept"} · {conceptCredits} credits
           </Button>
         </div>
-      </GlassCard>
-      <GlassCard className="p-6">
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-          <WandSparkles size={22} />
-        </div>
-        <h3 className="mt-5 text-xl font-black">Design direction</h3>
-        <div className="mt-4 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-          <RenderValue value={result.designDirection} />
+
+        <div className="mt-6 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--surface)] text-[var(--accent-strong)]">
+              <WandSparkles size={19} />
+            </div>
+            <div>
+              <Eyebrow>Current direction</Eyebrow>
+              <h3 className="mt-1 text-xl font-black">Design direction</h3>
+            </div>
+          </div>
+          <div className="mt-4 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
+            <RenderValue value={result.designDirection} />
+          </div>
         </div>
       </GlassCard>
     </div>
@@ -1427,6 +1431,9 @@ function PlansSection({
             })}
           </div>
         )}
+        <div className="mt-6 rounded-2xl border border-amber-300/50 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">
+          {INTERIOR_AI_CONCEPT_NOTICE}
+        </div>
       </GlassCard>
     );
   }
@@ -2019,11 +2026,10 @@ function InteriorWorkflowCard({
 
 function ImageCardLoading({ title }: { title: string }) {
   return (
-    <StudioLoader
+    <StudioVisualGenerationLoader
       tone="interior"
       title={`Generating ${title}`}
       detail="Preserving the approved layout, materials, furniture and lighting."
-      variant="overlay"
     />
   );
 }

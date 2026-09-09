@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import ProductionDeliverables from "@/components/production/admin/ProductionDeliverables";
 import ProductionInternalNotes from "@/components/production/admin/ProductionInternalNotes";
 import ProductionMessages from "@/components/production/admin/ProductionMessages";
-import ProductionRevisions from "@/components/production/admin/ProductionRevisions";
+import ExpertOperations from "@/components/production/admin/ExpertOperations";
 import ProductionChecklist from "@/components/production/shared/ProductionChecklist";
 import { VISIBLE_STUDIOS } from "../../../../lib/platform/platform-registry";
 import HeyySelect from "@/components/ui/heyy-select";
@@ -34,19 +33,23 @@ type ProductionJob = {
   unread_client_messages?: number;
 };
 
-type WorkspaceTab = "Workbench" | "Communication" | "Project Context";
+type WorkspaceTab = "Workbench" | "Client" | "Expert" | "Project Context";
 
 type CommunicationView = "Client Messages" | "Internal Notes";
 
-const TABS: WorkspaceTab[] = ["Workbench", "Communication", "Project Context"];
+const TABS: WorkspaceTab[] = ["Workbench", "Client", "Expert", "Project Context"];
 
 const LEGACY_TAB_MAP: Record<string, WorkspaceTab> = {
   Overview: "Workbench",
-  Deliverables: "Workbench",
-  Revisions: "Workbench",
+
   Timeline: "Workbench",
-  Messages: "Communication",
-  "Internal Notes": "Communication",
+  Messages: "Client",
+  "Internal Notes": "Client",
+  Communication: "Client",
+  "Expert Operations": "Expert",
+  Deliverables: "Expert",
+  Revisions: "Expert",
+  "Delivery & Review": "Expert",
   "Brand System": "Project Context",
   "Brand Book": "Project Context",
 };
@@ -342,7 +345,7 @@ export default function ProductionWorkspace() {
 
         .heyy-prod-tabs {
           display: grid;
-          grid-template-columns: repeat(3,minmax(0,1fr));
+          grid-template-columns: repeat(4,minmax(0,1fr));
           gap: 8px;
           border: 1px solid #ddd6e8 !important;
           border-radius: 22px !important;
@@ -351,12 +354,12 @@ export default function ProductionWorkspace() {
         }
 
         .heyy-prod-tab {
-          min-height: 72px;
+          min-height: 58px;
           border: 1px solid transparent !important;
           border-radius: 16px !important;
           background: #f8f7fb !important;
           color: #51495a !important;
-          padding: 13px 16px !important;
+          padding: 10px 14px !important;
           text-align: left !important;
           cursor: pointer !important;
           transition: all 200ms ease !important;
@@ -811,8 +814,8 @@ export default function ProductionWorkspace() {
                 className="heyy-prod-tab"
               >
                 <span className="flex items-center gap-2 text-sm font-black">
-                  {tab}
-                  {tab === "Communication" &&
+                  {tab === "Project Context" ? "Context" : tab}
+                  {tab === "Client" &&
                     Number(job.unread_client_messages || 0) > 0 && (
                       <span className="grid min-h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1.5 text-[9px] font-black text-white">
                         {Number(job.unread_client_messages) > 99
@@ -837,19 +840,22 @@ export default function ProductionWorkspace() {
                 metadata={metadata}
                 status={status}
                 timeline={timeline}
-                onReload={() => loadJob({ silent: true })}
               />
             )}
 
-            {activeTab === "Communication" && (
+            {activeTab === "Expert" && (
+              <ExpertOperations jobId={job.id} job={job} onReload={() => loadJob({ silent: true })} productionOnly />
+            )}
+
+            {activeTab === "Client" && (
               <section className="heyy-prod-card overflow-hidden">
                 <div className="heyy-prod-section-head">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
-                      Communication
+                      Client
                     </p>
                     <h2 className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950">
-                      Conversations & private notes
+                      Client messages & Admin notes
                     </h2>
                   </div>
 
@@ -952,13 +958,11 @@ function Workbench({
   metadata,
   status,
   timeline,
-  onReload,
 }: {
   job: ProductionJob;
   metadata: any;
   status: string;
   timeline: any[];
-  onReload: () => Promise<void>;
 }) {
   const action = nextAction(status);
   const brief =
@@ -1008,51 +1012,6 @@ function Workbench({
         </div>
       </section>
 
-      <section className="heyy-prod-card heyy-workflow-section heyy-revision-section">
-        <div className="heyy-prod-section-head">
-          <div className="heyy-workflow-head">
-            <span className="heyy-workflow-icon">↔</span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-600">
-                Client Conversation
-              </p>
-              <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] text-slate-950">
-                Revision Workspace
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Feedback, studio replies and revised files in one conversation.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="heyy-prod-section-body">
-          <ProductionRevisions job={job} />
-        </div>
-      </section>
-
-      <section className="heyy-prod-card heyy-workflow-section heyy-deliverables-section">
-        <div className="heyy-prod-section-head">
-          <div className="heyy-workflow-head">
-            <span className="heyy-workflow-icon">↓</span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
-                Final Handoff
-              </p>
-              <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] text-slate-950">
-                Production Deliverables
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Manage versions, select finals and publish approved files to the
-                client.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="heyy-prod-section-body">
-          <ProductionDeliverables job={job} onUploaded={onReload} />
-        </div>
-      </section>
-
       <details className="heyy-prod-card overflow-hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
           <div>
@@ -1087,6 +1046,7 @@ function Workbench({
     </>
   );
 }
+
 
 function JobSummary({ job, metadata }: { job: ProductionJob; metadata: any }) {
   const clientName =
@@ -1504,8 +1464,9 @@ function PriorityBadge({ value }: { value: string }) {
 }
 
 function tabDescription(tab: WorkspaceTab) {
-  if (tab === "Workbench") return "Revisions, deliverables and timeline";
-  if (tab === "Communication") return "Client messages and private notes";
+  if (tab === "Workbench") return "Status, next action and timeline";
+  if (tab === "Client") return "Client messages and private Admin notes";
+  if (tab === "Expert") return "Expert messages, project files, revisions, final files and payout";
   return "Brief, brand and source material";
 }
 

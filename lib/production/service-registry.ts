@@ -347,6 +347,8 @@ export function buildProductionWorkspaceHref(input: {
   paymentState?: "success" | "cancelled";
   quoteId?: unknown;
   sessionId?: unknown;
+  selectedScopes?: unknown;
+  productionOnly?: unknown;
 }) {
   const rawProjectId = String(input.projectId || "").trim();
   if (!rawProjectId) return "/dashboard";
@@ -361,8 +363,23 @@ export function buildProductionWorkspaceHref(input: {
   if (input.quoteId) params.set("quote", String(input.quoteId));
   if (input.sessionId) params.set("session_id", String(input.sessionId));
 
+  if (input.productionOnly === true || String(input.productionOnly || "").toLowerCase() === "true") {
+    params.set("serviceId", service.id);
+    params.set("studio", studio);
+    return `/dashboard/production/${projectId}?${params.toString()}`;
+  }
+
   if (studio === "brand_studio") {
+    const selectedScopes = Array.isArray(input.selectedScopes)
+      ? Array.from(new Set(input.selectedScopes.map((item: any) =>
+          String(typeof item === "string" ? item : item?.id || "").trim(),
+        ).filter(Boolean)))
+      : [];
+
     params.set("scope", service.workspaceScope || service.id);
+    if (service.id === "brand-selected-package" && selectedScopes.length) {
+      params.set("scopes", selectedScopes.join(","));
+    }
     return `/dashboard/brand/${projectId}?${params.toString()}`;
   }
 

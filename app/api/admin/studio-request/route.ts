@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { Notifications } from "@/lib/notifications";
+import { resolveProductionService } from "@/lib/production/service-registry";
 
 import { requireAdminApiCapability } from "@/lib/server/admin-api";
 const supabase = createClient(
@@ -217,19 +219,102 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data: quote, error: quoteError } = await supabase
-    .from("workspace_quotes")
-    .select("*")
-    .eq("studio_request_id", id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: quote, error: quoteError }, { data: selectedOpportunity, error: expertError }] = await Promise.all([
+    supabase
+      .from("workspace_quotes")
+      .select("*")
+      .eq("studio_request_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("expert_opportunities")
+      .select("id,expert_profile_id,status,quoted_fee_cents,currency,turnaround_days,included_revisions,extra_revision_fee_cents,expert_notes,quoted_at,shared_scope")
+      .eq("studio_request_id", id)
+      .eq("status", "selected")
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (quoteError) {
     return NextResponse.json(
       { success: false, error: quoteError.message },
       { status: 500 },
     );
+  }
+
+  if (expertError) {
+    return NextResponse.json(
+      { success: false, error: expertError.message },
+      { status: 500 },
+    );
+  }
+
+  let expertSelection: any = null;
+  if (selectedOpportunity) {
+    const { data: expertProfile, error: profileError } = await supabase
+      .from("expert_profiles")
+      .select("id,full_name,studio,role_title,availability")
+      .eq("id", selectedOpportunity.expert_profile_id)
+      .maybeSingle();
+
+    if (profileError) {
+      return NextResponse.json(
+        { success: false, error: profileError.message },
+        { status: 500 },
+      );
+    }
+
+    expertSelection = {
+      ...selectedOpportunity,
+      expert: expertProfile || null,
+    };
+  }
+
+  // Quote email delivery is repairable and independently idempotent. If the
+  // quote exists but the first Resend attempt failed, simply opening/refeshing
+  // the Admin request retries the missing client email without duplicating an
+  // already-sent message.
+  if (quote && ["sent", "quoted"].includes(String(quote.status || "").toLowerCase())) {
+    try {
+      const productionService = resolveProductionService({
+        serviceId: quote.service_id || studioRequest.service_id || studioRequest.metadata?.service_id,
+        service: quote.service || studioRequest.service,
+        studio: quote.studio || studioRequest.studio,
+      });
+      await Notifications.emit({
+        event: "quote.ready",
+        projectId: studioRequest.project_id,
+        projectName: studioRequest.project_name,
+        service: productionService.label,
+        studio: productionService.studio,
+        userId: studioRequest.user_id,
+        clientName:
+          studioRequest.metadata?.client_name || studioRequest.metadata?.name || null,
+        clientEmail:
+          studioRequest.metadata?.client_email || studioRequest.metadata?.email || null,
+        metadata: {
+          requestId: studioRequest.id,
+          quoteId: quote.id,
+          amount: quote.amount,
+          subtotalAmount: quote.subtotal_amount,
+          discountAmount: quote.discount_amount,
+          discountLabel: quote.discount_label,
+          currency: quote.currency,
+          estimatedDays: quote.estimated_days,
+          includedRevisions: quote.included_revisions,
+          extraRevisionFee: quote.extra_revision_fee,
+          serviceId: productionService.id,
+          selectedScopes:
+            studioRequest.metadata?.selected_production_scopes ||
+            studioRequest.metadata?.project_context?.selected_production_scopes ||
+            null,
+          productionOnly: Boolean(studioRequest.metadata?.production_only),
+        },
+      });
+    } catch (emailRepairError) {
+      console.error("Quote email retry failed:", emailRepairError);
+    }
   }
 
   const architectureHydrated = await hydrateArchitectureRequest(studioRequest);
@@ -239,5 +324,6 @@ export async function GET(request: NextRequest) {
     success: true,
     request: hydratedRequest,
     quote: quote || null,
+    expertSelection,
   });
 }

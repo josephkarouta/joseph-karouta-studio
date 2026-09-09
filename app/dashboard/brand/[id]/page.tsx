@@ -38,6 +38,7 @@ export default function BrandProjectPage() {
   const [project, setProject] = useState<any>(null);
   const [projectAssets, setProjectAssets] = useState<any[]>([]);
   const [projectLoading, setProjectLoading] = useState(true);
+  const [savingMode, setSavingMode] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -102,6 +103,7 @@ export default function BrandProjectPage() {
       "logo_selected",
     ]);
     const hasGuidelines = hasAssetType(projectAssets, ["brand_guidelines"]);
+    const hasApplications = hasAssetType(projectAssets, ["brand_application_visual", "brand_application_approval"]);
 
     return {
       hasDirections,
@@ -109,6 +111,7 @@ export default function BrandProjectPage() {
       hasExistingLogo,
       hasLogo,
       hasGuidelines,
+      hasApplications,
       hasAssets: projectAssets.length > 0,
     };
   }, [projectAssets]);
@@ -228,8 +231,8 @@ export default function BrandProjectPage() {
     steps.push({
       id: "applications",
       label: singleApplicationLabel || "Applications",
-      status: "upcoming",
-      helper: `${selectedApplicationCount} selected`,
+      status: workflowProgress.hasApplications ? "done" : "upcoming",
+      helper: workflowProgress.hasApplications ? "Application concepts saved." : `${selectedApplicationCount} selected`,
       tabId: "applications",
     });
     tabs.push({
@@ -302,6 +305,35 @@ export default function BrandProjectPage() {
     content: <BrandProductionWorkspace project={project} brand={brand} assets={projectAssets} />,
   });
 
+  const brandMode = journey.workMode;
+  const progressSteps = steps.filter((step) => !["export", "production"].includes(step.id));
+  const brandProgress = Math.max(10, Math.round((progressSteps.filter((step) => step.status === "done").length / Math.max(1, progressSteps.length)) * 100));
+
+  async function changeBrandMode(nextMode: "guided" | "professional") {
+    if (savingMode || nextMode === brandMode) return;
+    const previous = project;
+    const currentBrand = project.brand_system_json || {};
+    const nextBrand = {
+      ...currentBrand,
+      projectJourney: {
+        ...(currentBrand.projectJourney || {}),
+        workMode: nextMode,
+      },
+    };
+    setSavingMode(true);
+    setProject({ ...project, brand_system_json: nextBrand });
+    const { error } = await supabase
+      .from("brand_projects")
+      .update({ brand_system_json: nextBrand })
+      .eq("id", project.id)
+      .eq("user_id", project.user_id);
+    if (error) {
+      console.error("Brand work mode update failed:", error);
+      setProject(previous);
+    }
+    setSavingMode(false);
+  }
+
   return (
     <>
       <StudioProjectWorkspace
@@ -318,7 +350,11 @@ export default function BrandProjectPage() {
         onAssetsChange={setProjectAssets}
         projectTypeLabel={singleApplicationLabel ? `${singleApplicationLabel} Project` : "Brand Studio Project"}
         projectName={project.project_name}
-        statusLabel={journeyConfig.shortTitle}
+        statusLabel="Brief, directions, identity, applications and final brand assets stay connected in one workspace."
+        progress={brandProgress}
+        mode={brandMode}
+        onModeChange={(mode) => void changeBrandMode(mode)}
+        savingMode={savingMode}
         metaItems={[
           project.industry || "Brand",
           project.audience || "Audience",

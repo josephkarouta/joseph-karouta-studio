@@ -206,9 +206,11 @@ function CoverSlide({
         {slide.subtitle && <h2>{slide.subtitle}</h2>}
         {slide.meta && <span>{slide.meta}</span>}
       </div>
-      <div className="heyy-cover-logo">
-        {slide.logo?.url ? <ExportImage image={slide.logo} /> : <span>CREATE WITH AI.<br />BUILD WITH EXPERTS.</span>}
-      </div>
+      {slide.logo?.url && (
+        <div className="heyy-cover-logo">
+          <ExportImage image={slide.logo} />
+        </div>
+      )}
     </section>
   );
 }
@@ -364,9 +366,13 @@ function GallerySlide({
   const className =
     count === 1
       ? "one"
-      : count <= 4
-        ? "four"
-        : "six";
+      : count === 2
+        ? "two"
+        : count === 3
+          ? "three"
+          : count === 4
+            ? "four"
+            : "six";
 
   return (
     <section className="heyy-presentation-slide" data-presentation-slide="true">
@@ -729,7 +735,7 @@ const presentationStyles = `
   line-height: 1.01;
 }
 .heyy-presentation-body {
-  height: 650px;
+  height: 600px;
   box-sizing: border-box;
   padding-top: 30px;
 }
@@ -873,7 +879,7 @@ const presentationStyles = `
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 610px;
+  height: 560px;
   overflow: hidden;
   border: 1px solid #d8e1eb;
   border-radius: 25px;
@@ -888,19 +894,21 @@ const presentationStyles = `
 .heyy-image-text-copy { min-width: 0; }
 .heyy-image-text-cards { display: grid; gap: 13px; margin-top: 18px; }
 .heyy-image-text-cards .heyy-presentation-card {
-  min-height: 106px;
-  padding: 17px 19px;
+  min-height: 92px;
+  padding: 14px 17px;
 }
 .heyy-image-text-cards .heyy-presentation-card p {
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 12.5px;
+  line-height: 1.34;
 }
 .heyy-gallery-grid {
   display: grid;
-  height: 612px;
+  height: 560px;
   gap: 17px;
 }
 .heyy-gallery-grid.one { grid-template-columns: 1fr; }
+.heyy-gallery-grid.two { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-rows: 1fr; }
+.heyy-gallery-grid.three { grid-template-columns: repeat(3,minmax(0,1fr)); grid-template-rows: 1fr; }
 .heyy-gallery-grid.four { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-rows: repeat(2,minmax(0,1fr)); }
 .heyy-gallery-grid.six { grid-template-columns: repeat(3,minmax(0,1fr)); grid-template-rows: repeat(2,minmax(0,1fr)); }
 .heyy-gallery-grid figure {
@@ -976,8 +984,9 @@ const presentationStyles = `
 .heyy-material-grid {
   display: grid;
   grid-template-columns: repeat(4,minmax(0,1fr));
-  gap: 18px;
-  margin-top: 24px;
+  grid-auto-rows: 236px;
+  gap: 16px;
+  margin-top: 18px;
 }
 .heyy-material-grid article {
   overflow: hidden;
@@ -986,7 +995,7 @@ const presentationStyles = `
   background: #fff;
 }
 .heyy-material-grid article > div {
-  height: 180px;
+  height: 128px;
   overflow: hidden;
   background: #eef2f7;
 }
@@ -995,10 +1004,10 @@ const presentationStyles = `
   width: 100%;
   height: 100%;
 }
-.heyy-material-grid section { padding: 17px; }
-.heyy-material-grid strong { display: block; font-size: 19px; }
-.heyy-material-grid span { display: block; margin-top: 7px; color: var(--heyy-accent); font-size: 12px; font-weight: 900; text-transform: uppercase; }
-.heyy-material-grid p { margin: 9px 0 0; color: #617084; font-size: 13px; line-height: 1.35; }
+.heyy-material-grid section { padding: 12px 15px; }
+.heyy-material-grid strong { display: block; font-size: 17px; line-height:1.08; }
+.heyy-material-grid span { display: block; margin-top: 5px; color: var(--heyy-accent); font-size: 10px; font-weight: 900; text-transform: uppercase; }
+.heyy-material-grid p { margin: 6px 0 0; color: #617084; font-size: 10.5px; line-height: 1.28; }
 .heyy-table-wrap {
   overflow: hidden;
   margin-top: 20px;

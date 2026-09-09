@@ -46,7 +46,7 @@ function collectReadyFiles(assets: any[]) {
     );
   });
 
-  return files.slice(0, 8);
+  return files;
 }
 
 export default function AssetExportPanel() {

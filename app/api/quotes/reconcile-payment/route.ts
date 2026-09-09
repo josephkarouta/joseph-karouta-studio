@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
-import { processQuotePayment } from "../../../../lib/payments/process-quote-payment";
+import { ensurePreferredExpertAssignmentForPaidQuote, processQuotePayment } from "../../../../lib/payments/process-quote-payment";
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();
@@ -116,6 +116,9 @@ export async function POST(request: NextRequest) {
       String(quote.status || "").toLowerCase() === "paid" &&
       quote.production_job_id
     ) {
+      stage = "repairing Expert assignment";
+      await ensurePreferredExpertAssignmentForPaidQuote(quote.id);
+
       return NextResponse.json({
         success: true,
         paid: true,

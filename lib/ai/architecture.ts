@@ -2722,7 +2722,7 @@ export async function generateArchitectureVisualPrompts(args: {
   const template = getArchitectureProjectTemplate(projectType);
   const requestedViews = args.requestedViews.length
     ? args.requestedViews
-    : ["Hero Exterior Concept", "Outdoor Living Concept"];
+    : ["Exterior Concept Board", "Living & Landscape Concept Board"];
   const existingDesignSource = String(args.project.workflow_mode || "") === "plan_to_render";
 
   return structuredCompletion<{ visuals: LiveVisualPrompt[] }>({
@@ -2730,7 +2730,7 @@ export async function generateArchitectureVisualPrompts(args: {
     schema: visualPromptsSchema,
     system: [
       "You are Heyy Studio's architecture visual director.",
-      "Prepare a small, focused set of architecture CONCEPT image prompts. Do not present them as measured elevations or exact coordinated render views.",
+      "Prepare a small, focused set of architecture CONCEPT BOARD prompts. These must feel different from the single Design Direction hero render: each output is a composed presentation board with several coordinated visual studies rather than one standalone building image. Do not present them as measured elevations or exact coordinated render views.",
       `This is a ${projectType} project. Include the appropriate interior experiences and operational spaces rather than using a residential-only gallery.`,
       `The gallery must reflect these priorities: ${template.directionFocus.join(", ")}.`,
       existingDesignSource
@@ -2743,6 +2743,7 @@ export async function generateArchitectureVisualPrompts(args: {
         ? "Do not rely on a generated canonical plan, concept render or direction render to define geometry."
         : "All views, especially aerial and site-related views, must be derived from the approved plan geometry. Do not invent a U-shape, courtyard, wing, pool location, entry or massing relationship that conflicts with the approved plans.",
       "For new designs, preserve the major project anchors visible in the approved Plan Foundation: storey count, main entry zone, garage side, pool/outdoor relationship and overall massing family. Minor architectural differences may occur and the imagery remains conceptual.",
+      "Each concept board should combine one main atmospheric render with 3–5 supporting studies such as material close-ups, façade/details, quick sketch or diagram fragments, landscape/lighting studies and spatial moments. Keep the board premium and graphic, with minimal or no generated text inside the image.",
       "Use stable snake_case visual_type values.",
       safetyInstruction,
       imagePromptInstruction,
@@ -2788,14 +2789,14 @@ export async function generateArchitectureVisualPrompts(args: {
         }))
       : value.visuals.slice(0, 2).map((visual, index) => ({
           ...visual,
-          visual_type: index === 0 ? "hero_exterior_concept" : "outdoor_living_concept",
-          title: index === 0 ? "Hero Exterior Concept" : "Outdoor Living Concept",
+          visual_type: index === 0 ? "exterior_concept_board" : "living_landscape_concept_board",
+          title: index === 0 ? "Exterior Concept Board" : "Living & Landscape Concept Board",
           prompt: [
             index === 0
-              ? "Create one strong hero exterior concept that communicates the selected Design Direction while reasonably following the approved Plan Foundation."
-              : "Create one supporting outdoor-living concept focused on landscape, pool/terrace atmosphere and indoor-outdoor character rather than pretending to be a measured second elevation.",
+              ? "Create a premium architectural EXTERIOR CONCEPT BOARD, not another single hero render. Use one main exterior perspective plus smaller supporting studies: façade/material details, a loose sketch or massing diagram, entry/landscape moments and material swatches derived from the selected project palette."
+              : "Create a premium LIVING & LANDSCAPE CONCEPT BOARD, not another standalone exterior render. Use one main indoor-outdoor or terrace/pool scene plus supporting studies: landscape/material close-ups, lighting mood, threshold/detail sketches and smaller spatial vignettes.",
             visual.prompt,
-            "Keep the number of levels and major entry, garage, pool and outdoor-living relationships recognisable from the approved Plan Foundation. This is concept imagery, not exact documentation.",
+            "Compose the studies into one clean presentation board with a consistent architectural language. Avoid long AI-generated text; visual labels, if any, should be minimal. Keep the number of levels and major entry, garage, pool and outdoor-living relationships recognisable from the approved Plan Foundation. This is concept imagery, not exact documentation.",
           ].join(" "),
         })),
     usage,

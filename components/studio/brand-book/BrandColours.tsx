@@ -54,21 +54,11 @@ function getColourName(colour: any, index: number) {
 }
 
 const panelMeta = {
-  primary: { Icon: Palette, accent: "#1766c2", soft: "#edf6ff", border: "#bdd9ff" },
-  support: { Icon: SwatchBook, accent: "#6c00ff", soft: "#f3eaff", border: "#d8c2fb" },
-  usage: { Icon: ChartPie, accent: "#087e9d", soft: "#ebfbff", border: "#b8e5ee" },
-  pairings: {
-    Icon: LayoutTemplate,
-    accent: "#c51f7c",
-    soft: "#fff0f8",
-    border: "#f2bfdc",
-  },
-  guidance: {
-    Icon: BadgeCheck,
-    accent: "#0b8f4d",
-    soft: "#ebfbf2",
-    border: "#b7e6cb",
-  },
+  primary: { Icon: Palette, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  support: { Icon: SwatchBook, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  usage: { Icon: ChartPie, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  pairings: { Icon: LayoutTemplate, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  guidance: { Icon: BadgeCheck, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
 };
 
 type PanelTone = keyof typeof panelMeta;
@@ -109,7 +99,7 @@ export default function BrandColours({ brand }: { brand: any }) {
           backdrop-filter: blur(8px);
         }
       `}</style>
-      <div className="rounded-[18px] border border-blue-100 bg-gradient-to-r from-blue-50 to-white p-4 md:p-5">
+      <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-4 md:p-5">
         <p className="max-w-3xl text-sm font-medium leading-6 text-slate-600">
           The colour system defines the visual mood of the brand. Use these
           colours consistently across digital, print, presentation and campaign

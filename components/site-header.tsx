@@ -6,6 +6,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
   BadgeHelp,
+  BriefcaseBusiness,
   ChevronDown,
   CircleDollarSign,
   CreditCard,
@@ -48,6 +49,10 @@ export default function SiteHeader() {
   const avatarUrl = String(
     user?.user_metadata?.avatar_url || user?.user_metadata?.picture || "",
   ).trim();
+  const expertRoles = Array.isArray(user?.app_metadata?.roles)
+    ? user.app_metadata.roles.map((role: unknown) => String(role).toLowerCase())
+    : [];
+  const isExpert = Boolean(user?.app_metadata?.expert_profile_id) || expertRoles.includes("expert");
 
   useEffect(() => {
     setMenuOpen(false);
@@ -175,6 +180,7 @@ export default function SiteHeader() {
 
                   <div className="mt-2 grid gap-1">
                     <MenuLink href="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
+                    {isExpert && <MenuLink href="/expert" icon={<BriefcaseBusiness size={16} />} label="Expert Portal" />}
                     <MenuLink href="/account" icon={<Settings size={16} />} label="Account" />
                     <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
                     <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credits" />
@@ -243,6 +249,7 @@ export default function SiteHeader() {
                 <p className="mt-1 text-xs font-bold text-white/75">{plan} plan · {credits.available} credits left</p>
               </div>
               <MenuLink href="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
+              {isExpert && <MenuLink href="/expert" icon={<BriefcaseBusiness size={16} />} label="Expert Portal" />}
               <MenuLink href="/account" icon={<Settings size={16} />} label="Account" />
               <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
               <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credits" />

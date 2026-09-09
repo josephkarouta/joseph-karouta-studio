@@ -9,7 +9,7 @@ export const metadata = {
   description: "See how Heyy Studio credits are used across tools and Studios, including the daily utility allowance.",
 };
 
-const CATEGORIES = ["Utilities", "AI Tools", "Brand Studio", "Marketing Studio"] as const;
+const CATEGORIES = ["Brand Studio", "Marketing Studio", "Architecture Studio", "Interior Studio", "AI Tools", "Utilities"] as const;
 
 export default function CreditGuidePage() {
   return (

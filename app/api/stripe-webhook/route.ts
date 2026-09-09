@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { processQuotePayment } from "../../../lib/payments/process-quote-payment";
+import { processProductionAddonPayment } from "@/lib/payments/process-production-addon-payment";
 import { applyMonthlyCredits } from "@/lib/credits/server";
 import { getCreditPack, getPlan, normalizePlan } from "@/lib/platform/plans";
 import { recordCheckoutPayment, recordProductionCheckoutReceipt, recordSubscriptionInvoice } from "@/lib/payments/payment-receipts";
@@ -170,6 +171,24 @@ export async function POST(req: Request) {
   try {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
+      const addonResult = await processProductionAddonPayment(session);
+      if (addonResult.handled) {
+        try {
+          if (!addonResult.userId) throw new Error("Production add-on payment is missing a client user.");
+          await recordCheckoutPayment({
+            session,
+            userId: addonResult.userId,
+            paymentType: "production",
+            description: addonResult.title,
+            relatedId: addonResult.addonId,
+            metadata: { production_job_id: addonResult.productionJobId, production_addon_id: addonResult.addonId, kind: addonResult.kind },
+          });
+        } catch (receiptError) {
+          console.error("Production add-on payment receipt failed:", receiptError);
+        }
+        return NextResponse.json({ received: true, productionAddonId: addonResult.addonId, productionJobId: addonResult.productionJobId });
+      }
+
       const quoteResult = await processQuotePayment(session);
 
       if (quoteResult.handled) {

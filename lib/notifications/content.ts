@@ -10,20 +10,46 @@ export type InAppNotificationContent = {
 };
 
 export function buildClientProjectHref(payload: NotificationPayload) {
-  return buildProductionWorkspaceHref({
+  const href = buildProductionWorkspaceHref({
     projectId: payload.projectId,
     studio: payload.studio,
     serviceId: payload.metadata?.serviceId,
     service: payload.service,
+    selectedScopes: payload.metadata?.selectedScopes,
+    productionOnly: payload.metadata?.productionOnly || payload.metadata?.production_only,
   });
+  const explicitView = clean(payload.metadata?.productionView);
+  return withProductionView(href, explicitView || productionViewForEvent(payload.event));
+}
+
+function productionViewForEvent(event: unknown) {
+  const type = String(event || "");
+  if (type === "production.message.studio") return "messages";
+  if (type === "revision.requested") return "revisions";
+  if (["production.review", "revision.ready", "deliverables.uploaded", "project.completed"].includes(type)) {
+    return "review";
+  }
+  return null;
+}
+
+function withProductionView(href: string, view: string | null) {
+  if (!view || !href || href === "/dashboard") return href;
+  const hashIndex = href.indexOf("#");
+  const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
+  const base = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}productionView=${encodeURIComponent(view)}${hash}`;
 }
 
 
 const PRODUCTION_NOTIFICATION_TYPES = new Set([
   "production.requested",
   "quote.ready",
+  "quote.updated",
   "quote.replied",
   "payment.received",
+  "production.addon.ready",
+  "production.addon.paid",
   "production.assigned",
   "production.started",
   "production.review",
@@ -45,12 +71,17 @@ export function resolveStoredNotificationHref(notification: {
   const projectId = metadata.project_id || metadata.projectId;
 
   if (projectId && PRODUCTION_NOTIFICATION_TYPES.has(type)) {
-    return buildProductionWorkspaceHref({
-      projectId,
-      studio: metadata.studio,
-      serviceId: metadata.serviceId || metadata.service_id,
-      service: metadata.service,
-    });
+    return withProductionView(
+      buildProductionWorkspaceHref({
+        projectId,
+        studio: metadata.studio,
+        serviceId: metadata.serviceId || metadata.service_id,
+        service: metadata.service,
+        selectedScopes: metadata.selectedScopes || metadata.selected_scopes,
+        productionOnly: metadata.productionOnly || metadata.production_only,
+      }),
+      clean(metadata.productionView) || productionViewForEvent(type),
+    );
   }
 
   return typeof notification.href === "string" && notification.href.trim()
@@ -63,12 +94,14 @@ export function buildNotificationKey(payload: NotificationPayload) {
 
   const metadata = payload.metadata || {};
   const reference = firstValue(
+    metadata.messageId,
     metadata.replyId,
     metadata.paymentId,
     metadata.revisionId,
     metadata.quoteId,
     metadata.requestId,
     metadata.productionJobId,
+    metadata.addonId,
     payload.projectId,
   );
 
@@ -108,11 +141,38 @@ export function buildInAppNotification(
         payload.metadata?.amount,
         payload.metadata?.currency,
       );
+      const quoteHref = buildProductionWorkspaceHref({
+        projectId: payload.projectId,
+        studio: payload.studio,
+        serviceId: payload.metadata?.serviceId,
+        service: payload.service,
+        quoteId: payload.metadata?.quoteId,
+        selectedScopes: payload.metadata?.selectedScopes,
+      });
       return {
         type: payload.event,
         title: "Your quote is ready",
         message: `Review the scope${amount ? `, ${amount}` : ""}, delivery estimate and included revisions for ${projectName}.`,
-        href,
+        href: quoteHref,
+        metadata,
+      };
+    }
+
+    case "quote.updated": {
+      const amount = formatAmount(payload.metadata?.amount, payload.metadata?.currency);
+      const quoteHref = buildProductionWorkspaceHref({
+        projectId: payload.projectId,
+        studio: payload.studio,
+        serviceId: payload.metadata?.serviceId,
+        service: payload.service,
+        quoteId: payload.metadata?.quoteId,
+        selectedScopes: payload.metadata?.selectedScopes,
+      });
+      return {
+        type: payload.event,
+        title: "Your production quote was updated",
+        message: `Heyy Studio updated the proposal for ${projectName}${amount ? ` to ${amount}` : ""}. Review the revised scope, price, delivery and revisions before payment.`,
+        href: quoteHref,
         metadata,
       };
     }
@@ -136,6 +196,33 @@ export function buildInAppNotification(
         href,
         metadata,
       };
+
+    case "production.addon.ready": {
+      const amount = formatAmount(payload.metadata?.amount, payload.metadata?.currency);
+      const isRevision = clean(payload.metadata?.addonKind) === "extra_revision";
+      return {
+        type: payload.event,
+        title: isRevision ? "Additional revision ready" : "Additional project scope ready",
+        message: isRevision
+          ? `An additional revision round is available for ${projectName}${amount ? ` for ${amount}` : ""}.`
+          : `Heyy Studio prepared an additional-scope proposal for ${projectName}${amount ? ` for ${amount}` : ""}. Review it before payment.`,
+        href,
+        metadata,
+      };
+    }
+
+    case "production.addon.paid": {
+      const isRevision = clean(payload.metadata?.addonKind) === "extra_revision";
+      return {
+        type: payload.event,
+        title: isRevision ? "Additional revision unlocked" : "Additional scope confirmed",
+        message: isRevision
+          ? `Your additional revision payment for ${projectName} is confirmed. You can now submit another revision round.`
+          : `Your additional scope payment for ${projectName} is confirmed and the added work is now active.`,
+        href,
+        metadata,
+      };
+    }
 
     case "production.message.studio": {
       const senderName = clean(payload.metadata?.senderName) || "Heyy Studio";

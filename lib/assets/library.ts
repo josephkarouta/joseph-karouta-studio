@@ -327,6 +327,7 @@ export async function loadAssetLibrary(admin: SupabaseClient, userId: string) {
       : null;
     const metadata = asObject(row.metadata);
     const assetType = String(row.asset_type || "asset");
+    if (assetType === "library_reference") continue;
     const sourceKey = `project_asset:${row.id}`;
     const rawAssetUrl = inferPreviewFromPayload(row);
 

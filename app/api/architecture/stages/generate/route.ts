@@ -121,7 +121,7 @@ export async function POST(request: Request) {
       request,
       scope: "architecture-stage",
       dedupe: { projectId, stage },
-      action: stage === "concept" ? "architectureConcept" : "architectureText",
+      action: stage === "concept" || stage === "visuals" ? "architectureConcept" : "architectureText",
       projectId,
       tool: "architecture_stage",
       provider: "openai",

@@ -153,13 +153,18 @@ export default function HomePage() {
         <div data-home-parallax="0.08" className="home-motion-parallax absolute -left-52 top-10 -z-10 h-[540px] w-[540px] rounded-full bg-fuchsia-400/14 blur-[120px]" />
         <div data-home-parallax="-0.06" className="home-motion-parallax absolute -right-52 top-4 -z-10 h-[620px] w-[620px] rounded-full bg-blue-400/12 blur-[130px]" />
         <div data-home-parallax="0.04" className="home-motion-parallax absolute bottom-[-18rem] left-[38%] -z-10 h-[520px] w-[520px] rounded-full bg-violet-500/12 blur-[120px]" />
-
-        <img
-          src="/heyy-home-hero.webp"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-cover object-center lg:block"
-        />
+<video
+  autoPlay
+  loop
+  muted
+  playsInline
+  preload="metadata"
+  poster="/hero-video-poster.jpg"
+  aria-hidden="true"
+  className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-cover object-center lg:block"
+>
+  <source src="/hero-video.mp4" type="video/mp4" />
+</video>
         <div className="hero-image-overlay pointer-events-none absolute inset-0 z-[1] hidden lg:block" />
 
         <PageContainer className="relative z-10 min-h-[690px] py-16 lg:flex lg:items-center lg:py-24">
@@ -451,9 +456,9 @@ export default function HomePage() {
           );
         }
 
-        [data-theme="dark"] .home-hero > img {
-          filter: brightness(0.72) saturate(0.9);
-        }
+        [data-theme="dark"] .home-hero > video {
+  filter: brightness(0.72) saturate(0.9);
+}
 
         .hero-static-wrap {
           display: grid;
@@ -1343,11 +1348,17 @@ function HeroPlayground() {
       className="relative mt-10 w-full overflow-hidden rounded-[1.8rem] border border-[var(--border)] shadow-[var(--shadow-card)] lg:hidden"
       aria-hidden="true"
     >
-      <img
-        src="/heyy-home-hero.webp"
-        alt=""
-        className="aspect-[1.25/1] h-auto w-full object-cover object-[72%_center]"
-      />
+<video
+  autoPlay
+  loop
+  muted
+  playsInline
+  preload="metadata"
+  poster="/hero-video-poster.jpg"
+  className="aspect-[1.25/1] h-auto w-full object-cover object-center"
+>
+  <source src="/hero-video.mp4" type="video/mp4" />
+</video>
     </div>
   );
 }

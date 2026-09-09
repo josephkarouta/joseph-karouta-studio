@@ -18,61 +18,95 @@ function readPayload(asset: any) {
   return payload;
 }
 
-function getPreviewUrl(asset: any) {
-  const output = readPayload(asset);
-
-  return (
-    asset.thumbnail_url ||
-    asset.file_url ||
-    output.moodboards?.[0]?.imageUrl ||
-    output.variations?.[0]?.imageUrl ||
-    output.logos?.[0]?.imageUrl ||
-    null
-  );
+function looksLikeFileUrl(value: unknown) {
+  if (typeof value !== "string") return false;
+  const url = value.trim();
+  return Boolean(url) && (/^https?:\/\//i.test(url) || url.startsWith("/") || url.startsWith("data:"));
 }
 
-function getAssetCount(asset: any) {
+function isImageUrl(value: string) {
+  const url = String(value || "").trim().toLowerCase().split("?")[0].split("#")[0];
+  return url.startsWith("data:image/") || /\.(png|jpe?g|webp|gif|svg|avif)$/i.test(url);
+}
+
+function isDocumentUrl(value: string) {
+  const url = String(value || "").trim().toLowerCase().split("?")[0].split("#")[0];
+  return /\.(pdf|docx?|pptx?|xlsx?|zip|ai|eps)$/i.test(url);
+}
+
+function collectAssetUrls(value: any, seen = new Set<any>()): string[] {
+  if (!value || seen.has(value)) return [];
+  if (typeof value === "string") return looksLikeFileUrl(value) ? [value.trim()] : [];
+  if (typeof value !== "object") return [];
+  seen.add(value);
+
+  const urls: string[] = [];
+  const record = value as Record<string, any>;
+  for (const key of ["imageUrl", "image_url", "file_url", "thumbnail_url", "url", "previewUrl", "preview_url", "downloadUrl", "download_url"]) {
+    const candidate = record[key];
+    if (looksLikeFileUrl(candidate)) urls.push(String(candidate).trim());
+  }
+
+  for (const key of [
+    "selectedConcept",
+    "selectedDirection",
+    "selectedLogo",
+    "selectedMoodboardData",
+    "moodboards",
+    "variations",
+    "logos",
+    "directions",
+    "conceptsByDirection",
+    "concepts",
+    "outputs",
+    "files",
+  ]) {
+    const child = record[key];
+    if (Array.isArray(child)) {
+      for (const item of child) urls.push(...collectAssetUrls(item, seen));
+    } else if (child && typeof child === "object") {
+      urls.push(...collectAssetUrls(child, seen));
+    }
+  }
+  return urls;
+}
+
+function getAssetUrls(asset: any) {
   const output = readPayload(asset);
-
-  if (Array.isArray(output.moodboards)) return output.moodboards.length;
-  if (Array.isArray(output.variations)) return output.variations.length;
-  if (Array.isArray(output.logos)) return output.logos.length;
-  if (output.guidelines) return 1;
-
-  return 1;
+  return Array.from(new Set([
+    ...collectAssetUrls({ file_url: asset?.file_url, thumbnail_url: asset?.thumbnail_url }),
+    ...collectAssetUrls(output),
+  ].filter(Boolean)));
 }
 
 function getAssetImages(asset: any) {
-  const output = readPayload(asset);
-  const images: string[] = [];
+  return getAssetUrls(asset).filter(isImageUrl);
+}
 
-  if (asset.file_url) images.push(asset.file_url);
-  if (asset.thumbnail_url && asset.thumbnail_url !== asset.file_url) {
-    images.push(asset.thumbnail_url);
-  }
+function getAssetDocuments(asset: any) {
+  return getAssetUrls(asset).filter(isDocumentUrl);
+}
 
-  output.moodboards?.forEach((item: any) => {
-    if (item.imageUrl) images.push(item.imageUrl);
-  });
+function getPreviewUrl(asset: any) {
+  return getAssetImages(asset)[0] || null;
+}
 
-  output.variations?.forEach((item: any) => {
-    if (item.imageUrl) images.push(item.imageUrl);
-  });
+function getAssetCount(asset: any) {
+  const files = getAssetUrls(asset);
+  return Math.max(1, files.length);
+}
 
-  output.logos?.forEach((item: any) => {
-    if (item.imageUrl) images.push(item.imageUrl);
-  });
+function isUsefulVisibleAsset(asset: any) {
+  if (!asset || asset.asset_type === "brand_application_approval") return false;
+  const urls = getAssetUrls(asset);
+  if (urls.some((url) => isImageUrl(url) || isDocumentUrl(url))) return true;
 
-  if (output.imageUrl) images.push(output.imageUrl);
-  if (output.image_url) images.push(output.image_url);
-  output.directions?.forEach((item: any) => {
-    if (item.imageUrl) images.push(item.imageUrl);
-  });
-  output.conceptsByDirection?.forEach((item: any) => {
-    if (item.imageUrl) images.push(item.imageUrl);
-  });
-
-  return Array.from(new Set(images));
+  // Selection/state records are useful to workflows but are not useful files
+  // for the user-facing Asset Library when they contain no visual/file.
+  const type = String(asset.asset_type || "").toLowerCase();
+  if (type.includes("selected") || type.endsWith("_selection")) return false;
+  if (type === "brand_guidelines") return false;
+  return false;
 }
 
 function typeLabel(type?: string) {
@@ -112,10 +146,7 @@ export default function StudioAssets() {
   ];
 
   const displayAssets = useMemo(
-    () =>
-      assets.filter(
-        (asset: any) => asset?.asset_type !== "brand_application_approval",
-      ),
+    () => assets.filter((asset: any) => isUsefulVisibleAsset(asset)),
     [assets],
   );
 
@@ -149,6 +180,7 @@ export default function StudioAssets() {
   }, [page, pageCount]);
 
   const activeImages = activeAsset ? getAssetImages(activeAsset) : [];
+  const activeDocuments = activeAsset ? getAssetDocuments(activeAsset) : [];
   const activeImage = activeImages[activeImageIndex];
 
   function openAsset(asset: any) {
@@ -176,7 +208,9 @@ export default function StudioAssets() {
   }
 
   async function downloadActiveImage() {
-    if (!activeAsset || !activeImage) return;
+    if (!activeAsset) return;
+    const activeDownloadUrl = activeImage || activeDocuments[0];
+    if (!activeDownloadUrl) return;
     setDownloading(true);
     setDownloadError("");
     try {
@@ -185,8 +219,10 @@ export default function StudioAssets() {
       const token = data.session?.access_token;
       if (error || !token) throw new Error("Your session expired. Sign in again.");
 
+      const allUrls = getAssetUrls(activeAsset);
+      const downloadIndex = Math.max(0, allUrls.indexOf(activeDownloadUrl));
       const response = await fetch(
-        `/api/assets/download?assetId=${encodeURIComponent(activeAsset.id)}&index=${activeImageIndex}`,
+        `/api/assets/download?assetId=${encodeURIComponent(activeAsset.id)}&index=${downloadIndex}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const payload = response.ok ? null : await response.json().catch(() => null);
@@ -342,7 +378,7 @@ export default function StudioAssets() {
           </div>
 
           <span className="rounded-full bg-violet-100 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-violet-700">
-            {assets.length} Assets
+            {displayAssets.length} Assets
           </span>
         </header>
 
@@ -490,16 +526,15 @@ export default function StudioAssets() {
                       alt={activeAsset.title}
                       className="max-h-[62vh] max-w-full rounded-[18px] object-contain shadow-xl"
                     />
-                  ) : (
-                    <div className="text-center">
+                  ) : activeDocuments.length ? (
+                    <div className="max-w-sm text-center">
                       <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-[18px] bg-violet-100 text-violet-700">
                         <AssetTypeIcon type={activeAsset.asset_type} />
                       </span>
-                      <p className="mt-4 text-sm font-bold text-slate-500">
-                        This asset does not have a visual preview.
-                      </p>
+                      <p className="mt-4 text-base font-black text-slate-800">Downloadable project file</p>
+                      <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">This file does not need an image preview. Use Download Asset to open the saved document.</p>
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <aside className="flex min-h-0 flex-col overflow-y-auto border-t border-slate-200 p-5 lg:border-l lg:border-t-0">
@@ -565,7 +600,7 @@ export default function StudioAssets() {
                     </div>
                   )}
 
-                  {activeImage && (
+                  {(activeImage || activeDocuments.length > 0) && (
                     <button
                       type="button"
                       onClick={downloadActiveImage}
