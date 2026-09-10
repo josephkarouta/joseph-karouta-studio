@@ -32,7 +32,7 @@ import SiteFooter from "@/components/site-footer";
 import SiteHeader from "@/components/site-header";
 import StudioAccessGate from "@/components/studio-access-gate";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
-import ProductionPanel from "@/components/studio/production/ProductionPanel";
+import StudioProductionWorkspace from "@/components/studio/production/StudioProductionWorkspace";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { GUIDED_STUDIOS, type StudioField } from "@/lib/studio/generic-config";
@@ -604,6 +604,87 @@ async function approveAsset(asset: ProjectAsset) {
   const selectedChannels = Array.isArray(form.channels) ? form.channels : [];
   const approvedVisuals = assets.filter((asset) => String(asset.asset_type || "").startsWith("marketing_visual_") && isApproved(asset));
   const previewImage = approvedVisuals[0]?.file_url || assets.find((asset) => String(asset.asset_type || "").startsWith("marketing_visual_key_visual"))?.file_url || undefined;
+  const allMarketingOutputs = assets.filter((asset) => String(asset.asset_type || "").startsWith("marketing_"));
+  const marketingProductionContext = {
+    project_brief: form,
+    campaign_summary: result?.campaignSummary,
+    strategy: result?.strategy,
+    audience_segments: result?.audienceSegments,
+    big_idea: result?.bigIdea,
+    key_message: result?.keyMessage,
+    campaign_angles: result?.campaignAngles,
+    channel_plan: result?.channelPlan,
+    content_calendar: result?.calendar,
+    copy_bank: result?.copyBank,
+    creative_brief: result?.creativeBrief,
+    testing_plan: result?.testingPlan,
+    measurement_plan: result?.measurementPlan,
+    professional_package: result?.professionalPackage,
+    approved_visuals: approvedVisuals,
+    all_generated_outputs: allMarketingOutputs,
+  };
+  const marketingProductionScopes = [
+    {
+      id: "strategy",
+      title: "Campaign Strategy & Messaging",
+      service: "Campaign Strategy and Messaging Finalisation",
+      serviceId: "marketing-strategy-finalisation",
+      description: "Refine the approved strategy, audience, big idea and messaging into a polished production-ready campaign brief.",
+      outputs: ["Final campaign strategy", "Messaging framework", "Campaign brief PDF", "Editable strategy document"],
+      icon: Target,
+      assets: [],
+    },
+    {
+      id: "key-visual",
+      title: "Campaign Key Visual",
+      service: "Campaign Key Visual Production",
+      serviceId: "marketing-key-visual-production",
+      description: "Develop the approved campaign visual direction into a polished master key visual for production use.",
+      outputs: ["Master campaign key visual", "High-resolution JPG/PNG", "Adaptable source artwork where included", "Usage and crop guidance"],
+      icon: ImageIcon,
+      assets: allMarketingOutputs.filter((asset) => String(asset.asset_type || "").includes("key_visual")),
+    },
+    {
+      id: "channel-assets",
+      title: "Channel Assets",
+      service: "Channel Asset Production",
+      serviceId: "marketing-channel-assets-production",
+      description: "Adapt the approved campaign system into social, paid-media, display, outdoor and other agreed channel assets.",
+      outputs: ["Channel-ready image assets", "Required platform sizes", "Campaign copy variants", "Export package"],
+      icon: Megaphone,
+      assets: allMarketingOutputs.filter((asset) => /social_feed|story_cover|carousel_cover|display_ad|outdoor_poster/.test(String(asset.asset_type || ""))),
+    },
+    {
+      id: "content",
+      title: "Campaign Content & Copy",
+      service: "Campaign Content and Copy Production",
+      serviceId: "marketing-content-production",
+      description: "Turn the approved messaging, copy bank and calendar into a ready-to-use campaign content package.",
+      outputs: ["Final copy bank", "Content calendar", "Channel copy variants", "Editable content document"],
+      icon: FileText,
+      assets: [],
+    },
+    {
+      id: "landing-email",
+      title: "Landing Page & Email Creative",
+      service: "Landing Page and Email Creative Production",
+      serviceId: "marketing-landing-email-production",
+      description: "Develop the approved campaign direction into the agreed landing-page and email creative assets.",
+      outputs: ["Landing-page creative", "Email header assets", "Desktop/mobile exports", "Copy and handoff notes"],
+      icon: Layers3,
+      assets: allMarketingOutputs.filter((asset) => /landing_hero|email_header/.test(String(asset.asset_type || ""))),
+    },
+    {
+      id: "measurement",
+      title: "Measurement & Launch Handoff",
+      service: "Campaign Measurement and Launch Handoff",
+      serviceId: "marketing-measurement-handoff",
+      description: "Refine testing, measurement and launch controls into a practical campaign handoff package.",
+      outputs: ["Measurement plan", "Testing matrix", "Launch checklist", "Handoff document"],
+      icon: BarChart3,
+      assets: [],
+    },
+  ];
 
   return (
     <main className="heyy-page min-h-screen py-8 sm:py-10" style={studioStyle}>
@@ -686,34 +767,27 @@ async function approveAsset(asset: ProjectAsset) {
             {activeTab === "campaign-pack" && <CampaignPackSection result={result} assets={assets} workMode={workMode} exporting={exportingCampaignPack} onDownload={() => void downloadCampaignPack()} />}
             {activeTab === "measurement" && <MeasurementSection result={result} />}
             {activeTab === "production" && (
-              <ProductionPanel
+              <StudioProductionWorkspace
                 project={project}
-                brand={{
-                  project_brief: form,
-                  campaign_summary: result.campaignSummary,
-                  strategy: result.strategy,
-                  audience_segments: result.audienceSegments,
-                  big_idea: result.bigIdea,
-                  key_message: result.keyMessage,
-                  campaign_angles: result.campaignAngles,
-                  channel_plan: result.channelPlan,
-                  content_calendar: result.calendar,
-                  copy_bank: result.copyBank,
-                  creative_brief: result.creativeBrief,
-                  testing_plan: result.testingPlan,
-                  measurement_plan: result.measurementPlan,
-                  professional_package: result.professionalPackage,
-                  approved_visuals: approvedVisuals,
-                  all_generated_outputs: assets.filter((asset) => String(asset.asset_type || "").startsWith("marketing_")),
-                }}
                 studio={config.databaseId}
-                service={config.productionService}
-                serviceId={config.productionServiceId}
+                baseContext={marketingProductionContext}
+                scopes={marketingProductionScopes}
+                selectedPackage={{
+                  title: "Selected Marketing Production Package",
+                  service: "Selected Marketing Production Package",
+                  serviceId: "marketing-selected-package",
+                  description: "Prepare the selected marketing deliverables together as one coordinated Expert production package.",
+                }}
+                completePackage={{
+                  title: "Complete Marketing Campaign Production Package",
+                  service: config.productionService,
+                  serviceId: config.productionServiceId,
+                  description: "Develop the approved campaign strategy, content system and creative direction into one complete production package.",
+                }}
                 previewImage={previewImage}
-                description={String(result.campaignSummary || "Marketing campaign concept and creative system")}
                 usage="Campaign strategy, messaging, channel planning, content production, paid-ad creative, email, landing-page and launch assets."
                 expertNote={config.disclaimer}
-                buttonLabel="Request Marketing Production →"
+                heading="Select the campaign items you want to send to production"
               />
             )}
             <ProjectJourney activeTab={activeTab} onChange={selectWorkspaceTab} />

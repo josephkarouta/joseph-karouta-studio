@@ -201,19 +201,141 @@ export const PRODUCTION_SERVICES: ProductionServiceDefinition[] = [
     requiredProjectContext: ["All selected deliverables", "Approved identity", "Application briefs", "Final-file requirements"],
   },
   {
+    id: "architecture-concept-development",
+    studio: "architecture_studio",
+    label: "Architecture Concept Development",
+    aliases: ["Architecture Concept", "Concept Development"],
+    workspaceScope: "concept",
+    defaultScope: "Develop the approved architecture direction and concept into a professionally coordinated design-development brief.",
+    supportedFinalFiles: ["Developed concept package", "Design-development drawings", "Coordination notes", "Presentation PDF"],
+    requiredProjectContext: ["Project brief", "Site", "Selected direction", "Architecture concept"],
+  },
+  {
+    id: "architecture-plan-development",
+    studio: "architecture_studio",
+    label: "Plans and Drawing Development",
+    aliases: ["Architecture Plans", "Plan Development", "Drawing Development"],
+    workspaceScope: "plans",
+    defaultScope: "Develop the approved concept plans into professionally reviewed and coordinated drawing outputs for the agreed project stage.",
+    supportedFinalFiles: ["Developed floor plans", "Dimensioned drawings", "Drawing PDF set", "Editable CAD/BIM files where included in quote"],
+    requiredProjectContext: ["Site information", "Space program", "Concept plans", "Selected direction"],
+  },
+  {
+    id: "architecture-render-development",
+    studio: "architecture_studio",
+    label: "Professional Render Development",
+    aliases: ["Architecture Renders", "Render Development", "Professional Renders"],
+    workspaceScope: "renders",
+    defaultScope: "Refine the approved architecture visual direction into professionally developed presentation renders.",
+    supportedFinalFiles: ["High-resolution renders", "Presentation JPG/PNG files", "Approved camera views", "Source scene files where included in quote"],
+    requiredProjectContext: ["Selected direction", "Concept plans", "Materials", "Approved concept visuals"],
+  },
+  {
+    id: "architecture-materials-schedules",
+    studio: "architecture_studio",
+    label: "Materials and Schedule Development",
+    aliases: ["Architecture Materials", "Material Schedule", "Schedules"],
+    workspaceScope: "materials",
+    defaultScope: "Develop the approved material direction, project information and concept outputs into coordinated schedules for the agreed stage.",
+    supportedFinalFiles: ["Material schedule", "Finish schedule", "Specification notes", "Schedule PDF/worksheet"],
+    requiredProjectContext: ["Selected materials", "Plans", "Project requirements", "Approved visuals"],
+  },
+  {
+    id: "architecture-design-pack-production",
+    studio: "architecture_studio",
+    label: "Architecture Design Pack Production",
+    aliases: ["Architecture Design Pack", "Design Pack Production"],
+    workspaceScope: "design-pack",
+    defaultScope: "Turn the approved architecture concept, plans, visuals and project notes into a professionally structured design-development package.",
+    supportedFinalFiles: ["Coordinated design pack", "Package PDF", "Drawing register", "Professional handoff notes"],
+    requiredProjectContext: ["Project brief", "Selected direction", "Plans", "Visuals", "Design pack"],
+  },
+  {
+    id: "architecture-selected-package",
+    studio: "architecture_studio",
+    label: "Selected Architecture Production Package",
+    aliases: ["Selected Architecture Items", "Architecture Production Bundle"],
+    workspaceScope: "selected-package",
+    defaultScope: "Coordinate the selected architecture development items as one Expert production package.",
+    supportedFinalFiles: ["Final files as defined by the selected architecture production items and approved quote"],
+    requiredProjectContext: ["Selected production items", "Project brief", "Approved direction", "Plans and visuals"],
+  },
+  {
     id: "architecture-design-development",
     studio: "architecture_studio",
     label: "Architecture Design Development",
-    aliases: ["Architecture Production", "Architecture Design Package", "Architecture Concept Package"],
+    aliases: ["Architecture Production", "Architecture Design Package", "Architecture Concept Package", "Complete Architecture Production Package"],
+    workspaceScope: "complete-package",
     defaultScope: "Develop the approved architecture concept into a professionally scoped design-development package.",
     supportedFinalFiles: ["Drawings", "Schedules", "Professional renders", "Coordination notes", "Package PDF"],
     requiredProjectContext: ["Site information", "Space program", "Selected direction", "Plans", "Materials", "Visuals"],
   },
   {
+    id: "interior-layout-development",
+    studio: "interior_studio",
+    label: "Interior Layout and Plan Development",
+    aliases: ["Interior Plans", "Layout Development", "Interior Plan Development"],
+    workspaceScope: "layout",
+    defaultScope: "Develop the approved interior layout and concept plans into professionally coordinated drawings for the agreed scope.",
+    supportedFinalFiles: ["Developed layout plans", "Furniture plan", "Lighting/ceiling plan", "Drawing PDF set", "Editable files where included in quote"],
+    requiredProjectContext: ["Project brief", "Layout", "Concept plans", "Existing architecture information"],
+  },
+  {
+    id: "interior-materials-production",
+    studio: "interior_studio",
+    label: "Interior Materials and Finishes Production",
+    aliases: ["Interior Materials", "Finish Schedule", "Materials Production"],
+    workspaceScope: "materials",
+    defaultScope: "Develop the approved material and finish direction into a coordinated specification and finish schedule.",
+    supportedFinalFiles: ["Material and finish schedule", "Specification notes", "Reference board", "Supplier-ready schedule where included"],
+    requiredProjectContext: ["Material palette", "Project brief", "Layout", "Approved visuals"],
+  },
+  {
+    id: "interior-furniture-lighting-production",
+    studio: "interior_studio",
+    label: "Furniture and Lighting Schedule Production",
+    aliases: ["Furniture Schedule", "Lighting Schedule", "Furniture and Lighting"],
+    workspaceScope: "furniture-lighting",
+    defaultScope: "Develop the approved furniture and lighting direction into coordinated schedules and placement information.",
+    supportedFinalFiles: ["Furniture schedule", "Lighting schedule", "Placement notes", "Procurement references"],
+    requiredProjectContext: ["Furniture plan", "Lighting strategy", "Layout", "Materials"],
+  },
+  {
+    id: "interior-render-development",
+    studio: "interior_studio",
+    label: "Interior Render Development",
+    aliases: ["Interior Renders", "Professional Interior Renders", "Render Development"],
+    workspaceScope: "renders",
+    defaultScope: "Refine the approved interior visual direction into professionally developed presentation renders.",
+    supportedFinalFiles: ["High-resolution renders", "Presentation JPG/PNG files", "Approved room views", "Source scene files where included in quote"],
+    requiredProjectContext: ["Layout", "Materials", "Furniture", "Lighting", "Approved visuals"],
+  },
+  {
+    id: "interior-design-pack-production",
+    studio: "interior_studio",
+    label: "Interior Design Pack Production",
+    aliases: ["Interior Design Pack", "Design Pack Production", "Procurement Package"],
+    workspaceScope: "design-pack",
+    defaultScope: "Turn the approved interior concept, plans, finishes and schedules into a professionally structured design and procurement package.",
+    supportedFinalFiles: ["Coordinated design pack", "Layout and schedule set", "Procurement register", "Package PDF"],
+    requiredProjectContext: ["Project brief", "Layout", "Materials", "Furniture", "Lighting", "Design pack"],
+  },
+  {
+    id: "interior-selected-package",
+    studio: "interior_studio",
+    label: "Selected Interior Production Package",
+    aliases: ["Selected Interior Items", "Interior Production Bundle"],
+    workspaceScope: "selected-package",
+    defaultScope: "Coordinate the selected interior production items as one Expert package.",
+    supportedFinalFiles: ["Final files as defined by the selected interior production items and approved quote"],
+    requiredProjectContext: ["Selected production items", "Project brief", "Approved concept", "Plans and visuals"],
+  },
+  {
     id: "interior-concept-package",
     studio: "interior_studio",
     label: "Interior Concept Package",
-    aliases: ["Interior Production", "Interior Design Package", "Interior Concept Production"],
+    aliases: ["Interior Production", "Interior Design Package", "Interior Concept Production", "Complete Interior Concept Package"],
+    workspaceScope: "complete-package",
     defaultScope: "Develop the approved interior concept into a coordinated design and procurement package.",
     supportedFinalFiles: ["Layout plans", "Material palette", "Furniture/lighting schedules", "Visuals", "Package PDF"],
     requiredProjectContext: ["Project brief", "Layout", "Materials", "Furniture", "Lighting", "Approved visuals"],
@@ -223,15 +345,87 @@ export const PRODUCTION_SERVICES: ProductionServiceDefinition[] = [
     studio: "interior_studio",
     label: "Professional Interior Fit-Out Package",
     aliases: ["Interior Fit-Out Package", "Professional Interior Package", "Interior Fit Out Package"],
+    workspaceScope: "complete-package",
     defaultScope: "Develop the professional interior brief into a complete fit-out, procurement and delivery package.",
     supportedFinalFiles: ["Detailed plans", "Schedules", "Quantity take-off", "Procurement register", "Work programme"],
     requiredProjectContext: ["Professional brief", "Site constraints", "Technical requirements", "Procurement market", "Programme"],
   },
   {
+    id: "marketing-strategy-finalisation",
+    studio: "marketing_studio",
+    label: "Campaign Strategy and Messaging Finalisation",
+    aliases: ["Marketing Strategy", "Campaign Strategy", "Messaging Finalisation"],
+    workspaceScope: "strategy",
+    defaultScope: "Refine the approved campaign strategy, audience, messaging and creative platform into a polished production-ready campaign brief.",
+    supportedFinalFiles: ["Final campaign strategy", "Messaging framework", "Campaign brief PDF", "Editable strategy document"],
+    requiredProjectContext: ["Campaign brief", "Audience", "Strategy", "Big idea", "Key message"],
+  },
+  {
+    id: "marketing-key-visual-production",
+    studio: "marketing_studio",
+    label: "Campaign Key Visual Production",
+    aliases: ["Key Visual", "Campaign Visual", "Key Visual Production"],
+    workspaceScope: "key-visual",
+    defaultScope: "Develop the approved campaign visual direction into a polished master key visual for production use.",
+    supportedFinalFiles: ["Master campaign key visual", "High-resolution JPG/PNG", "Adaptable source artwork where included", "Usage/crop guidance"],
+    requiredProjectContext: ["Campaign strategy", "Big idea", "Creative brief", "Approved visual"],
+  },
+  {
+    id: "marketing-channel-assets-production",
+    studio: "marketing_studio",
+    label: "Channel Asset Production",
+    aliases: ["Social Media Assets", "Paid Ad Creative", "Channel Assets"],
+    workspaceScope: "channel-assets",
+    defaultScope: "Adapt the approved campaign system into channel-ready social, paid-media, display and other agreed campaign assets.",
+    supportedFinalFiles: ["Channel-ready image assets", "Required platform sizes", "Campaign copy variants", "Export package"],
+    requiredProjectContext: ["Channel plan", "Approved visuals", "Messaging", "Campaign requirements"],
+  },
+  {
+    id: "marketing-content-production",
+    studio: "marketing_studio",
+    label: "Campaign Content and Copy Production",
+    aliases: ["Campaign Copy", "Copy Bank", "Content Calendar", "Content Production"],
+    workspaceScope: "content",
+    defaultScope: "Refine the approved campaign messaging, copy bank and content calendar into a ready-to-use content production package.",
+    supportedFinalFiles: ["Final copy bank", "Content calendar", "Channel copy variants", "Editable content document"],
+    requiredProjectContext: ["Messaging", "Copy bank", "Content calendar", "Channel plan"],
+  },
+  {
+    id: "marketing-landing-email-production",
+    studio: "marketing_studio",
+    label: "Landing Page and Email Creative Production",
+    aliases: ["Landing Page Creative", "Email Creative", "Landing and Email Assets"],
+    workspaceScope: "landing-email",
+    defaultScope: "Develop the approved campaign direction into the agreed landing-page and email creative assets.",
+    supportedFinalFiles: ["Landing-page creative", "Email header assets", "Desktop/mobile exports", "Copy and handoff notes"],
+    requiredProjectContext: ["Campaign strategy", "Messaging", "Approved visuals", "Channel plan"],
+  },
+  {
+    id: "marketing-measurement-handoff",
+    studio: "marketing_studio",
+    label: "Campaign Measurement and Launch Handoff",
+    aliases: ["Measurement Plan", "Launch Handoff", "Campaign Handoff"],
+    workspaceScope: "measurement",
+    defaultScope: "Refine the approved testing, measurement and launch controls into a practical handoff package.",
+    supportedFinalFiles: ["Measurement plan", "Testing matrix", "Launch checklist", "Handoff document"],
+    requiredProjectContext: ["Testing plan", "Measurement plan", "Campaign strategy", "Channels"],
+  },
+  {
+    id: "marketing-selected-package",
+    studio: "marketing_studio",
+    label: "Selected Marketing Production Package",
+    aliases: ["Selected Marketing Items", "Marketing Production Bundle"],
+    workspaceScope: "selected-package",
+    defaultScope: "Coordinate the selected marketing production items as one Expert production package.",
+    supportedFinalFiles: ["Final files as defined by the selected marketing production items and approved quote"],
+    requiredProjectContext: ["Selected production items", "Campaign brief", "Strategy", "Approved visuals"],
+  },
+  {
     id: "marketing-campaign-creative-package",
     studio: "marketing_studio",
     label: "Marketing Campaign Creative Package",
-    aliases: ["Marketing Production", "Campaign Creative Package", "Marketing Campaign Production"],
+    aliases: ["Marketing Production", "Campaign Creative Package", "Marketing Campaign Production", "Complete Marketing Production Package"],
+    workspaceScope: "complete-package",
     defaultScope: "Develop the approved campaign strategy and creative system into channel-ready production assets.",
     supportedFinalFiles: ["Campaign key visual", "Channel assets", "Copy bank", "Content calendar", "Launch package"],
     requiredProjectContext: ["Campaign brief", "Strategy", "Audience", "Big idea", "Channels", "Approved visuals"],
@@ -383,17 +577,34 @@ export function buildProductionWorkspaceHref(input: {
     return `/dashboard/brand/${projectId}?${params.toString()}`;
   }
 
+  const selectedScopes = Array.isArray(input.selectedScopes)
+    ? Array.from(new Set(input.selectedScopes.map((item: any) =>
+        String(typeof item === "string" ? item : item?.id || "").trim(),
+      ).filter(Boolean)))
+    : [];
+
+  const applyStudioProductionScope = () => {
+    const scope = service.workspaceScope || service.id;
+    params.set("scope", scope);
+    if (scope === "selected-package" && selectedScopes.length) {
+      params.set("scopes", selectedScopes.join(","));
+    }
+  };
+
   if (studio === "architecture_studio") {
+    applyStudioProductionScope();
     return `/dashboard/architecture/${projectId}?${params.toString()}`;
   }
 
   if (studio === "interior_studio") {
     params.set("project", rawProjectId);
+    applyStudioProductionScope();
     return `/interior-studio?${params.toString()}`;
   }
 
   if (studio === "marketing_studio") {
     params.set("project", rawProjectId);
+    applyStudioProductionScope();
     return `/marketing-studio?${params.toString()}`;
   }
 

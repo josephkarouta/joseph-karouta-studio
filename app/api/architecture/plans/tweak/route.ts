@@ -9,9 +9,10 @@ import {
   type CanonicalPlanSpec,
   type LivePlanSet,
 } from "@/lib/ai/architecture";
-import { getAiMode, getAiPlanConfig, resolveAiPlan } from "@/lib/ai/config";
+import { getAiMode, getArchitectureAiPlanConfig, resolveAiPlan } from "@/lib/ai/config";
 import { assertRateLimit } from "@/lib/ai/rate-limit";
 import { CreditError } from "@/lib/credits/server";
+import { directionGeometryContractFromUnknown } from "@/lib/architecture/direction-geometry-contract";
 import { runSynchronousGenerationJob } from "@/lib/generation-jobs/synchronous";
 
 export const runtime = "nodejs";
@@ -301,7 +302,7 @@ export async function POST(request: Request) {
 
     assertRateLimit(`architecture-plan-tweak:${user.id}`, 6, 60_000);
     const aiPlanName = resolveAiPlan(user);
-    const aiPlan = getAiPlanConfig(aiPlanName);
+    const aiPlan = getArchitectureAiPlanConfig(aiPlanName);
     const creditAdmin = createClient(
       requiredEnvironment("NEXT_PUBLIC_SUPABASE_URL"),
       requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"),
@@ -329,6 +330,11 @@ export async function POST(request: Request) {
       work: async () => {
     const project = projectResult.data as Record<string, unknown>;
     const direction = directionResult.data as Record<string, unknown>;
+    const directionJson = recordValue(direction.generation_json);
+    const directionGeometryContract = directionGeometryContractFromUnknown(directionJson.direction_geometry_contract);
+    if (directionGeometryContract && /\b(entry|entrance|garage|carport|driveway|pool|storey|story|floor count|upper floor|upper level|setback|stair|lift|shaft|vertical core|building footprint|massing)\b/i.test(instruction)) {
+      throw new Error("This tweak would change a Direction-locked spatial anchor. Regenerate or change the Design Direction first so the Direction image, Geometry Contract, Plan Foundation and Concept Visuals remain one coordinated property.");
+    }
     const site = siteResult.data as Record<string, unknown> | null;
     const planning = planningResult.data as Record<string, unknown> | null;
     const materials = materialsResult.data as Array<Record<string, unknown>> || [];
@@ -360,6 +366,8 @@ export async function POST(request: Request) {
       planning,
       selectedMaterials: materials,
       spaceProgram,
+      directionGeometryContract,
+      planFoundationMode: Boolean(directionGeometryContract),
       existingPlan,
       adjustmentInstruction: instruction,
       adjustmentScope: scope,
@@ -399,6 +407,7 @@ export async function POST(request: Request) {
           usage: generated.usage,
           architecture_dna: dnaResult.architectureDna,
           canonical_plan,
+          direction_geometry_contract: directionGeometryContract,
           selected_materials: materials,
           saved_space_program: spaceProgram,
           plan_version: nextVersion,

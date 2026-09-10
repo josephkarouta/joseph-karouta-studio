@@ -614,9 +614,9 @@ export async function extractDirectionSpatialBrief(args: {
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const model = process.env.OPENAI_ARCHITECTURE_VISION_MODEL?.trim()
-    || process.env.OPENAI_TEXT_MODEL?.trim()
-    || "gpt-4.1-mini";
+  // Normal Architecture uses its own model setting. Beast/Astra experiments are
+  // intentionally not read here; they will live behind a separate Beast Mode path.
+  const model = process.env.ARCHITECTURE_TEXT_MODEL?.trim() || "gpt-4.1-mini";
   const dataUrl = `data:${image.mimeType};base64,${image.bytes.toString("base64")}`;
   const context = projectContextText(args);
 

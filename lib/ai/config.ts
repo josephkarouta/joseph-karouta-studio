@@ -51,6 +51,17 @@ export function getAiPlanConfig(_plan: AiPlan): AiPlanConfig {
   };
 }
 
+export function getArchitectureAiPlanConfig(plan: AiPlan): AiPlanConfig {
+  // Architecture normal mode is intentionally isolated from the platform-wide
+  // OPENAI_TEXT_MODEL. This prevents a private Beast/Astra experiment from
+  // silently changing Brand, Marketing, Interior or the normal Architecture path.
+  const base = getAiPlanConfig(plan);
+  return {
+    ...base,
+    textModel: env("ARCHITECTURE_TEXT_MODEL", "gpt-4.1-mini"),
+  };
+}
+
 export function imageQualityForTier(
   plan: AiPlanConfig,
   tier: ImageGenerationTier,

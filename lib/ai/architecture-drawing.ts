@@ -106,8 +106,35 @@ function pointBounds(points: Array<{ x: number; y: number }>) {
   };
 }
 
+function coordinationBounds(plan: CanonicalPlanSpec) {
+  const points = [...masterOutline(plan)];
+  const addRect = (rect: { present?: boolean; x: number; y: number; width: number; height: number } | null | undefined) => {
+    if (!rect || rect.present === false || rect.width <= 0 || rect.height <= 0) return;
+    points.push(
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      { x: rect.x, y: rect.y + rect.height },
+    );
+  };
+  addRect(plan.pool);
+  addRect(plan.driveway);
+  if (plan.entry) points.push({ x: plan.entry.x, y: plan.entry.y });
+  const raw = pointBounds(points);
+  const margin = 4;
+  return {
+    minX: Math.max(0, raw.minX - margin),
+    minY: Math.max(0, raw.minY - margin),
+    maxX: Math.min(100, raw.maxX + margin),
+    maxY: Math.min(100, raw.maxY + margin),
+  };
+}
+
 function lockedTransform(plan: CanonicalPlanSpec, target: Rect) {
-  const bounds = pointBounds(masterOutline(plan));
+  // Every level uses this ONE transform. It includes the fixed site anchors as
+  // well as the building, so a pool/driveway cannot be redrawn on a convenient
+  // side of each floor sheet. Common scale remains literal across all levels.
+  const bounds = coordinationBounds(plan);
   const sourceWidth = Math.max(12, bounds.maxX - bounds.minX);
   const sourceHeight = Math.max(12, bounds.maxY - bounds.minY);
   const scale = Math.min(target.width / sourceWidth, target.height / sourceHeight);
@@ -133,8 +160,8 @@ function mapRooms(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | undefined
     room,
     x: transform.offsetX + (clamp(room.x) - transform.bounds.minX) * transform.scale,
     y: transform.offsetY + (clamp(room.y) - transform.bounds.minY) * transform.scale,
-    width: Math.max(28, Math.max(2, clamp(room.width, 0, 100)) * transform.scale),
-    height: Math.max(28, Math.max(2, clamp(room.height, 0, 100)) * transform.scale),
+    width: Math.max(10, Math.max(2, clamp(room.width, 0, 100)) * transform.scale),
+    height: Math.max(10, Math.max(2, clamp(room.height, 0, 100)) * transform.scale),
   }));
 }
 
@@ -422,7 +449,9 @@ function fixtureSvg(item: ScreenRoom) {
   if (/bed/.test(name)) return bedSvg(item);
   if (/dining|nook/.test(name)) return diningSvg(item);
   if (/living|family|lounge|sitting/.test(name)) return livingSvg(item);
-  if (/stair/.test(name)) return stairSvg(item);
+  // Shared stairs are rendered only from canonical vertical_cores below. Drawing a
+  // second room-sized stair symbol can visually rescale the stair between floors.
+  if (/stair/.test(name)) return "";
   if (/study|office/.test(name)) {
     return `<g stroke="${MID}" fill="none" stroke-width="2"><rect x="${item.x + item.width * 0.18}" y="${item.y + item.height * 0.16}" width="${item.width * 0.58}" height="${Math.min(32, item.height * 0.2)}"/><circle cx="${item.x + item.width * 0.48}" cy="${item.y + item.height * 0.48}" r="11"/></g>`;
   }
@@ -460,33 +489,30 @@ function doorSvg(boundary: ReturnType<typeof sharedBoundary>, width = 42) {
   return `<g><line x1="${x}" y1="${y}" x2="${x + opening}" y2="${y}" stroke="#fff" stroke-width="14"/><line x1="${x}" y1="${y}" x2="${x}" y2="${y + direction * opening}" stroke="${INK}" stroke-width="2.5"/><path d="M ${x + opening} ${y} A ${opening} ${opening} 0 0 ${direction > 0 ? 1 : 0} ${x} ${y + direction * opening}" fill="none" stroke="${MID}" stroke-width="1.5"/></g>`;
 }
 
-function entryDoorSvg(plan: CanonicalPlanSpec, rooms: ScreenRoom[]) {
-  if (!rooms.length) return "";
-  const entryX = clamp(plan.entry?.x || 50);
-  const entryY = clamp(plan.entry?.y || 95);
-  const sourceRooms = rooms.map((item) => item.room);
-  const minX = Math.min(...sourceRooms.map((room) => room.x));
-  const maxX = Math.max(...sourceRooms.map((room) => room.x + room.width));
-  const minY = Math.min(...sourceRooms.map((room) => room.y));
-  const maxY = Math.max(...sourceRooms.map((room) => room.y + room.height));
-  const nearest = rooms.reduce((best, item) => {
-    const centerX = item.room.x + item.room.width / 2;
-    const centerY = item.room.y + item.room.height / 2;
-    const distance = Math.hypot(centerX - entryX, centerY - entryY);
-    return !best || distance < best.distance ? { item, distance } : best;
-  }, null as { item: ScreenRoom; distance: number } | null)?.item;
-  if (!nearest) return "";
+function entryDoorSvg(
+  plan: CanonicalPlanSpec,
+  level: CanonicalPlanLevel | undefined,
+  target: Rect,
+) {
+  if (!level || level !== plan.levels?.[0] || !plan.entry) return "";
+  const outline = levelOutline(plan, level);
+  const canonicalBounds = pointBounds(outline);
+  const entry = { x: clamp(plan.entry.x || 50), y: clamp(plan.entry.y || 95) };
   const distances = {
-    left: Math.abs(entryX - minX),
-    right: Math.abs(entryX - maxX),
-    top: Math.abs(entryY - minY),
-    bottom: Math.abs(entryY - maxY),
+    left: Math.abs(entry.x - canonicalBounds.minX),
+    right: Math.abs(entry.x - canonicalBounds.maxX),
+    top: Math.abs(entry.y - canonicalBounds.minY),
+    bottom: Math.abs(entry.y - canonicalBounds.maxY),
   };
   const edge = (Object.entries(distances).sort((a, b) => a[1] - b[1])[0]?.[0] || "bottom") as Edge;
+  const mapped = mapPoint(plan, target, entry);
+  const opening = 58;
   const boundary = edge === "left" || edge === "right"
-    ? { edge, x: edge === "left" ? nearest.x : nearest.x + nearest.width, y: nearest.y + nearest.height * 0.38, length: Math.max(48, nearest.height * 0.25), distance: 0 }
-    : { edge, x: nearest.x + nearest.width * 0.38, y: edge === "top" ? nearest.y : nearest.y + nearest.height, length: Math.max(48, nearest.width * 0.25), distance: 0 };
-  return `${doorSvg(boundary, 48)}<text x="${nearest.x + nearest.width / 2}" y="${nearest.y + nearest.height - 13}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="${BLUE}">${esc(plan.entry?.label || "ENTRY")}</text>`;
+    ? { edge, x: mapped.x, y: mapped.y - opening / 2, length: opening, distance: 0 }
+    : { edge, x: mapped.x - opening / 2, y: mapped.y, length: opening, distance: 0 };
+  const labelX = edge === "left" ? mapped.x - 12 : edge === "right" ? mapped.x + 12 : mapped.x;
+  const labelY = edge === "top" ? mapped.y - 18 : edge === "bottom" ? mapped.y + 28 : mapped.y - 16;
+  return `${doorSvg(boundary, 52)}<text x="${labelX}" y="${labelY}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="800" fill="${BLUE}">${esc(plan.entry.label || "MAIN ENTRY")}</text>`;
 }
 
 function dimensionLine(x1: number, y1: number, x2: number, y2: number, label: string, vertical = false) {
@@ -533,8 +559,8 @@ function verticalCoresSvg(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | u
     .map((core) => {
       const p = mapPoint(plan, target, { x: core.x, y: core.y });
       const transform = lockedTransform(plan, target);
-      const width = Math.max(38, core.width * transform.scale);
-      const height = Math.max(38, core.height * transform.scale);
+      const width = Math.max(10, core.width * transform.scale);
+      const height = Math.max(10, core.height * transform.scale);
       const box = { x: p.x, y: p.y, width, height };
       if (core.type === "stair") {
         return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#fff" stroke="${INK}" stroke-width="5"/>${stairSvg({ ...box, room: { id: core.id, name: "Stair", zone: "circulation", x: core.x, y: core.y, width: core.width, height: core.height } })}<text x="${box.x + box.width / 2}" y="${box.y + box.height - 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="800" fill="${BLUE}">CORE ${esc(core.id)}</text></g>`;
@@ -581,7 +607,7 @@ function renderFloorPlan(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | un
   const planWidthM = Math.max(4, Number(plan.site?.width_m || 24) * (outlineBounds.maxX - outlineBounds.minX) / 100);
   const planDepthM = Math.max(4, Number(plan.site?.depth_m || 30) * (outlineBounds.maxY - outlineBounds.minY) / 100);
 
-  const roomBodies = rooms.map((item) => `<g opacity="${circulation ? 0.36 : 1}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="${zoning ? zoneFill[zoneKey(item.room.zone)] : "#fff"}" stroke="${INK}" stroke-width="9" stroke-linejoin="miter"/>${!zoning && !circulation ? fixtureSvg(item) : ""}${roomLabelSvg(plan, item)}</g>`).join("");
+  const roomBodies = rooms.map((item) => `<g opacity="${circulation ? 0.36 : 1}"><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="${zoning ? zoneFill[zoneKey(item.room.zone)] : "#fff"}" stroke="${INK}" stroke-width="5.5" stroke-linejoin="miter"/>${!zoning && !circulation ? fixtureSvg(item) : ""}${roomLabelSvg(plan, item)}</g>`).join("");
 
   const scheduledOpenings = (level?.openings || []).map((opening) => {
     const room = rooms.find((item) => item.room.id === opening.room_id);
@@ -619,9 +645,25 @@ function renderFloorPlan(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | un
       }).join("")
     : "";
 
-  const poolX = Math.min(1390, maxX + 30);
-  const pool = plan.pool?.present && (visualType === "ground_floor" || zoning)
-    ? `<rect x="${poolX}" y="${minY + (maxY - minY) * 0.28}" width="110" height="${Math.max(120, (maxY - minY) * 0.42)}" fill="#eef8ff" stroke="${INK}" stroke-width="4"/><line x1="${poolX + 12}" y1="${minY + (maxY - minY) * 0.48}" x2="${poolX + 98}" y2="${minY + (maxY - minY) * 0.48}" stroke="#8cc8eb" stroke-width="2"/><text x="${poolX + 55}" y="${minY + (maxY - minY) * 0.5}" text-anchor="middle" transform="rotate(-90 ${poolX + 55} ${minY + (maxY - minY) * 0.5})" font-family="Arial, sans-serif" font-size="13" font-weight="800">POOL</text>`
+  const siteTransform = lockedTransform(plan, target);
+  const siteRect = (rect: { x: number; y: number; width: number; height: number }) => ({
+    x: siteTransform.offsetX + (clamp(rect.x) - siteTransform.bounds.minX) * siteTransform.scale,
+    y: siteTransform.offsetY + (clamp(rect.y) - siteTransform.bounds.minY) * siteTransform.scale,
+    width: Math.max(6, clamp(rect.width, 0, 100) * siteTransform.scale),
+    height: Math.max(6, clamp(rect.height, 0, 100) * siteTransform.scale),
+  });
+  const showSite = level === plan.levels?.[0] && (visualType === "ground_floor" || zoning);
+  const pool = showSite && plan.pool?.present
+    ? (() => {
+        const box = siteRect(plan.pool);
+        return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#eef8ff" stroke="${INK}" stroke-width="3"/><path d="M ${box.x + 8} ${box.y + box.height * 0.35} C ${box.x + box.width * 0.3} ${box.y + box.height * 0.2}, ${box.x + box.width * 0.7} ${box.y + box.height * 0.5}, ${box.x + box.width - 8} ${box.y + box.height * 0.35}" fill="none" stroke="#8cc8eb" stroke-width="2"/><text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 5}" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="800">POOL</text></g>`;
+      })()
+    : "";
+  const driveway = showSite && plan.driveway?.present
+    ? (() => {
+        const box = siteRect(plan.driveway);
+        return `<g opacity="0.9"><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#f1f1ef" stroke="#737373" stroke-width="2" stroke-dasharray="8 5"/><path d="M ${box.x + 8} ${box.y + box.height - 8} L ${box.x + box.width - 8} ${box.y + 8}" stroke="#c5c5c0" stroke-width="1.5"/><text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 4}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="${MID}">DRIVEWAY</text></g>`;
+      })()
     : "";
 
   const legend = zoning ? Array.from(new Set(rooms.map((room) => zoneKey(room.room.zone)))).map((key, index) => `<rect x="${160 + index * 160}" y="900" width="18" height="18" fill="${zoneFill[key]}" stroke="${INK}" stroke-width="1"/><text x="${186 + index * 160}" y="914" font-family="Arial, sans-serif" font-size="11" font-weight="700">${esc(key.toUpperCase())}</text>`).join("") : "";
@@ -629,7 +671,7 @@ function renderFloorPlan(plan: CanonicalPlanSpec, level: CanonicalPlanLevel | un
   return `<g>
     <rect x="115" y="145" width="1305" height="735" fill="#fff" stroke="#cfd5de" stroke-width="2"/>
     ${polygonSvg(plan, level, target)}
-    ${roomBodies}${scheduledOpenings}${fallbackDoors}${fallbackWindows}${verticalCoresSvg(plan, level, target)}${level === plan.levels?.[0] ? entryDoorSvg(plan, rooms) : ""}${circulationPaths}${pool}
+    ${driveway}${pool}${roomBodies}${scheduledOpenings}${fallbackDoors}${fallbackWindows}${verticalCoresSvg(plan, level, target)}${entryDoorSvg(plan, level, target)}${circulationPaths}
     ${!zoning && !circulation ? sectionCutMarkersSvg(plan, level, rooms) : ""}
     ${dimensionLine(minX, maxY + 60, maxX, maxY + 60, `APPROX. ${planWidthM.toFixed(1)} m`)}
     ${dimensionLine(minX - 60, minY, minX - 60, maxY, `APPROX. ${planDepthM.toFixed(1)} m`, true)}
@@ -839,6 +881,63 @@ function renderPerspectiveGuide(plan: CanonicalPlanSpec, visualType: string) {
   const footprint = normaliseSiteElement(plan.footprint || { x: 20, y: 20, width: 60, height: 55 }, { x: 370, y: 230, width: 800, height: 500 });
   const label = visualType.replace(/_/g, " ").toUpperCase();
   return `<g><rect x="115" y="145" width="1305" height="735" fill="#fff" stroke="#cfd5de" stroke-width="2"/><path d="M ${footprint.x} ${footprint.y + 90} L ${footprint.x + footprint.width * 0.52} ${footprint.y} L ${footprint.x + footprint.width} ${footprint.y + 90} L ${footprint.x + footprint.width * 0.48} ${footprint.y + 180} Z" fill="#f4f4f4" stroke="${INK}" stroke-width="5"/><path d="M ${footprint.x} ${footprint.y + 90} V ${footprint.y + 90 + footprint.height * 0.45} L ${footprint.x + footprint.width * 0.48} ${footprint.y + 180 + footprint.height * 0.45} V ${footprint.y + 180} Z" fill="#fff" stroke="${INK}" stroke-width="5"/><path d="M ${footprint.x + footprint.width} ${footprint.y + 90} V ${footprint.y + 90 + footprint.height * 0.45} L ${footprint.x + footprint.width * 0.48} ${footprint.y + 180 + footprint.height * 0.45} V ${footprint.y + 180} Z" fill="#fafafa" stroke="${INK}" stroke-width="5"/><text x="768" y="760" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="800">${esc(label)} · CAMERA / MASSING GUIDE</text></g>`;
+}
+
+
+
+export function renderPlanFoundationSheetSvg(args: {
+  plan: CanonicalPlanSpec;
+  projectName: string;
+  architectureDna?: ArchitectureDna | null;
+}) {
+  const levels = Array.isArray(args.plan.levels) ? args.plan.levels : [];
+  const columns = levels.length <= 1 ? 1 : 2;
+  const rows = Math.max(1, Math.ceil(levels.length / columns));
+  const sourceWidth = WIDTH;
+  const sourceHeight = HEIGHT;
+  const panelWidth = columns === 1 ? 1640 : 1360;
+  const scale = panelWidth / sourceWidth;
+  const panelHeight = sourceHeight * scale;
+  const gapX = 44;
+  const gapY = 86;
+  const marginX = 70;
+  const top = 220;
+  const sheetWidth = Math.ceil(marginX * 2 + columns * panelWidth + (columns - 1) * gapX);
+  const sheetHeight = Math.ceil(top + rows * panelHeight + (rows - 1) * gapY + 125);
+
+  const panels = levels.map((level, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = marginX + column * (panelWidth + gapX);
+    const y = top + row * (panelHeight + gapY);
+    const visualType = index === 0 ? "ground_floor" : index === 1 ? "upper_floor" : `level_${index}_floor`;
+    const label = String(level.label || (index === 0 ? "Ground Floor" : `Level ${index}`)).replace(/\bplan\b/gi, "").trim();
+    return `<g transform="translate(${x} ${y})">
+      <rect x="0" y="-42" width="${panelWidth}" height="36" rx="18" fill="#eff6ff"/>
+      <text x="18" y="-17" font-family="Arial, sans-serif" font-size="18" font-weight="800" fill="${INK}">${esc(label)} · COMMON SCALE</text>
+      <g transform="scale(${scale})">${renderFloorPlan(args.plan, level, visualType)}</g>
+    </g>`;
+  }).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${sheetWidth}" height="${sheetHeight}" viewBox="0 0 ${sheetWidth} ${sheetHeight}">
+  <defs>
+    <linearGradient id="foundationHeader" x1="0" x2="1"><stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#eef2ff"/></linearGradient>
+    <marker id="arrowBlack" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="${INK}"/></marker>
+    <marker id="arrowBlue" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="${BLUE}"/></marker>
+  </defs>
+  <rect width="${sheetWidth}" height="${sheetHeight}" fill="#fff"/>
+  <rect width="${sheetWidth}" height="155" fill="url(#foundationHeader)"/>
+  <text x="70" y="45" font-family="Arial, sans-serif" font-size="15" font-weight="800" letter-spacing="1.8" fill="${BLUE}">HEYY STUDIO · COORDINATED PLAN FOUNDATION</text>
+  <text x="70" y="96" font-family="Arial, sans-serif" font-size="38" font-weight="800" fill="${INK}">${esc(args.projectName)}</text>
+  <text x="${sheetWidth - 70}" y="51" text-anchor="end" font-family="Arial, sans-serif" font-size="17" font-weight="800" fill="${INK}">${levels.length} COORDINATED LEVEL${levels.length === 1 ? "" : "S"}</text>
+  <text x="${sheetWidth - 70}" y="82" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="${MID}">Every floor uses the same canonical coordinate transform and drawing scale.</text>
+  <text x="${sheetWidth - 70}" y="111" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="${BLUE}">Shared stairs / lifts / shafts remain identical in size and position across served floors.</text>
+  ${panels}
+  <line x1="70" y1="${sheetHeight - 82}" x2="${sheetWidth - 70}" y2="${sheetHeight - 82}" stroke="${LIGHT}" stroke-width="2"/>
+  <text x="70" y="${sheetHeight - 47}" font-family="Arial, sans-serif" font-size="13" fill="${MID}">One canonical geometry model · one common scale · conceptual only · not for permit, construction or measurement.</text>
+  <text x="${sheetWidth - 70}" y="${sheetHeight - 47}" text-anchor="end" font-family="Arial, sans-serif" font-size="13" fill="${MID}">${esc(args.architectureDna?.identity_name || "Selected Architecture Direction connected")}</text>
+</svg>`;
 }
 
 export function renderArchitecturalDrawingSvg(args: DrawingArgs) {

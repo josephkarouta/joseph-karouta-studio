@@ -186,25 +186,67 @@ function collectGeneratedAssets(context: any) {
   });
 }
 
-function compactProjectContext(context: any) {
+function compactContextValue(value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value.slice(0, 12000);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    if (depth >= 3) return value.slice(0, 40).map((item) =>
+      typeof item === "string" || typeof item === "number" || typeof item === "boolean"
+        ? item
+        : null,
+    ).filter((item) => item !== null);
+    return value.slice(0, 60).map((item) => compactContextValue(item, depth + 1));
+  }
+  if (typeof value === "object" && depth < 4) {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(record)
+        .filter(([key]) => !["all_generated_outputs", "generated_assets", "approved_visuals"].includes(key))
+        .slice(0, 80)
+        .map(([key, nested]) => [key, compactContextValue(nested, depth + 1)]),
+    );
+  }
+  return null;
+}
+
+function compactProjectContext(context: any, studio: string) {
   if (!context || typeof context !== "object") return {};
-  return {
-    summary: context.summary || null,
-    foundation: context.foundation || null,
-    brandStrategy: context.brandStrategy || null,
-    brandVoice: context.brandVoice || null,
-    personality: context.personality || null,
-    colourPalette: context.colourPalette || null,
-    typography: context.typography || null,
-    projectJourney: context.projectJourney || null,
-    applicationPlan: context.applicationPlan || null,
-    applicationBriefs: context.applicationBriefs || null,
-    production_scope: context.production_scope || null,
-    production_scope_id: context.production_scope_id || null,
-    final_file_requirements: context.final_file_requirements || null,
-    selected_brand_applications: context.selected_brand_applications || null,
-    selected_production_scopes: context.selected_production_scopes || null,
+
+  const sharedKeys = [
+    "summary",
+    "production_scope",
+    "production_scope_id",
+    "final_file_requirements",
+    "selected_production_scopes",
+  ];
+  const studioKeys: Record<string, string[]> = {
+    brand_studio: [
+      "foundation", "brandStrategy", "brandVoice", "personality", "colourPalette", "typography",
+      "projectJourney", "applicationPlan", "applicationBriefs", "selected_brand_applications",
+    ],
+    marketing_studio: [
+      "project_brief", "campaign_summary", "strategy", "audience_segments", "big_idea", "key_message",
+      "campaign_angles", "channel_plan", "content_calendar", "copy_bank", "creative_brief", "testing_plan",
+      "measurement_plan", "professional_package",
+    ],
+    interior_studio: [
+      "project_brief", "connected_architecture", "layout_plan", "concept_plans", "material_palette",
+      "furniture_schedule", "lighting_strategy", "professional_package", "design_pack",
+    ],
+    architecture_studio: [
+      "project", "site", "planning", "source_brief", "source_documents", "selected_direction",
+      "architecture_concept", "space_program", "selected_materials", "concept_plan_set", "design_pack",
+      "pre_production_estimate", "disclaimer",
+    ],
   };
+
+  const keys = Array.from(new Set([...sharedKeys, ...(studioKeys[studio] || [])]));
+  return Object.fromEntries(
+    keys
+      .filter((key) => context[key] !== undefined)
+      .map((key) => [key, compactContextValue(context[key])]),
+  );
 }
 
 function listText(values: unknown) {
@@ -343,7 +385,7 @@ export default function ProductionPanel({
 
     try {
       const compactAssets = generatedAssets.map(compactProductionAsset);
-      const compactContext = compactProjectContext(brand);
+      const compactContext = compactProjectContext(brand, studio);
       const requiredOutputs = listText(brand?.final_file_requirements);
       const projectBrief = [
         "Production Request",

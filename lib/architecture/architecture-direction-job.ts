@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { generateArchitectureDirection } from "@/lib/ai/architecture";
-import { getAiPlanConfig, type AiPlan } from "@/lib/ai/config";
+import { getArchitectureAiPlanConfig, type AiPlan } from "@/lib/ai/config";
 import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
+import type { DirectionGeometryContract } from "@/lib/architecture/direction-geometry-contract";
 
 export type ArchitectureDirectionJobInput = {
   projectId?: string;
@@ -140,6 +141,42 @@ function nextVariation(existing: ExistingDirection | undefined) {
   const stored = existing?.generation_json?.demo_variation;
   const current = typeof stored === "number" ? stored : 0;
   return current + 1;
+}
+
+function demoGeometryContract(
+  number: number,
+  project: ProjectRow,
+  site: SiteRow | null,
+): DirectionGeometryContract {
+  const storeys = Math.max(1, Math.min(12, Math.round(Number(project.source_brief?.desired_floors || site?.desired_floors || 2) || 2)));
+  const variants = {
+    1: { ground: [{ x: 18, y: 20 }, { x: 78, y: 20 }, { x: 78, y: 76 }, { x: 18, y: 76 }], entryX: 49, garageX: 20, poolX: 62, poolY: 80, coreX: 46 },
+    2: { ground: [{ x: 13, y: 25 }, { x: 84, y: 25 }, { x: 84, y: 70 }, { x: 13, y: 70 }], entryX: 50, garageX: 16, poolX: 66, poolY: 73, coreX: 48 },
+    3: { ground: [{ x: 22, y: 18 }, { x: 76, y: 18 }, { x: 82, y: 70 }, { x: 18, y: 70 }], entryX: 52, garageX: 22, poolX: 61, poolY: 74, coreX: 48 },
+  } as const;
+  const v = variants[number as 1 | 2 | 3] || variants[1];
+  const upper = Array.from({ length: Math.max(0, storeys - 1) }, (_, index) => ({
+    level_index: index + 1,
+    relationship: index === 0 ? "Upper level steps back from the ground floor while preserving the same central core." : "Upper level continues the coordinated stepped massing.",
+    points: [{ x: 24, y: 24 }, { x: 74, y: 24 }, { x: 74, y: 66 }, { x: 24, y: 66 }],
+  }));
+  return {
+    version: 1,
+    coordinate_system: "site_grid_0_100",
+    front_edge: "south",
+    storeys,
+    massing_summary: "Coordinated demonstration massing for Direction preview.",
+    site_relationship_summary: "Front access, attached garage, outdoor living and pool share one fixed site arrangement.",
+    ground_outline: v.ground.map((point) => ({ ...point })),
+    upper_level_outlines: upper,
+    entry: { edge: "south", position_0_100: 52, x: v.entryX, y: 76, description: "Main entrance on the front facade." },
+    garage: { present: true, edge: "west", position_0_100: 25, x: v.garageX, y: 42, width: 17, height: 27, description: "Attached garage in the left/front wing." },
+    driveway: { present: true, access_edge: "south", x: v.garageX, y: 69, width: 17, height: 24, description: "Driveway connects the front boundary to the garage." },
+    pool: { present: true, x: v.poolX, y: v.poolY, width: 23, height: 10, relationship_to_entry: "right", description: "Pool remains outside the building beside the main outdoor living area." },
+    outdoor_living: { present: true, x: 54, y: 68, width: 27, height: 10, description: "Outdoor living connects the principal living spaces to the pool." },
+    vertical_core: { required: storeys > 1, x: v.coreX, y: 43, width: 8, height: 10, description: "One shared stair/core zone across all storeys." },
+    must_preserve: ["front edge", "main-entry position", "garage/driveway relationship", "pool position", "outdoor-living relationship", "shared vertical core"],
+  };
 }
 
 function demoSourceDirection(
@@ -513,14 +550,13 @@ async function runArchitectureDirections(args: {
 }) {
   const { admin, userId, projectId, directionNumber, planName, mode } = args;
 
-  const [projectResult, siteResult, planningResult, existingResult, materialsResult, planResult, foundationResult] = await Promise.all([
+  const [projectResult, siteResult, planningResult, existingResult, materialsResult, programResult] = await Promise.all([
     admin.from("architecture_projects").select("*").eq("id", projectId).eq("user_id", userId).single(),
     admin.from("architecture_sites").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_planning").select("*").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
     admin.from("architecture_directions").select("id,direction_number,is_selected,generation_json,image_storage_path").eq("project_id", projectId).eq("user_id", userId),
     admin.from("architecture_materials").select("material_key,name,category,finish,application,image_url").eq("project_id", projectId).eq("user_id", userId).eq("is_selected", true).order("sort_order", { ascending: true }),
-    admin.from("architecture_plan_sets").select("title,planning_assumptions,area_schedule,room_relationships,conceptual_dimensions,total_estimated_area,generation_json").eq("project_id", projectId).eq("user_id", userId).maybeSingle(),
-    admin.from("architecture_visuals").select("image_url,is_approved,metadata").eq("project_id", projectId).eq("user_id", userId).eq("visual_type", "plan_foundation_sheet").maybeSingle(),
+    admin.from("architecture_space_programs").select("*").eq("project_id", projectId).eq("user_id", userId).order("sort_order", { ascending: true }),
   ]);
 
   if (projectResult.error || !projectResult.data) {
@@ -532,32 +568,11 @@ async function runArchitectureDirections(args: {
   const planning = (planningResult.data as PlanningRow | null) || null;
   const existing = (existingResult.data as ExistingDirection[] | null) || [];
   const selectedMaterials = (materialsResult.data as SelectedMaterial[] | null) || [];
-  const planFoundation = planResult.data && typeof planResult.data === "object"
-    ? planResult.data as unknown as Record<string, unknown>
-    : null;
+  const spaceProgram = (programResult.data as Array<Record<string, unknown>> | null) || [];
   const minimumMaterials = project.workflow_mode === "build_from_scratch" ? 3 : 1;
 
-  if (project.workflow_mode === "build_from_scratch") {
-    if (!planFoundation) {
-      throw new Error("Prepare the Plan Foundation before generating Architecture Directions.");
-    }
-    const foundation = foundationResult.data && typeof foundationResult.data === "object"
-      ? foundationResult.data as unknown as Record<string, unknown>
-      : null;
-    const foundationMetadata = foundation?.metadata && typeof foundation.metadata === "object" && !Array.isArray(foundation.metadata)
-      ? foundation.metadata as Record<string, unknown>
-      : {};
-    const foundationTechnical = foundationMetadata.technical_assets && typeof foundationMetadata.technical_assets === "object" && !Array.isArray(foundationMetadata.technical_assets)
-      ? foundationMetadata.technical_assets as Record<string, unknown>
-      : {};
-    const foundationReady = Boolean(
-      foundation &&
-      foundation.is_approved === true &&
-      (foundationTechnical.master_storage_path || foundationTechnical.preview_storage_path || foundationTechnical.preview_url || foundation.image_url)
-    );
-    if (!foundationReady) {
-      throw new Error("Approve the coordinated Plan Foundation before generating Architecture Directions.");
-    }
+  if (project.workflow_mode === "build_from_scratch" && !spaceProgram.length) {
+    throw new Error("Prepare the Space Program before generating Architecture Directions.");
   }
 
   if (selectedMaterials.length < minimumMaterials) {
@@ -566,7 +581,7 @@ async function runArchitectureDirections(args: {
 
   const materialNames = selectedMaterials.map((material) => material.name);
   const numbers = directionNumber ? [directionNumber] : [1, 2, 3];
-  const aiPlan = getAiPlanConfig(planName);
+  const aiPlan = getArchitectureAiPlanConfig(planName);
   const payloads: DirectionUpsertPayload[] = [];
 
   for (const number of numbers) {
@@ -594,6 +609,7 @@ async function runArchitectureDirections(args: {
           ...(base.generation_json || {}),
           selected_material_keys: selectedMaterials.map((material) => material.material_key),
           selected_materials: selectedMaterials,
+          direction_geometry_contract: demoGeometryContract(number, project, site),
         },
       });
       continue;
@@ -606,7 +622,8 @@ async function runArchitectureDirections(args: {
       site: site as unknown as Record<string, unknown> | null,
       planning: planning as unknown as Record<string, unknown> | null,
       selectedMaterials: selectedMaterials as unknown as Array<Record<string, unknown>>,
-      planFoundation: project.workflow_mode === "build_from_scratch" ? planFoundation : null,
+      spaceProgram,
+      planFoundation: null,
     });
 
     payloads.push({
@@ -623,8 +640,10 @@ async function runArchitectureDirections(args: {
         plan: planName,
         selected_material_keys: selectedMaterials.map((material) => material.material_key),
         selected_materials: selectedMaterials,
-        plan_first_geometry_authority: project.workflow_mode === "build_from_scratch",
-        plan_foundation_snapshot: project.workflow_mode === "build_from_scratch" ? planFoundation : null,
+        direction_first_sequence: project.workflow_mode === "build_from_scratch",
+        saved_space_program: project.workflow_mode === "build_from_scratch" ? spaceProgram : [],
+        direction_geometry_contract: generated.geometryContract,
+        direction_geometry_prompt: generated.geometryPrompt,
         usage: generated.usage,
         image_usage: null,
         preview_assets: null,
@@ -661,7 +680,7 @@ async function runArchitectureDirections(args: {
   const nextStatus = project.selected_direction_id ? "Direction Selected" : "Directions Ready";
   const { data: updatedProject, error: projectError } = await admin
     .from("architecture_projects")
-    .update({ status: nextStatus, completion: Math.max(project.completion || 0, 68) })
+    .update({ status: nextStatus, completion: Math.max(project.completion || 0, 56) })
     .eq("id", projectId)
     .eq("user_id", userId)
     .select("*")

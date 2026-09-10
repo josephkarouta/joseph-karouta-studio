@@ -35,7 +35,7 @@ import SiteFooter from "@/components/site-footer";
 import SiteHeader from "@/components/site-header";
 import StudioAccessGate from "@/components/studio-access-gate";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
-import ProductionPanel from "@/components/studio/production/ProductionPanel";
+import StudioProductionWorkspace from "@/components/studio/production/StudioProductionWorkspace";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { GUIDED_STUDIOS, type StudioField } from "@/lib/studio/generic-config";
@@ -729,6 +729,78 @@ function InteriorExperience() {
   const mainVisual = existingDesign
     ? assets.find((asset) => String(asset.asset_type || "").startsWith("interior_visual_main_space_") && isApprovedAsset(asset)) || assets.find((asset) => String(asset.asset_type || "").startsWith("interior_visual_main_space_"))
     : getInteriorAsset(assets, "main_space", "final") || getInteriorAsset(assets, "main_space", "preview");
+  const allInteriorOutputs = assets.filter((asset) => {
+    const type = String(asset.asset_type || "");
+    return type.startsWith("interior_plan_") || type.startsWith("interior_visual_") || type.startsWith("interior_source_");
+  });
+  const interiorProductionContext = {
+    project_brief: form,
+    connected_architecture: architectureProjects.find((item) => item.id === form.architectureProjectId) || null,
+    layout_plan: result?.layoutPlan,
+    concept_plans: assets.filter((asset) => {
+      const type = String(asset.asset_type || "");
+      return type.startsWith("interior_plan_") || type.startsWith("interior_source_");
+    }),
+    material_palette: result?.materialPalette,
+    furniture_schedule: result?.furniturePlan,
+    lighting_strategy: result?.lightingPlan,
+    professional_package: result?.professionalPackage,
+    approved_visuals: assets.filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_") && isApprovedAsset(asset) && (!existingDesign || Boolean(asset.metadata?.room_key))),
+    design_pack: { concept: result?.conceptSummary, procurement: result?.procurementPriorities, professional: result?.professionalPackage },
+    all_generated_outputs: allInteriorOutputs,
+  };
+  const interiorProductionScopes = [
+    {
+      id: "layout",
+      title: "Layout & Plan Development",
+      service: "Interior Layout and Plan Development",
+      serviceId: "interior-layout-development",
+      description: "Develop the approved layout and concept plans into professionally coordinated interior drawings for the agreed scope.",
+      outputs: ["Developed layout plans", "Furniture plan", "Lighting/ceiling plan", "Drawing PDF set", "Editable files where included in quote"],
+      icon: LayoutDashboard,
+      assets: allInteriorOutputs.filter((asset) => String(asset.asset_type || "").startsWith("interior_plan_") || String(asset.asset_type || "").startsWith("interior_source_")),
+    },
+    {
+      id: "materials",
+      title: "Materials & Finishes",
+      service: "Interior Materials and Finishes Production",
+      serviceId: "interior-materials-production",
+      description: "Turn the approved material direction into a coordinated finish schedule and specification package.",
+      outputs: ["Material and finish schedule", "Specification notes", "Reference board", "Supplier-ready schedule where included"],
+      icon: Palette,
+      assets: [],
+    },
+    {
+      id: "furniture-lighting",
+      title: "Furniture & Lighting Schedules",
+      service: "Furniture and Lighting Schedule Production",
+      serviceId: "interior-furniture-lighting-production",
+      description: "Develop the approved furniture and lighting direction into coordinated schedules and placement information.",
+      outputs: ["Furniture schedule", "Lighting schedule", "Placement notes", "Procurement references"],
+      icon: LampFloor,
+      assets: [],
+    },
+    {
+      id: "renders",
+      title: "Professional Interior Renders",
+      service: "Interior Render Development",
+      serviceId: "interior-render-development",
+      description: "Refine the approved interior visual direction into professionally developed presentation renders.",
+      outputs: ["High-resolution renders", "Presentation JPG/PNG files", "Approved room views", "Source scene files where included in quote"],
+      icon: ImageIcon,
+      assets: allInteriorOutputs.filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_")),
+    },
+    {
+      id: "design-pack",
+      title: workMode === "professional" ? "Professional Fit-Out Handoff" : "Interior Design Pack",
+      service: "Interior Design Pack Production",
+      serviceId: "interior-design-pack-production",
+      description: workMode === "professional" ? "Structure the professional brief, plans, schedules and procurement information into a coordinated fit-out handoff." : "Turn the approved concept, plans, finishes and schedules into a professionally structured design and procurement package.",
+      outputs: workMode === "professional" ? ["Coordinated fit-out package", "Detailed schedules", "Procurement register", "Work programme and handoff notes"] : ["Coordinated design pack", "Layout and schedule set", "Procurement register", "Package PDF"],
+      icon: PackageCheck,
+      assets: [],
+    },
+  ];
   const uploadedSourcePlansReady = hasUploadedSourcePlanAssets(assets);
   const spacePlanReady = existingDesign ? uploadedSourcePlansReady : isAnyStageApproved(assets, "space_plan");
   const sourcingMarket = String(form.procurementMarket || form.location || "");
@@ -835,35 +907,27 @@ function InteriorExperience() {
               <DesignPackSection result={result} assets={assets} workMode={workMode} existingDesign={existingDesign} exporting={exportingDesignPack} onDownload={() => void downloadDesignPack()} />
             )}
             {activeTab === "production" && (
-              <ProductionPanel
+              <StudioProductionWorkspace
                 project={project}
-                brand={{
-                  project_brief: form,
-                  connected_architecture: architectureProjects.find((item) => item.id === form.architectureProjectId) || null,
-                  layout_plan: result.layoutPlan,
-                  concept_plans: assets.filter((asset) => {
-                    const type = String(asset.asset_type || "");
-                    return type.startsWith("interior_plan_") || type.startsWith("interior_source_");
-                  }),
-                  material_palette: result.materialPalette,
-                  furniture_schedule: result.furniturePlan,
-                  lighting_strategy: result.lightingPlan,
-                  professional_package: result.professionalPackage,
-                  approved_visuals: assets.filter((asset) => String(asset.asset_type || "").startsWith("interior_visual_") && isApprovedAsset(asset) && (!existingDesign || Boolean(asset.metadata?.room_key))),
-                  all_generated_outputs: assets.filter((asset) => {
-                    const type = String(asset.asset_type || "");
-                    return type.startsWith("interior_plan_") || type.startsWith("interior_visual_");
-                  }),
-                  design_pack: { concept: result.conceptSummary, procurement: result.procurementPriorities, professional: result.professionalPackage },
-                }}
                 studio={config.databaseId}
-                service={workMode === "professional" ? "Professional Interior Fit-Out Package" : config.productionService}
-                serviceId={workMode === "professional" ? config.professionalProductionServiceId : config.productionServiceId}
+                baseContext={interiorProductionContext}
+                scopes={interiorProductionScopes}
+                selectedPackage={{
+                  title: "Selected Interior Production Package",
+                  service: "Selected Interior Production Package",
+                  serviceId: "interior-selected-package",
+                  description: "Prepare the selected interior deliverables together as one coordinated Expert production package.",
+                }}
+                completePackage={{
+                  title: workMode === "professional" ? "Professional Interior Fit-Out Package" : "Complete Interior Concept Package",
+                  service: workMode === "professional" ? "Professional Interior Fit-Out Package" : config.productionService,
+                  serviceId: workMode === "professional" ? config.professionalProductionServiceId || "interior-professional-fit-out" : config.productionServiceId,
+                  description: workMode === "professional" ? "Develop the professional interior brief into one complete fit-out, procurement and delivery package." : "Develop the approved interior concept into one complete coordinated design and procurement package.",
+                }}
                 previewImage={mainVisual?.file_url || undefined}
-                description={String(result.conceptSummary || "Interior concept package")}
                 usage="Interior layout, material, furniture, lighting, procurement and visual development."
                 expertNote={config.disclaimer}
-                buttonLabel="Request Interior Production →"
+                heading="Select the interior items you want to send to production"
               />
             )}
           </div>

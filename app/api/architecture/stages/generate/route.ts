@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 
     const { data: project, error: projectError } = await supabase
       .from("architecture_projects")
-      .select("id,selected_direction_id")
+      .select("id,selected_direction_id,workflow_mode")
       .eq("id", projectId)
       .eq("user_id", user.id)
       .single();
@@ -101,11 +101,33 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
-    if (stage !== "plans" && !project.selected_direction_id) {
+    if (!project.selected_direction_id && (project.workflow_mode === "build_from_scratch" || stage !== "plans")) {
       return NextResponse.json(
-        { success: false, error: "Select an Architecture Direction before continuing." },
+        {
+          success: false,
+          error: project.workflow_mode === "build_from_scratch"
+            ? "Select an Architecture Direction before generating the Plan Foundation."
+            : "Select an Architecture Direction before continuing.",
+        },
         { status: 400 },
       );
+    }
+
+    if (stage === "plans" && project.workflow_mode === "build_from_scratch" && project.selected_direction_id) {
+      const { data: selectedDirection, error: directionError } = await supabase
+        .from("architecture_directions")
+        .select("image_url,image_storage_path")
+        .eq("id", project.selected_direction_id)
+        .eq("project_id", projectId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (directionError) throw new Error(directionError.message);
+      if (!selectedDirection?.image_url && !selectedDirection?.image_storage_path) {
+        return NextResponse.json(
+          { success: false, error: "Generate the selected Design Direction visual before preparing the Plan Foundation." },
+          { status: 400 },
+        );
+      }
     }
 
     const planName = resolveAiPlan(user);

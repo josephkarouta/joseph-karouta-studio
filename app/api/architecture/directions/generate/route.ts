@@ -91,56 +91,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (project.workflow_mode === "build_from_scratch") {
-      const [{ data: planSet }, { data: planVisuals }] = await Promise.all([
-        supabase
-          .from("architecture_plan_sets")
-          .select("generation_json")
-          .eq("project_id", projectId)
-          .eq("user_id", user.id)
-          .maybeSingle(),
-        supabase
-          .from("architecture_visuals")
-          .select("visual_type,image_url,is_approved,metadata")
-          .eq("project_id", projectId)
-          .eq("user_id", user.id),
-      ]);
-      const generationJson = planSet?.generation_json && typeof planSet.generation_json === "object"
-        ? planSet.generation_json as Record<string, unknown>
-        : {};
-      const canonicalPlan = generationJson.canonical_plan && typeof generationJson.canonical_plan === "object"
-        ? generationJson.canonical_plan as Record<string, unknown>
-        : null;
-      const levels = Array.isArray(canonicalPlan?.levels) ? canonicalPlan.levels : [];
-      if (!planSet || !levels.length) {
-        return NextResponse.json(
-          { success: false, error: "Prepare the Plan Foundation before generating Architecture Directions." },
-          { status: 400 },
-        );
-      }
-      const rows = (planVisuals || []) as Array<Record<string, unknown>>;
-      const foundation = rows.find((item) => String(item.visual_type || "") === "plan_foundation_sheet");
-      const foundationMetadata = foundation?.metadata && typeof foundation.metadata === "object" && !Array.isArray(foundation.metadata)
-        ? foundation.metadata as Record<string, unknown>
-        : {};
-      const foundationTechnical = foundationMetadata.technical_assets && typeof foundationMetadata.technical_assets === "object" && !Array.isArray(foundationMetadata.technical_assets)
-        ? foundationMetadata.technical_assets as Record<string, unknown>
-        : {};
-      const foundationReady = Boolean(
-        foundation &&
-        foundation.is_approved === true &&
-        (foundationTechnical.master_storage_path || foundationTechnical.preview_storage_path || foundationTechnical.preview_url || foundation.image_url)
-      );
-      if (!foundationReady) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Approve the coordinated Plan Foundation before generating Architecture Directions. The approved Plan Foundation sheet is the geometry source of truth.",
-          },
-          { status: 400 },
-        );
-      }
-    } else if (project.workflow_mode === "plan_to_render") {
+    if (project.workflow_mode === "plan_to_render") {
       const { count } = await supabase
         .from("architecture_documents")
         .select("id", { count: "exact", head: true })
@@ -150,6 +101,21 @@ export async function POST(request: Request) {
       if (!Number(count || 0)) {
         return NextResponse.json(
           { success: false, error: "Organize at least one source plan before generating Architecture Directions." },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (project.workflow_mode === "build_from_scratch") {
+      const { count: programCount, error: programError } = await supabase
+        .from("architecture_space_programs")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId)
+        .eq("user_id", user.id);
+      if (programError) throw new Error(programError.message);
+      if (!Number(programCount || 0)) {
+        return NextResponse.json(
+          { success: false, error: "Prepare the Space Program before generating Architecture Directions." },
           { status: 400 },
         );
       }

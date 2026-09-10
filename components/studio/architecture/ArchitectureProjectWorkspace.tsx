@@ -5,14 +5,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import type { ChangeEvent, PointerEvent as ReactPointerEvent } from "react";
-import ProductionPanel from "@/components/studio/production/ProductionPanel";
+import StudioProductionWorkspace from "@/components/studio/production/StudioProductionWorkspace";
 import HeyySelect from "@/components/ui/heyy-select";
 import StudioLoader from "@/components/ui/StudioLoader";
 import StudioWorkspaceNavigation from "@/components/studio/common/StudioWorkspaceNavigation";
 import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
 import StudioProjectHero from "@/components/studio/common/StudioProjectHero";
 import { generationFetch } from "@/lib/client/generation-request";
-import { AlertTriangle, Check, ChevronDown, ChevronUp, DraftingCompass, Download, FileText } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronUp, DraftingCompass, Download, FileText, ImageIcon, Layers3, PackageCheck, Palette } from "lucide-react";
 import ArchitecturePresentationExport from "@/components/studio/architecture/ArchitecturePresentationExport";
 import {
   ARCHITECTURE_MATERIAL_CATEGORIES,
@@ -1718,7 +1718,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     if (
       changingDirection &&
       !window.confirm(
-        "Changing the Design Direction will keep the approved Plan Foundation, but reset generated concept visuals and the Concept Pack so two design routes are not mixed. Continue?",
+        "Changing the Design Direction will reset the Plan Foundation, concept visuals and Concept Pack because the plan must be rebuilt from the newly selected architectural route. Continue?",
       )
     ) {
       return;
@@ -1746,13 +1746,10 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         concept && typeof concept.generation_json?.image_storage_path === "string"
           ? concept.generation_json.image_storage_path
           : null;
-      const downstreamVisuals = visuals.filter(
-        (visual) => recordValue(visual.metadata).group !== "plans",
-      );
-      const downstreamVisualIds = downstreamVisuals.map((visual) => visual.id);
-      const downstreamStoragePaths = [
+      const resetVisualIds = visuals.map((visual) => visual.id);
+      const resetStoragePaths = [
         conceptStoragePath,
-        ...downstreamVisuals.flatMap((visual) => [
+        ...visuals.flatMap((visual) => [
           visual.storage_path,
           ...assetStoragePathsFromMetadata(visual.metadata),
         ]),
@@ -1763,13 +1760,18 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         .delete()
         .eq("project_id", projectId)
         .eq("user_id", user.id);
-      const visualDelete = downstreamVisualIds.length
+      const planDelete = await supabase
+        .from("architecture_plan_sets")
+        .delete()
+        .eq("project_id", projectId)
+        .eq("user_id", user.id);
+      const visualDelete = resetVisualIds.length
         ? await supabase
             .from("architecture_visuals")
             .delete()
             .eq("project_id", projectId)
             .eq("user_id", user.id)
-            .in("id", downstreamVisualIds)
+            .in("id", resetVisualIds)
         : { error: null };
       const packDelete = await supabase
         .from("architecture_design_packs")
@@ -1777,19 +1779,20 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
         .eq("project_id", projectId)
         .eq("user_id", user.id);
 
-      const resetError = conceptDelete.error || visualDelete.error || packDelete.error;
+      const resetError = conceptDelete.error || planDelete.error || visualDelete.error || packDelete.error;
 
-      if (downstreamStoragePaths.length) {
-        await supabase.storage.from("architecture-files").remove(Array.from(new Set(downstreamStoragePaths)));
+      if (resetStoragePaths.length) {
+        await supabase.storage.from("architecture-files").remove(Array.from(new Set(resetStoragePaths)));
       }
 
       setConcept(null);
-      setVisuals((current) => current.filter((visual) => recordValue(visual.metadata).group === "plans"));
+      setPlanSet(null);
+      setVisuals([]);
       setDesignPack(null);
 
       if (resetError) {
         setError(
-          `The direction was selected, but some style-dependent content could not be reset: ${resetError.message}`,
+          `The direction was selected, but some direction-dependent content could not be reset: ${resetError.message}`,
         );
       }
     }
@@ -1809,7 +1812,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
             ...current,
             selected_direction_id: direction.id,
             status: "Direction Selected",
-            completion: Math.max(current.completion || 0, 76),
+            completion: changingDirection ? 60 : Math.max(current.completion || 0, 60),
           }
         : current,
     );
@@ -1820,21 +1823,28 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
             ...current,
             selected_direction_id: direction.id,
             status: "Direction Selected",
-            completion: Math.max(current.completion || 0, 76),
+            completion: changingDirection ? 60 : Math.max(current.completion || 0, 60),
           }
         : current,
     );
 
     showMessage(
-      `${direction.title} selected. The approved Plan Foundation remains the geometry source of truth; this Direction now controls architectural expression.`,
+      `${direction.title} selected. Plan Foundation is now unlocked and will be generated from this architectural direction, the site and the Space Program.`,
     );
   }
 
   async function generateArchitectureStage(stage: DemoStage) {
     if (!user) return;
 
+    if (projectDraft?.workflow_mode === "build_from_scratch" && !projectDraft.selected_direction_id) {
+      setError(stage === "plans"
+        ? "Select a Design Direction before preparing the Plan Foundation."
+        : "Select a Design Direction before preparing Concept Visuals or the Concept Pack.");
+      switchTab("design-direction");
+      return;
+    }
     if (stage !== "plans" && !projectDraft?.selected_direction_id) {
-      setError("Select a Design Direction before preparing Concept Visuals or the Concept Pack.");
+      setError("Select a Design Direction before continuing.");
       switchTab("design-direction");
       return;
     }
@@ -1949,9 +1959,9 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
 
       const liveLabels: Record<DemoStage, string> = {
         concept: "Internal architecture strategy prepared.",
-        plans: "Plan Foundation prepared. Generate and approve the required floor plans before moving to Materials and Directions.",
-        visuals: "Visual prompts are ready. Approved floor plans control geometry and the selected Direction controls architectural expression.",
-        "design-pack": "Architecture Concept Pack prepared from the approved Plan Foundation, selected Design Direction and concept visuals.",
+        plans: "Plan Foundation prepared from the selected Design Direction. Review the coordinated same-scale floor sheet and approve it before generating Concept Visuals.",
+        visuals: "Visual prompts are ready. The approved Plan Foundation controls geometry and the selected Design Direction controls architectural expression.",
+        "design-pack": "Architecture Concept Pack prepared from the selected Design Direction, approved Plan Foundation and concept visuals.",
         all: "Architecture content prepared.",
       };
       const demoLabels: Record<DemoStage, string> = {
@@ -2425,7 +2435,22 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
 
   if (!projectDraft || !siteDraft || !planningDraft) return null;
 
-  const visibleTabs = tabs
+  const scratchFlowOrder: TabId[] = [
+    "overview",
+    "setup",
+    "program",
+    "materials",
+    "design-direction",
+    "plans",
+    "visuals",
+    "design-pack",
+    "estimate",
+    "production",
+  ];
+  const orderedTabs = projectDraft.workflow_mode === "build_from_scratch"
+    ? [...tabs].sort((a, b) => scratchFlowOrder.indexOf(a.id) - scratchFlowOrder.indexOf(b.id))
+    : tabs;
+  const visibleTabs = orderedTabs
     .filter((tab) => tab.id !== "source" || projectDraft.workflow_mode !== "build_from_scratch")
     .map((tab) =>
       tab.id === "source"
@@ -2437,7 +2462,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
     );
 
   const workflowHeroMessage = projectDraft.workflow_mode === "build_from_scratch"
-    ? "Set up the project, organise the Space Program, choose Materials & Palette, approve one coordinated Plan Foundation, then develop a Design Direction and focused concept boards."
+    ? "Set up the project, organise the Space Program and Materials, choose a Design Direction, then build and approve one coordinated Plan Foundation before generating concept visuals."
     : "Organise the source geometry first, then develop a Design Direction and focused concept boards without replacing the uploaded building.";
 
   const activeTabIndex = visibleTabs.findIndex((tab) => tab.id === activeTab);
@@ -2455,7 +2480,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
               title={projectDraft.project_name}
               description={[projectDraft.project_type, projectDraft.city, projectDraft.country].filter(Boolean).join(" · ") || workflowLabel(projectDraft.workflow_mode)}
               progress={projectDraft.completion || 0}
-              statusLabel="Brief, space program, materials, plans, directions and concept boards stay connected in one workspace."
+              statusLabel={workflowHeroMessage}
               mode={projectDraft.working_mode === "professional" ? "professional" : "guided"}
               onModeChange={(mode) => void changeWorkingMode(mode)}
               saving={saving === "working-mode"}
@@ -2493,7 +2518,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
                 <div className="merged-stage-intro surface-card">
                   <p className="eyebrow">Project Setup</p>
                   <h2>Define the project once</h2>
-                  <p>Keep the brief, site information and planning assumptions together before Heyy Studio prepares the Space Program and Plan Foundation.</p>
+                  <p>Keep the brief, site information and planning assumptions together before Heyy Studio prepares the Space Program, Materials and Design Direction.</p>
                 </div>
                 <BriefTab
                   project={projectDraft}
@@ -2592,6 +2617,7 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
                   visuals={visuals}
                   documents={documents}
                   selectedMaterials={selectedMaterials}
+                  spaceProgram={spaceProgram}
                   generatingDirection={generatingDirection}
                   selectingDirection={selectingDirection}
                   onGenerate={generateDirections}
@@ -2608,11 +2634,13 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
             {activeTab === "plans" && (
               <PlansTab
                 project={projectDraft}
+                direction={selectedDirection}
                 planSet={planSet}
                 visuals={visuals}
                 documents={documents}
                 generating={generatingStage === "plans" || generatingStage === "all"}
                 onGenerate={() => generateArchitectureStage("plans")}
+                onOpenDirections={() => switchTab("design-direction")}
                 regeneratingImage={regeneratingImage}
                 generationStatus={generationStatus}
                 onRegenerateImage={(visualId, planMode, quality) =>
@@ -2798,7 +2826,9 @@ function OverviewTab({
           <div>
             <p className="eyebrow">Project Overview</p>
             <h2>Your architecture project at a glance</h2>
-            <p>Set up the project, choose a project-specific Materials & Palette system, approve one coordinated Plan Foundation, then develop a Design Direction and focused concept boards.</p>
+            <p>{sourceWorkflow
+              ? "Set up the project, organise the source geometry, choose a Design Direction and create focused concept boards without replacing the uploaded building."
+              : "Set up the project, prepare the Space Program and Materials, choose a Design Direction, then generate and approve one coordinated Plan Foundation before creating Concept Visuals."}</p>
           </div>
         </div>
 
@@ -2813,17 +2843,45 @@ function OverviewTab({
         <div className="surface-card next-stage-card">
           <div>
             <p className="eyebrow">Next Major Stage</p>
-            <h3>{materials.length < (sourceWorkflow ? 1 : 3) ? "Set the Materials & Palette" : sourceWorkflow ? "Lock the source geometry" : "Create the Plan Foundation"}</h3>
+            <h3>{
+              materials.length < (sourceWorkflow ? 1 : 3)
+                ? "Set the Materials & Palette"
+                : sourceWorkflow
+                  ? "Lock the source geometry"
+                  : selectedDirection
+                    ? "Create the Plan Foundation"
+                    : "Choose the Design Direction"
+            }</h3>
             <p>
               {materials.length < (sourceWorkflow ? 1 : 3)
-                ? "Start with project-aware material and colour recommendations, then edit, replace or upload your own selections before plan and direction development."
+                ? "Start with project-aware material and colour recommendations, then edit, replace or upload your own selections before design development."
                 : sourceWorkflow
                   ? "Organize the uploaded plans so every later Design Direction and concept board starts from the same source geometry."
-                  : "The coordinated multi-floor Plan Foundation establishes the layout using the program and selected material context before architectural direction and imagery are developed."}
+                  : selectedDirection
+                    ? "The selected Direction now becomes the design-intent reference. Generate one coordinated same-scale Plan Foundation from that route, the site and the Space Program."
+                    : "Generate three architectural routes from the brief, site, Space Program and selected materials. Select the route you want before any exact floor geometry is created."}
             </p>
           </div>
-          <button type="button" onClick={() => onOpen(materials.length < (sourceWorkflow ? 1 : 3) ? "materials" : "plans")} className="primary-action">
-            {materials.length < (sourceWorkflow ? 1 : 3) ? "Open Materials & Palette →" : "Open Plan Foundation →"}
+          <button
+            type="button"
+            onClick={() => onOpen(
+              materials.length < (sourceWorkflow ? 1 : 3)
+                ? "materials"
+                : sourceWorkflow
+                  ? "plans"
+                  : selectedDirection
+                    ? "plans"
+                    : "design-direction",
+            )}
+            className="primary-action"
+          >
+            {materials.length < (sourceWorkflow ? 1 : 3)
+              ? "Open Materials & Palette →"
+              : sourceWorkflow
+                ? "Open Plan Foundation →"
+                : selectedDirection
+                  ? "Open Plan Foundation →"
+                  : "Open Design Direction →"}
           </button>
         </div>
 
@@ -3903,6 +3961,7 @@ function DirectionsTab({
   visuals,
   documents,
   selectedMaterials,
+  spaceProgram,
   generatingDirection,
   selectingDirection,
   onGenerate,
@@ -3919,6 +3978,7 @@ function DirectionsTab({
   visuals: ArchitectureVisual[];
   documents: DocumentRow[];
   selectedMaterials: ArchitectureMaterial[];
+  spaceProgram: SpaceProgramItem[];
   generatingDirection: "all" | number | null;
   selectingDirection: string | null;
   onGenerate: (directionNumber?: number) => void;
@@ -3951,27 +4011,10 @@ function DirectionsTab({
       planning.max_height_m ||
       planning.notes,
   );
-  const canonicalPlan = recordValue(recordValue(planSet?.generation_json).canonical_plan);
-  const canonicalLevels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
-  const requiredFloorTypes = floorPlanTypesForLevels(canonicalLevels);
-  const planRows = visuals.filter((visual) =>
-    recordValue(visual.metadata).group === "plans" || isCanonicalFloorVisualType(visual.visual_type),
-  );
-  const generatedPlanFoundationReady = Boolean(
-    planSet &&
-    (() => {
-      const foundation = planRows.find((visual) => visual.visual_type === "plan_foundation_sheet");
-      return Boolean(
-        foundation?.is_approved &&
-        (assetPreviewUrl(recordValue(foundation.metadata).technical_assets) || foundation.image_url),
-      );
-    })(),
-  );
   const organisedSourcePlanReady = documents.some((document) => Boolean(sourcePlanTypeFromCategory(document.category)));
-  const planFoundationReady = project.workflow_mode === "plan_to_render"
-    ? organisedSourcePlanReady
-    : generatedPlanFoundationReady;
-  const directionReady = briefReady && planningAdded && materialReady && planFoundationReady;
+  const spaceProgramReady = sourceWorkflow || spaceProgram.length > 0;
+  const sourceGeometryReady = project.workflow_mode !== "plan_to_render" || organisedSourcePlanReady;
+  const directionReady = briefReady && siteReady && planningAdded && materialReady && spaceProgramReady && sourceGeometryReady;
   const selectedDirection = directions.find((direction) => direction.is_selected);
   const [lightbox, setLightbox] = useState<{ url: string; title: string } | null>(null);
   const [expandedDirections, setExpandedDirections] = useState<string[]>([]);
@@ -3994,20 +4037,20 @@ function DirectionsTab({
               ? "Three ways to turn the sketch into architecture"
               : project.workflow_mode === "plan_to_render"
                 ? "Three style and material directions for the existing design"
-                : "Three architectural directions for the approved Plan Foundation"}
+                : "Three architectural directions before the floor plan is developed"}
           </h2>
           <p>
             {project.workflow_mode === "sketch_to_real"
               ? "The saved sketch, preservation rules and requested changes guide three routes: faithful interpretation, refined evolution and bold reimagining."
               : project.workflow_mode === "plan_to_render"
                 ? "Your uploaded drawings remain the fixed building geometry. These directions explore materials, façade character, landscape, light and atmosphere without redesigning the plan or massing."
-                : "Heyy Studio keeps the approved floor-plan geometry fixed and explores three different facade, roof, material, opening and landscape expressions for that same building."}
+                : "Heyy Studio explores three different architectural routes from your brief, site, Space Program and material preferences. Select the route first; its massing and design rules will then guide the Plan Foundation."}
             {" "}These are not permit, engineering or construction documents.
           </p>
         </div>
 
         <div className="directions-action-stack">
-          <div className="directions-material-note">Choose at least {minimumMaterials} material{minimumMaterials === 1 ? "" : "s"} in Materials & Palette, then approve the Plan Foundation. Directions style that approved building instead of inventing new geometry.</div>
+          <div className="directions-material-note">Choose at least {minimumMaterials} material{minimumMaterials === 1 ? "" : "s"} in Materials & Palette and complete the Space Program. Select a Direction before generating the Plan Foundation.</div>
         <button
           type="button"
           className="primary-action directions-generate-all"
@@ -4035,13 +4078,11 @@ function DirectionsTab({
         />
         <DirectionReadinessItem
           label="Land & site"
-          complete={siteReady || planFoundationReady}
+          complete={siteReady}
           detail={
             siteReady
               ? `${formatMeasurement(site.plot_area, "m²")} · ${site.terrain || "Terrain not set"}`
-              : planFoundationReady
-                ? "Approved Plan Foundation already contains the locked building/site geometry"
-                : "Add the country and available site information"
+              : "Add the country and available site information"
           }
         />
         <DirectionReadinessItem
@@ -4055,17 +4096,19 @@ function DirectionsTab({
                 : "Generation can continue, but planning assumptions will be limited"
           }
         />
-        <DirectionReadinessItem
-          label={project.workflow_mode === "plan_to_render" ? "Source geometry" : "Approved Plan Foundation"}
-          complete={planFoundationReady}
-          detail={
-            planFoundationReady
-              ? "Geometry locked for Direction development"
-              : project.workflow_mode === "plan_to_render"
-                ? "Organize at least one source plan in Plan Foundation"
-                : "Generate and approve every required floor plan first"
-          }
-        />
+        {project.workflow_mode === "plan_to_render" ? (
+          <DirectionReadinessItem
+            label="Source geometry"
+            complete={organisedSourcePlanReady}
+            detail={organisedSourcePlanReady ? "Existing geometry ready for Direction development" : "Organize at least one source plan first"}
+          />
+        ) : project.workflow_mode === "build_from_scratch" ? (
+          <DirectionReadinessItem
+            label="Space Program"
+            complete={spaceProgramReady}
+            detail={spaceProgramReady ? `${spaceProgram.length} programmed space${spaceProgram.length === 1 ? "" : "s"}` : "Prepare the Space Program before generating directions"}
+          />
+        ) : null}
         <DirectionReadinessItem
           label="Materials"
           complete={materialReady}
@@ -4083,7 +4126,7 @@ function DirectionsTab({
           <p>
             {project.workflow_mode === "plan_to_render"
               ? "This direction controls style, materials and atmosphere. Your organised source drawings remain the geometry source for Concepts and Visuals."
-              : "The approved Plan Foundation remains the layout reference. This Direction controls facade, roof, materials, openings, landscape character and atmosphere for Concept Visuals and the Concept Pack."}
+              : "This Direction is the approved architectural route. Its massing, roof, material, opening and landscape rules now guide the Plan Foundation; after the plan is approved, both sources control Concept Visuals."}
           </p>
         </div>
       )}
@@ -4504,11 +4547,13 @@ function ConceptTab({
 
 function PlansTab({
   project,
+  direction,
   planSet,
   visuals,
   documents,
   generating,
   onGenerate,
+  onOpenDirections,
   regeneratingImage,
   generationStatus,
   onRegenerateImage,
@@ -4519,11 +4564,13 @@ function PlansTab({
   onDeleteDocument,
 }: {
   project: Project;
+  direction: Direction | null;
   planSet: ArchitecturePlanSet | null;
   visuals: ArchitectureVisual[];
   documents: DocumentRow[];
   generating: boolean;
   onGenerate: () => void;
+  onOpenDirections: () => void;
   regeneratingImage: string | null;
   generationStatus: string;
   onRegenerateImage: (
@@ -4559,6 +4606,30 @@ function PlansTab({
         onCreateSourcePlan={onCreateSourcePlan}
         onDownloadDocument={onDownloadDocument}
         onDeleteDocument={onDeleteDocument}
+      />
+    );
+  }
+
+  if (project.workflow_mode === "build_from_scratch" && !direction) {
+    return (
+      <StageLocked
+        eyebrow="Design Direction Required"
+        title="Choose the architectural route before developing the floor plans"
+        body="The Plan Foundation is generated from the selected Design Direction together with the site, Space Program and material preferences. This keeps the plan connected to the architecture you approved instead of inventing the building before its design direction is chosen."
+        onOpenDirections={onOpenDirections}
+        actionLabel="Open Design Direction →"
+      />
+    );
+  }
+
+  if (project.workflow_mode === "build_from_scratch" && direction && !direction.image_url && !direction.image_storage_path) {
+    return (
+      <StageLocked
+        eyebrow="Direction Visual Required"
+        title="Generate the selected Direction visual before the Plan Foundation"
+        body="The selected Direction and its visual now share one Direction Geometry Contract for the building massing, entry, garage/driveway, pool/outdoor relationship and upper-level form. The Plan Foundation uses that same contract plus the Space Program instead of trying to reverse-engineer geometry from the finished image."
+        onOpenDirections={onOpenDirections}
+        actionLabel="Generate Direction Visual →"
       />
     );
   }
@@ -4619,19 +4690,19 @@ function PlansTab({
           <p>
             {existingDesignSource
               ? "Your uploaded drawings remain the source of truth. This stage can organise them into the project, prepare optional faithful redraws and coordinate additional documentation without inventing a different plan."
-              : "This is the geometry-first stage. Heyy Studio prepares the floor-plan foundation, site relationships and coordinated documentation before any architectural Direction is allowed to define the building's appearance."}
+              : "The selected Design Direction and its locked Geometry Contract now guide the building massing and site anchors. Heyy Studio fits the Space Program into that same coordinated multi-floor property before any Concept Visual is generated."}
           </p>
           <div className="demo-explanation">
             <strong>{existingDesignSource ? "Existing geometry stays locked." : "These are not permit drawings."}</strong>
             <span>{existingDesignSource
               ? "If you already have the plans you need, you can go directly to Visuals. Generate a detailed plan here only when you want a cleaned or presentation-ready redraw of the uploaded source."
-              : "Prepare one coordinated multi-floor Plan Foundation sheet and approve it once. That approved sheet becomes the geometry source of truth for every Direction and Visual that follows."}</span>
+              : "Prepare one coordinated multi-floor Plan Foundation sheet and approve it once. Every floor is rendered from one shared coordinate system at the same scale; the approved sheet then becomes the geometry source of truth for every Concept Visual that follows."}</span>
           </div>
         </div>
         <button type="button" className="primary-action" disabled={generating} onClick={onGenerate}>
           {generating ? "Preparing Plan Foundation..." : `Prepare Plan Foundation · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
         </button>
-        {generating && <StageGenerationLoading title="Preparing Plan Foundation" detail="Creating one canonical building geometry, room relationship set and coordinated floor specification before architectural styling begins." />}
+        {generating && <StageGenerationLoading title="Preparing Plan Foundation" detail="Validating the selected Direction Geometry Contract, then fitting the Space Program into one canonical building with aligned floors, fixed site anchors and one shared vertical-core system." />}
       </section>
     );
   }
@@ -4652,7 +4723,7 @@ function PlansTab({
         </button>
       </div>
 
-      {generating && <StageGenerationLoading title="Refreshing Plan Foundation" detail="Updating the canonical geometry and linked plan prompts. Approved plans remain the source for every later Direction and Visual." />}
+      {generating && <StageGenerationLoading title="Refreshing Plan Foundation" detail="Updating the direction-led canonical geometry and same-scale floor sheet. Approved plans remain the geometry source for every later Concept Visual." />}
       <div className="plan-workflow-card surface-card" data-ready={requiredFloorPlansReady ? "true" : "false"}>
         <div>
           <strong>{existingDesignSource
@@ -4663,7 +4734,7 @@ function PlansTab({
           <span>{existingDesignSource
             ? "Visuals and optional redraws use the uploaded source drawings first. Heyy Studio must preserve the existing footprint, layout, stairs, openings and level relationships."
             : requiredFloorPlansReady
-              ? "The approved Plan Foundation can now guide the Design Direction, concept visuals and Concept Pack."
+              ? "The approved Plan Foundation now locks geometry for Concept Visuals and the Concept Pack while the selected Direction keeps control of architectural expression."
               : `All required floors are generated together on one professional Plan Foundation sheet. Review the whole building, then approve the sheet once.`}</span>
         </div>
         <div className="credit-legend">
@@ -5660,7 +5731,7 @@ function EstimateTab({
         <StageLocked
           eyebrow="Approved Plan Foundation Required"
           title="Approve the coordinated Plan Foundation before preparing the budget guide"
-          body="The approved multi-floor Plan Foundation is the geometry authority used for quantities, Directions and downstream visuals."
+          body="The approved multi-floor Plan Foundation is the geometry authority used for quantities, Concept Visuals, the Concept Pack and downstream Expert Development."
           onOpenDirections={onOpenPlans}
           actionLabel="Review Plan Foundation →"
         />
@@ -5934,9 +6005,11 @@ function ArchitectureProductionTab({
         storage_path: document.storage_path,
       })),
     selected_direction: direction,
+    architecture_concept: concept,
     space_program: spaceProgram,
     selected_materials: materials,
     concept_plan_set: planSet,
+    approved_visuals: visuals.filter((visual) => visual.is_approved && recordValue(visual.metadata).group === "visuals"),
     approved_concept_visuals: visuals.filter((visual) => visual.is_approved && recordValue(visual.metadata).group === "visuals"),
     all_generated_outputs: generatedOutputs,
     design_pack: designPack,
@@ -5944,48 +6017,84 @@ function ArchitectureProductionTab({
     disclaimer: "Heyy Studio Architecture outputs are conceptual. Expert Development is required for measured drawings, coordinated renders, approvals, engineering and construction documentation.",
   };
 
+  const architectureProductionScopes = [
+    {
+      id: "concept",
+      title: "Architecture Concept Development",
+      service: "Architecture Concept Development",
+      serviceId: "architecture-concept-development",
+      description: "Develop the approved architecture direction and concept into a professionally coordinated design-development brief.",
+      outputs: ["Developed concept package", "Design-development drawings", "Coordination notes", "Presentation PDF"],
+      icon: DraftingCompass,
+      assets: generatedOutputs.filter((asset) => asset.group === "direction"),
+    },
+    {
+      id: "plans",
+      title: "Plans & Drawing Development",
+      service: "Plans and Drawing Development",
+      serviceId: "architecture-plan-development",
+      description: "Develop the approved concept plans into professionally reviewed and coordinated drawing outputs for the agreed project stage.",
+      outputs: ["Developed floor plans", "Dimensioned drawings", "Drawing PDF set", "Editable CAD/BIM files where included in quote"],
+      icon: Layers3,
+      assets: generatedOutputs.filter((asset) => asset.group === "plan_foundation" || String(asset.visual_type || "").startsWith("plan_")),
+    },
+    {
+      id: "renders",
+      title: "Professional Renders",
+      service: "Professional Render Development",
+      serviceId: "architecture-render-development",
+      description: "Refine the approved architecture visual direction into professionally developed presentation renders.",
+      outputs: ["High-resolution renders", "Presentation JPG/PNG files", "Approved camera views", "Source scene files where included in quote"],
+      icon: ImageIcon,
+      assets: generatedOutputs.filter((asset) => asset.group === "concept_visuals"),
+    },
+    {
+      id: "materials",
+      title: "Materials & Schedules",
+      service: "Materials and Schedule Development",
+      serviceId: "architecture-materials-schedules",
+      description: "Develop the approved material direction and project information into coordinated schedules for the agreed stage.",
+      outputs: ["Material schedule", "Finish schedule", "Specification notes", "Schedule PDF/worksheet"],
+      icon: Palette,
+      assets: [],
+    },
+    {
+      id: "design-pack",
+      title: "Architecture Design Pack",
+      service: "Architecture Design Pack Production",
+      serviceId: "architecture-design-pack-production",
+      description: "Turn the approved concept, plans, visuals and project notes into a professionally structured design-development package.",
+      outputs: ["Coordinated design pack", "Package PDF", "Drawing register", "Professional handoff notes"],
+      icon: PackageCheck,
+      assets: generatedOutputs.filter((asset) => asset.group === "design-pack"),
+    },
+  ];
+
   return (
-    <section className="production-stage">
-      <div className="stage-header surface-card">
-        <div>
-          <p className="eyebrow">Expert Development</p>
-          <h2>Develop the AI concept with qualified architecture professionals</h2>
-          <p>
-            This uses the existing Heyy Studio request, quote, secure payment, production, deliverables and revision workflow. Everything stays connected to the same project.
-          </p>
-        </div>
-      </div>
-
-      <div className="expert-deliverable-grid">
-        {[
-          "CAD drawings",
-          "BIM model",
-          "Planning drawings",
-          "Permit documentation",
-          "Construction documentation",
-          "Professional renders",
-          "Interior design",
-          "Structural coordination",
-          "MEP coordination",
-          "Landscape design",
-          "Quantity schedules",
-        ].map((item) => <span key={item}>{item}</span>)}
-      </div>
-
-      <div className="architecture-production-panel">
-        <ProductionPanel
-          project={project}
-          brand={productionContext}
-          service="Architecture Design Development"
-          serviceId="architecture-design-development"
-          studio="architecture_studio"
-          previewImage={direction.image_url || undefined}
-          description={`Professional development of the selected ${direction.title} ${project.workflow_mode === "sketch_to_real" ? "sketch interpretation" : project.workflow_mode === "plan_to_render" ? "plan-to-render direction" : "architecture concept"}.`}
-          usage="Planning, design development, professional coordination and project-specific architecture deliverables as defined in the final quote."
-          expertNote="The current Architecture Studio outputs are conceptual. A qualified expert must verify and develop the final scope, drawings, renders and documentation."
-          buttonLabel="Request Expert Development →"
-        />
-      </div>
+    <section className="production-stage architecture-production-panel">
+      <StudioProductionWorkspace
+        project={project}
+        studio="architecture_studio"
+        baseContext={productionContext}
+        scopes={architectureProductionScopes}
+        selectedPackage={{
+          title: "Selected Architecture Production Package",
+          service: "Selected Architecture Production Package",
+          serviceId: "architecture-selected-package",
+          description: "Prepare the selected architecture development items together as one coordinated Expert production package.",
+        }}
+        completePackage={{
+          title: "Complete Architecture Design Development Package",
+          service: "Architecture Design Development",
+          serviceId: "architecture-design-development",
+          description: "Develop the approved architecture concept, plans, materials and visuals as one complete professional design-development package.",
+        }}
+        previewImage={direction.image_url || undefined}
+        usage="Planning, design development, professional coordination and project-specific architecture deliverables as defined in the final quote."
+        expertNote="The current Architecture Studio outputs are conceptual. A qualified expert must verify and develop the final scope, drawings, renders and documentation."
+        heading="Select the architecture items you want to send to Expert Development"
+        intro="Choose one development item, combine several items in one request, or send the complete approved architecture concept for professional development."
+      />
     </section>
   );
 }

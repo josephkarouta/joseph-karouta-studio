@@ -163,26 +163,26 @@ export default function HomePage() {
   aria-hidden="true"
   className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-cover object-center lg:block"
 >
-  <source src="/hero-video.mp4" type="video/mp4" />
+  <source src="/hero-video-web.mp4" type="video/mp4" />
 </video>
         <div className="hero-image-overlay pointer-events-none absolute inset-0 z-[1] hidden lg:block" />
 
-        <PageContainer className="relative z-10 min-h-[690px] py-16 lg:flex lg:items-center lg:py-24">
+        <PageContainer className="relative z-10 min-h-0 py-10 sm:min-h-[690px] sm:py-16 lg:flex lg:items-center lg:py-24">
           <div data-home-reveal className="relative z-10 max-w-[650px]">
             <p className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-[var(--accent-strong)]">
               Create with AI. Build with Experts.
             </p>
 
-            <h1 className="mt-6 max-w-[680px] text-[clamp(3.15rem,5.4vw,5.65rem)] font-bold leading-[1.02] tracking-[-0.045em] text-[var(--text-primary)]">
+            <h1 className="mt-4 max-w-[680px] text-[2.65rem] font-bold leading-[0.98] tracking-[-0.045em] text-[var(--text-primary)] sm:mt-6 sm:text-[clamp(3.15rem,5.4vw,5.65rem)] sm:leading-[1.02]">
               <span className="block">Turn your idea</span>
               <span className="home-spectrum-text block">into finished work.</span>
             </h1>
 
-            <p className="mt-8 max-w-2xl text-base font-semibold leading-8 text-[var(--text-secondary)] sm:text-lg">
+            <p className="mt-5 max-w-2xl text-base font-semibold leading-7 text-[var(--text-secondary)] sm:mt-8 sm:text-lg sm:leading-8">
               Play with ideas, shape what you love, and call in an expert when you are ready to finish it.
             </p>
 
-            <div className="mt-9 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-2.5 sm:mt-9 sm:gap-3">
               <ButtonLink href="#create" size="lg">
                 Start creating <ArrowRight size={16} />
               </ButtonLink>
@@ -196,7 +196,7 @@ export default function HomePage() {
         </PageContainer>
       </section>
 
-      <section id="create" className="relative py-24 sm:py-32">
+      <section id="create" className="relative py-14 sm:py-32">
         <PageContainer>
           <SectionHeading
             eyebrow="Studios"
@@ -204,7 +204,7 @@ export default function HomePage() {
             description="Pick a Studio and start playing with ideas."
           />
 
-          <div className="mt-14 grid gap-5 lg:grid-cols-2">
+          <div className="mt-8 grid gap-4 sm:mt-14 sm:gap-5 lg:grid-cols-2">
             {VISIBLE_STUDIOS.map((studio, studioIndex) => {
               const content = studioContent[studio.id];
               if (!content) return null;
@@ -219,7 +219,7 @@ export default function HomePage() {
                   style={{ transitionDelay: `${studioIndex * 80}ms` }}
                 >
                   <article
-                    className="relative min-h-[390px] overflow-hidden rounded-[2rem] border p-7 shadow-[var(--shadow-card)] transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-card-hover)] sm:p-9"
+                    className="relative min-h-[330px] overflow-hidden rounded-[1.6rem] border p-5 shadow-[var(--shadow-card)] transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-card-hover)] sm:min-h-[390px] sm:rounded-[2rem] sm:p-9"
                     style={{
                       borderColor: studio.border,
                       background: `linear-gradient(145deg, ${studio.soft}, var(--surface-strong) 62%)`,
@@ -230,28 +230,28 @@ export default function HomePage() {
                       style={{ background: studio.accent }}
                     />
 
-                    <div className="relative grid h-full gap-8 sm:grid-cols-[0.92fr_1.08fr] sm:items-stretch">
+                    <div className="relative grid h-full gap-5 sm:grid-cols-[0.92fr_1.08fr] sm:items-stretch sm:gap-8">
                       <div className="flex flex-col">
                       <div className="flex items-start justify-between gap-4">
                         <span
-                          className="grid h-14 w-14 place-items-center rounded-2xl border shadow-sm"
+                          className="grid h-12 w-12 place-items-center rounded-xl border shadow-sm sm:h-14 sm:w-14 sm:rounded-2xl"
                           style={{ background: studio.soft, borderColor: studio.border, color: studio.accent }}
                         >
                           <Icon size={24} />
                         </span>
                       </div>
 
-                      <p className="mt-7 text-[0.62rem] font-black uppercase tracking-[0.16em]" style={{ color: studio.accent }}>
+                      <p className="mt-4 text-[0.6rem] font-black uppercase tracking-[0.16em] sm:mt-7 sm:text-[0.62rem]" style={{ color: studio.accent }}>
                         {content.label}
                       </p>
-                      <h3 className="mt-3 text-4xl font-black leading-[0.95] tracking-[-0.055em] sm:text-5xl">
+                      <h3 className="mt-2 text-3xl font-black leading-[0.95] tracking-[-0.055em] sm:mt-3 sm:text-5xl">
                         {content.title}
                       </h3>
-                      <p className="mt-4 max-w-xl text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base">
+                      <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-4 sm:text-base sm:leading-7">
                         {content.description}
                       </p>
 
-                      <div className="mt-6 space-y-2">
+                      <div className="mt-4 space-y-1.5 sm:mt-6 sm:space-y-2">
                         {content.examples.slice(0, 2).map((item) => (
                           <p key={item} className="flex items-center gap-2 text-xs font-bold text-[var(--text-secondary)]">
                             <Check size={13} style={{ color: studio.accent }} /> {item}
@@ -259,7 +259,7 @@ export default function HomePage() {
                         ))}
                       </div>
 
-                      <div className="mt-auto flex items-center gap-2 pt-9 text-sm font-black" style={{ color: studio.accent }}>
+                      <div className="mt-auto flex items-center gap-2 pt-5 text-sm font-black sm:pt-9" style={{ color: studio.accent }}>
                         Open Studio <ArrowRight size={16} className="transition-transform group-hover:translate-x-1.5" />
                       </div>
                       </div>
@@ -276,9 +276,9 @@ export default function HomePage() {
         </PageContainer>
       </section>
 
-      <section id="tools" className="border-y border-[var(--border)] bg-[var(--surface)] py-24 sm:py-32">
+      <section id="tools" className="border-y border-[var(--border)] bg-[var(--surface)] py-14 sm:py-32">
         <PageContainer>
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-5 sm:gap-8 lg:flex-row lg:items-end lg:justify-between">
             <SectionHeading
               eyebrow="Quick tools"
               title="Quick idea? Make it happen."
@@ -290,7 +290,7 @@ export default function HomePage() {
             </ButtonLink>
           </div>
 
-          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
             {PLATFORM_TOOLS.map((tool, toolIndex) => {
               const Icon = toolIcons[tool.id] || Sparkles;
               const copy = toolCopy[tool.id] || { title: tool.label, description: tool.description };
@@ -303,17 +303,17 @@ export default function HomePage() {
                   className="quick-tool-card group block"
                   style={{ transitionDelay: `${toolIndex * 60}ms` }}
                 >
-                  <article className="flex h-full min-h-[285px] flex-col overflow-hidden rounded-[1.7rem] border border-[var(--border)] bg-[var(--surface-strong)] p-5 shadow-[var(--shadow-card)] transition duration-300 hover:-translate-y-1 hover:border-[var(--accent-border)] hover:shadow-[var(--shadow-card-hover)]">
-                    <div className="relative h-24 overflow-hidden rounded-[1.15rem]" style={{ background: `linear-gradient(135deg, ${tool.soft}, var(--surface))` }}>
+                  <article className="flex h-full min-h-[235px] flex-col overflow-hidden rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow-card)] transition duration-300 hover:-translate-y-1 hover:border-[var(--accent-border)] hover:shadow-[var(--shadow-card-hover)] sm:min-h-[285px] sm:rounded-[1.7rem] sm:p-5">
+                    <div className="relative h-20 overflow-hidden rounded-[1rem] sm:h-24 sm:rounded-[1.15rem]" style={{ background: `linear-gradient(135deg, ${tool.soft}, var(--surface))` }}>
                       <div className="absolute -right-4 -top-7 h-24 w-24 rounded-full opacity-20 blur-2xl" style={{ background: tool.accent }} />
                       <span className="absolute bottom-4 left-4 grid h-12 w-12 place-items-center rounded-2xl bg-[var(--surface-strong)] shadow-sm" style={{ color: tool.accent }}>
                         <Icon size={21} />
                       </span>
                     </div>
-                    <p className="mt-6 text-[0.62rem] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">{tool.label}</p>
+                    <p className="mt-4 text-[0.6rem] font-black uppercase tracking-[0.16em] text-[var(--text-muted)] sm:mt-6 sm:text-[0.62rem]">{tool.label}</p>
                     <h3 className="mt-2 text-xl font-black tracking-[-0.04em]">{copy.title}</h3>
                     <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{copy.description}</p>
-                    <div className="mt-auto flex items-center justify-between gap-3 pt-7">
+                    <div className="mt-auto flex items-center justify-between gap-3 pt-5 sm:pt-7">
                       <CreditPill credits={tool.creditLabel.replace("From ", "").replace(" credits", "")} label={tool.group === "utility" ? "" : "credits"} />
                       <ArrowRight size={16} style={{ color: tool.accent }} className="transition-transform group-hover:translate-x-1" />
                     </div>
@@ -325,7 +325,7 @@ export default function HomePage() {
         </PageContainer>
       </section>
 
-      <section id="how-it-works" className="pb-12 pt-24 sm:pb-16 sm:pt-32">
+      <section id="how-it-works" className="pb-8 pt-14 sm:pb-16 sm:pt-32">
         <PageContainer>
           <SectionHeading
             eyebrow="How it works"
@@ -333,28 +333,28 @@ export default function HomePage() {
             description="Start simple, explore quickly and bring in an expert only when you need one."
           />
 
-          <div className="mt-14 grid gap-5 lg:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:mt-14 sm:gap-5 lg:grid-cols-3">
             {simpleSteps.map(({ icon: Icon, number, title, text }, stepIndex) => (
               <div
                 key={title}
                 data-home-reveal
                 style={{ transitionDelay: `${stepIndex * 90}ms` }}
               >
-                <GlassCard className="how-step min-h-[270px] p-7 sm:p-8">
+                <GlassCard className="how-step min-h-[215px] p-5 sm:min-h-[270px] sm:p-8">
                   <div className="flex items-center justify-between">
                     <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
                       <Icon size={20} />
                     </span>
                     <span className="text-[0.68rem] font-black tracking-[0.18em] text-[var(--text-muted)]">{number}</span>
                   </div>
-                  <h3 className="mt-9 text-2xl font-black leading-[1] tracking-[-0.045em]">{title}</h3>
-                  <p className="mt-4 text-sm font-semibold leading-6 text-[var(--text-secondary)]">{text}</p>
+                  <h3 className="mt-6 text-[1.35rem] font-black leading-[1] tracking-[-0.045em] sm:mt-9 sm:text-2xl">{title}</h3>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-4">{text}</p>
                 </GlassCard>
               </div>
             ))}
           </div>
 
-          <div data-home-reveal className="mt-6 flex flex-col gap-5 rounded-[1.7rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+          <div data-home-reveal className="mt-4 flex flex-col gap-4 rounded-[1.45rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-5 sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:rounded-[1.7rem] sm:p-7">
             <div>
               <p className="text-lg font-black tracking-[-0.03em]">Not sure which Studio or tool to use?</p>
               <p className="mt-1 text-sm font-semibold text-[var(--text-secondary)]">Tell Heyy what you want to make.</p>
@@ -366,7 +366,7 @@ export default function HomePage() {
         </PageContainer>
       </section>
 
-      <section id="pricing" className="pb-24 pt-10 sm:pb-32 sm:pt-14">
+      <section id="pricing" className="pb-14 pt-8 sm:pb-32 sm:pt-14">
         <PageContainer>
           <SectionHeading
             eyebrow="Plans & credits"
@@ -375,7 +375,7 @@ export default function HomePage() {
           />
 
           {!accountLoading && user && (
-            <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-4 rounded-[1.7rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="mx-auto mt-7 flex max-w-6xl flex-col gap-3 rounded-[1.45rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:rounded-[1.7rem] sm:p-6">
               <div>
                 <p className="text-[0.62rem] font-black uppercase tracking-[0.15em] text-[var(--accent-strong)]">Your account</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -396,15 +396,15 @@ export default function HomePage() {
             </div>
           )}
 
-          <div className="mx-auto mt-10 max-w-6xl">
+          <div className="mx-auto mt-7 max-w-6xl sm:mt-10">
             <PlanCards />
           </div>
 
-          <div className="mx-auto mt-10 max-w-6xl rounded-[1.7rem] border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-7">
+          <div className="mx-auto mt-7 max-w-6xl rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface)] p-4 sm:mt-10 sm:rounded-[1.7rem] sm:p-7">
             <CreditTopUps />
           </div>
 
-          <div className="mx-auto mt-7 flex max-w-6xl flex-col items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-5 py-4 text-center text-xs font-semibold leading-6 text-[var(--text-secondary)] sm:flex-row sm:justify-between sm:text-left">
+          <div className="mx-auto mt-5 flex max-w-6xl flex-col items-center gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 text-center text-xs font-semibold leading-5 text-[var(--text-secondary)] sm:mt-7 sm:flex-row sm:justify-between sm:gap-3 sm:px-5 sm:py-4 sm:text-left sm:leading-6">
             <span>Prices are in US dollars. Expert production is quoted separately before you pay.</span>
             <ButtonLink href="/credit-guide" variant="secondary" size="sm" className="shrink-0">
               See credit costs
@@ -1329,11 +1329,11 @@ function SectionHeading({
   return (
     <div data-home-reveal className={align === "center" ? "mx-auto max-w-5xl text-center" : "max-w-3xl"}>
       <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="mt-5 text-4xl font-black leading-[0.95] tracking-[-0.06em] sm:text-6xl lg:text-[4.15rem]">
+      <h2 className="mt-4 text-[2.15rem] font-black leading-[0.98] tracking-[-0.055em] sm:mt-5 sm:text-6xl sm:leading-[0.95] sm:tracking-[-0.06em] lg:text-[4.15rem]">
         {title}
       </h2>
       {description && (
-        <p className={`mt-6 text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base ${align === "center" ? "mx-auto max-w-3xl" : ""}`}>
+        <p className={`mt-4 text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-6 sm:text-base sm:leading-7 ${align === "center" ? "mx-auto max-w-3xl" : ""}`}>
           {description}
         </p>
       )}
@@ -1345,7 +1345,7 @@ function HeroPlayground() {
   return (
     <div
       data-home-reveal
-      className="relative mt-10 w-full overflow-hidden rounded-[1.8rem] border border-[var(--border)] shadow-[var(--shadow-card)] lg:hidden"
+      className="relative mt-7 w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] shadow-[var(--shadow-card)] sm:mt-10 sm:rounded-[1.8rem] lg:hidden"
       aria-hidden="true"
     >
 <video
@@ -1355,9 +1355,9 @@ function HeroPlayground() {
   playsInline
   preload="metadata"
   poster="/hero-video-poster.jpg"
-  className="aspect-[1.25/1] h-auto w-full object-cover object-center"
+  className="aspect-[1.45/1] h-auto w-full object-cover object-center sm:aspect-[1.25/1]"
 >
-  <source src="/hero-video.mp4" type="video/mp4" />
+  <source src="/hero-video-web.mp4" type="video/mp4" />
 </video>
     </div>
   );
@@ -1366,7 +1366,7 @@ function HeroPlayground() {
 function StudioPreview({ studioId, accent, soft }: { studioId: string; accent: string; soft: string }) {
   if (studioId === "brand_studio") {
     return (
-      <div className="studio-preview studio-preview-brand relative min-h-[270px] overflow-hidden rounded-[1.5rem] border border-white/50 bg-[#201429] p-4 text-white shadow-xl">
+      <div className="studio-preview studio-preview-brand relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[#201429] p-3 text-white shadow-xl sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-4">
         <div className="studio-preview-grid absolute inset-0 opacity-20" />
         <div className="studio-piece studio-piece-main relative rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur-sm">
           <p className="text-[0.5rem] font-black uppercase tracking-[0.18em] text-white/45">Identity system</p>
@@ -1398,8 +1398,8 @@ function StudioPreview({ studioId, accent, soft }: { studioId: string; accent: s
 
   if (studioId === "marketing_studio") {
     return (
-      <div className="studio-preview studio-preview-marketing relative min-h-[270px] overflow-hidden rounded-[1.5rem] border border-white/50 bg-[var(--surface-strong)] p-4 shadow-xl">
-        <div className="studio-piece studio-piece-poster relative h-44 overflow-hidden rounded-2xl text-white" style={{ background: `linear-gradient(145deg, ${accent}, #251329 72%)` }}>
+      <div className="studio-preview studio-preview-marketing relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[var(--surface-strong)] p-3 shadow-xl sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-4">
+        <div className="studio-piece studio-piece-poster relative h-36 overflow-hidden rounded-xl text-white sm:h-44 sm:rounded-2xl" style={{ background: `linear-gradient(145deg, ${accent}, #251329 72%)` }}>
           <div className="absolute -right-8 -top-10 h-36 w-36 rounded-full bg-[#ffb04a] opacity-90" />
           <div className="absolute right-7 top-7 h-20 w-20 rounded-full border-[10px] border-white/85" />
           <div className="absolute bottom-5 left-5 h-4 w-28 rounded-full bg-white" />
@@ -1407,7 +1407,7 @@ function StudioPreview({ studioId, accent, soft }: { studioId: string; accent: s
           <div className="absolute bottom-12 left-20 h-12 w-12 -rotate-6 rounded-full bg-[#ef3fb4]" />
           <span className="absolute left-5 top-4 text-[0.5rem] font-black uppercase tracking-[0.18em] text-white/65">Campaign direction</span>
         </div>
-        <div className="studio-piece studio-piece-bottom mt-3 grid grid-cols-[1fr_0.72fr] gap-3">
+        <div className="studio-piece studio-piece-bottom mt-2 grid grid-cols-[1fr_0.72fr] gap-2 sm:mt-3 sm:gap-3">
           <div className="rounded-xl p-3" style={{ background: soft }}>
             <div className="flex gap-2">
               <span className="h-7 w-7 rounded-full" style={{ background: accent }} />
@@ -1427,7 +1427,7 @@ function StudioPreview({ studioId, accent, soft }: { studioId: string; accent: s
 
   if (studioId === "architecture_studio") {
     return (
-      <div className="studio-preview studio-preview-architecture relative min-h-[270px] overflow-hidden rounded-[1.5rem] border border-white/50 bg-[#eaf4ff] p-5 shadow-xl dark:bg-[#111a25]">
+      <div className="studio-preview studio-preview-architecture relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[#eaf4ff] p-4 shadow-xl dark:bg-[#111a25] sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-5">
         <div className="studio-preview-grid absolute inset-0 opacity-55" />
         <div className="studio-piece studio-sun absolute right-6 top-8 h-20 w-20 rounded-full bg-[linear-gradient(145deg,#fff5b8,#ffb04a)] shadow-[0_0_45px_rgba(255,176,74,.35)]" />
         <div className="relative flex items-center justify-between">
@@ -1451,7 +1451,7 @@ function StudioPreview({ studioId, accent, soft }: { studioId: string; accent: s
   }
 
   return (
-    <div className="studio-preview studio-preview-interior relative min-h-[270px] overflow-hidden rounded-[1.5rem] border border-white/50 bg-[#f8eee5] p-4 shadow-xl dark:bg-[#2b211e]">
+    <div className="studio-preview studio-preview-interior relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[#f8eee5] p-3 shadow-xl dark:bg-[#2b211e] sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-4">
       <div className="absolute inset-x-0 bottom-0 h-[42%] bg-[#e8cbb2]/60 dark:bg-[#684c3f]/35" />
       <div className="studio-piece studio-art absolute left-6 top-6 h-20 w-28 rounded-xl border-[7px] border-white bg-[linear-gradient(145deg,#ffcf9d,#ee8d48)] shadow-md dark:border-[#4a3932]">
         <span className="absolute bottom-2 left-3 h-8 w-8 rounded-full bg-white/55" />
