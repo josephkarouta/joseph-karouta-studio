@@ -1826,14 +1826,142 @@ function repairLocalCanonicalConflicts(planSet: LivePlanSet): LivePlanSet {
   return repaired;
 }
 
+
+/**
+ * Resolve the last few ordinary-room collisions with minimal displacement.
+ *
+ * This is deliberately different from the rejected row/grid packer: it never
+ * invents a new room sequence or normalises the whole floor. It only relaxes
+ * rooms that are still colliding after the model correction/local repair,
+ * keeps Direction anchors fixed, and chooses the smallest move that reduces
+ * total collision area while staying inside the real level outline.
+ */
+function resolveResidualCanonicalRoomOverlaps(planSet: LivePlanSet): LivePlanSet {
+  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
+  const plan = repaired.canonical_plan;
+  if (!plan) return repaired;
+
+  const rawOverlapArea = (a: CanonicalPlanRoom, b: CanonicalPlanRoom) => {
+    const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+    return overlapX > 0 && overlapY > 0 ? overlapX * overlapY : 0;
+  };
+
+  const collisionAreaFor = (room: CanonicalPlanRoom, rooms: CanonicalPlanRoom[]) =>
+    rooms.reduce((sum, other) => {
+      if (other.id === room.id) return sum;
+      return sum + rawOverlapArea(room, other);
+    }, 0);
+
+  for (const level of plan.levels || []) {
+    const outline = canonicalOutlineForLevel(plan, level);
+    const bounds = pointBounds(outline);
+    const indoor = (level.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
+    if (indoor.length < 2) continue;
+
+    const original = new Map(indoor.map((room) => [room.id, { x: room.x, y: room.y }]));
+
+    for (let iteration = 0; iteration < 36; iteration += 1) {
+      let conflict: { a: CanonicalPlanRoom; b: CanonicalPlanRoom; area: number } | null = null;
+
+      for (let i = 0; i < indoor.length; i += 1) {
+        for (let j = i + 1; j < indoor.length; j += 1) {
+          const a = indoor[i];
+          const b = indoor[j];
+          if (!canonicalRoomsOverlap(a, b)) continue;
+          const area = rawOverlapArea(a, b);
+          if (!conflict || area > conflict.area) conflict = { a, b, area };
+        }
+      }
+
+      if (!conflict) break;
+
+      const aAnchor = canonicalRoomIsLayoutAnchor(conflict.a);
+      const bAnchor = canonicalRoomIsLayoutAnchor(conflict.b);
+      if (aAnchor && bAnchor) break;
+
+      // Prefer moving the smaller non-anchor room. This naturally keeps major
+      // living/bedroom zones stable while allowing bathrooms/robes/laundries to
+      // resolve local collisions around them.
+      const movable = aAnchor
+        ? conflict.b
+        : bAnchor
+          ? conflict.a
+          : (conflict.a.width * conflict.a.height <= conflict.b.width * conflict.b.height ? conflict.a : conflict.b);
+      const blocker = movable.id === conflict.a.id ? conflict.b : conflict.a;
+      const start = original.get(movable.id) || { x: movable.x, y: movable.y };
+      const currentArea = collisionAreaFor(movable, indoor);
+      const candidates: Array<{ x: number; y: number; score: number; collision: number }> = [];
+      const seen = new Set<string>();
+
+      const pushCandidate = (x: number, y: number, adjacencyBonus = 0) => {
+        const key = `${x.toFixed(2)}:${y.toFixed(2)}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        const trial = { ...movable, x, y };
+        if (!canonicalRoomInsideOutline(trial, outline)) return;
+        const move = Math.hypot(x - movable.x, y - movable.y);
+        const totalMove = Math.hypot(x - start.x, y - start.y);
+        if (totalMove > 24) return;
+        const collision = collisionAreaFor(trial, indoor);
+        const score = collision * 1000 + move * 2 + totalMove * 0.25 - adjacencyBonus;
+        candidates.push({ x, y, score, collision });
+      };
+
+      const gap = 0.18;
+      // Exact separating moves around the room causing the current collision.
+      pushCandidate(blocker.x - movable.width - gap, movable.y, 1.5);
+      pushCandidate(blocker.x + blocker.width + gap, movable.y, 1.5);
+      pushCandidate(movable.x, blocker.y - movable.height - gap, 1.5);
+      pushCandidate(movable.x, blocker.y + blocker.height + gap, 1.5);
+
+      // Alignment alternatives preserve the same local room cluster while
+      // giving the solver a way around a third neighbouring room.
+      pushCandidate(blocker.x - movable.width - gap, blocker.y, 1.0);
+      pushCandidate(blocker.x + blocker.width + gap, blocker.y, 1.0);
+      pushCandidate(blocker.x, blocker.y - movable.height - gap, 1.0);
+      pushCandidate(blocker.x, blocker.y + blocker.height + gap, 1.0);
+      pushCandidate(blocker.x + blocker.width - movable.width, blocker.y - movable.height - gap, 0.6);
+      pushCandidate(blocker.x + blocker.width - movable.width, blocker.y + blocker.height + gap, 0.6);
+
+      // Half-unit local search is intentionally fine-grained. The previous
+      // whole-unit search could miss a perfectly valid nearby position and
+      // then abort the entire paid generation over one Bedroom/Bathroom clash.
+      for (let radius = 0.5; radius <= 24; radius += 0.5) {
+        const steps = [
+          [radius, 0], [-radius, 0], [0, radius], [0, -radius],
+          [radius, radius], [radius, -radius], [-radius, radius], [-radius, -radius],
+        ];
+        for (const [dx, dy] of steps) pushCandidate(movable.x + dx, movable.y + dy);
+      }
+
+      pushCandidate(bounds.minX, Math.min(Math.max(movable.y, bounds.minY), bounds.maxY - movable.height), 0.25);
+      pushCandidate(bounds.maxX - movable.width, Math.min(Math.max(movable.y, bounds.minY), bounds.maxY - movable.height), 0.25);
+      pushCandidate(Math.min(Math.max(movable.x, bounds.minX), bounds.maxX - movable.width), bounds.minY, 0.25);
+      pushCandidate(Math.min(Math.max(movable.x, bounds.minX), bounds.maxX - movable.width), bounds.maxY - movable.height, 0.25);
+
+      candidates.sort((left, right) => left.score - right.score);
+      const best = candidates.find((candidate) => candidate.collision + 0.02 < currentArea);
+      if (!best) break;
+
+      movable.x = best.x;
+      movable.y = best.y;
+    }
+  }
+
+  return repaired;
+}
+
 function prepareCanonicalPlanCandidate(
   planSet: LivePlanSet,
   contract: DirectionGeometryContract | null | undefined,
 ) {
   return repairCanonicalPlanAccess(
-    repairLocalCanonicalConflicts(
-      repairMinorCanonicalGeometry(
-        applyDirectionContractLocks(planSet, contract),
+    resolveResidualCanonicalRoomOverlaps(
+      repairLocalCanonicalConflicts(
+        repairMinorCanonicalGeometry(
+          applyDirectionContractLocks(planSet, contract),
+        ),
       ),
     ),
   );
