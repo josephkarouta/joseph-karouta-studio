@@ -885,6 +885,362 @@ function renderPerspectiveGuide(plan: CanonicalPlanSpec, visualType: string) {
 
 
 
+
+type FoundationMetricBounds = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+type FoundationTransform = {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  bounds: FoundationMetricBounds;
+};
+
+function canonicalPointToMetres(plan: CanonicalPlanSpec, point: { x: number; y: number }) {
+  const siteWidth = Math.max(8, Number(plan.site?.width_m || 24));
+  const siteDepth = Math.max(8, Number(plan.site?.depth_m || 30));
+  return {
+    x: siteWidth * clamp(point.x) / 100,
+    y: siteDepth * clamp(point.y) / 100,
+  };
+}
+
+function canonicalRectToMetres(
+  plan: CanonicalPlanSpec,
+  rect: { x: number; y: number; width: number; height: number },
+) {
+  const siteWidth = Math.max(8, Number(plan.site?.width_m || 24));
+  const siteDepth = Math.max(8, Number(plan.site?.depth_m || 30));
+  return {
+    x: siteWidth * clamp(rect.x) / 100,
+    y: siteDepth * clamp(rect.y) / 100,
+    width: siteWidth * clamp(rect.width, 0, 100) / 100,
+    height: siteDepth * clamp(rect.height, 0, 100) / 100,
+  };
+}
+
+function foundationBoundsFromPoints(points: Array<{ x: number; y: number }>): FoundationMetricBounds {
+  const safe = points.length ? points : [{ x: 0, y: 0 }, { x: 10, y: 10 }];
+  return {
+    minX: Math.min(...safe.map((point) => point.x)),
+    minY: Math.min(...safe.map((point) => point.y)),
+    maxX: Math.max(...safe.map((point) => point.x)),
+    maxY: Math.max(...safe.map((point) => point.y)),
+  };
+}
+
+function foundationSharedBounds(plan: CanonicalPlanSpec): FoundationMetricBounds {
+  const buildingPoints: Array<{ x: number; y: number }> = [];
+  for (const level of plan.levels || []) {
+    const outline = levelOutline(plan, level);
+    buildingPoints.push(...outline.map((point) => canonicalPointToMetres(plan, point)));
+  }
+  if (!buildingPoints.length) {
+    buildingPoints.push(...masterOutline(plan).map((point) => canonicalPointToMetres(plan, point)));
+  }
+
+  const building = foundationBoundsFromPoints(buildingPoints);
+  const width = Math.max(4, building.maxX - building.minX);
+  const height = Math.max(4, building.maxY - building.minY);
+
+  // Keep a generous but controlled perimeter around the actual building. Nearby
+  // pool / driveway geometry is visible without allowing a long driveway to shrink
+  // the architectural plans down to a tiny diagram.
+  const horizontalMargin = Math.max(2, width * 0.22);
+  const verticalMargin = Math.max(2, height * 0.22);
+  const display: FoundationMetricBounds = {
+    minX: building.minX - horizontalMargin,
+    minY: building.minY - verticalMargin,
+    maxX: building.maxX + horizontalMargin,
+    maxY: building.maxY + verticalMargin,
+  };
+
+  const includeNearbyRect = (rect: { present?: boolean; x: number; y: number; width: number; height: number } | undefined) => {
+    if (!rect || rect.present === false || rect.width <= 0 || rect.height <= 0) return;
+    const metric = canonicalRectToMetres(plan, rect);
+    const maxExpansionX = width * 0.34;
+    const maxExpansionY = height * 0.34;
+    display.minX = Math.min(display.minX, Math.max(building.minX - maxExpansionX, metric.x));
+    display.minY = Math.min(display.minY, Math.max(building.minY - maxExpansionY, metric.y));
+    display.maxX = Math.max(display.maxX, Math.min(building.maxX + maxExpansionX, metric.x + metric.width));
+    display.maxY = Math.max(display.maxY, Math.min(building.maxY + maxExpansionY, metric.y + metric.height));
+  };
+
+  includeNearbyRect(plan.pool);
+  includeNearbyRect(plan.driveway);
+  return display;
+}
+
+function foundationTransform(bounds: FoundationMetricBounds, target: Rect): FoundationTransform {
+  const sourceWidth = Math.max(4, bounds.maxX - bounds.minX);
+  const sourceHeight = Math.max(4, bounds.maxY - bounds.minY);
+  const scale = Math.min(target.width / sourceWidth, target.height / sourceHeight);
+  const fittedWidth = sourceWidth * scale;
+  const fittedHeight = sourceHeight * scale;
+  return {
+    bounds,
+    scale,
+    offsetX: target.x + (target.width - fittedWidth) / 2,
+    offsetY: target.y + (target.height - fittedHeight) / 2,
+  };
+}
+
+function foundationMapPoint(
+  plan: CanonicalPlanSpec,
+  transform: FoundationTransform,
+  point: { x: number; y: number },
+) {
+  const metric = canonicalPointToMetres(plan, point);
+  return {
+    x: transform.offsetX + (metric.x - transform.bounds.minX) * transform.scale,
+    y: transform.offsetY + (metric.y - transform.bounds.minY) * transform.scale,
+  };
+}
+
+function foundationMapRoom(
+  plan: CanonicalPlanSpec,
+  transform: FoundationTransform,
+  room: CanonicalPlanRoom,
+): ScreenRoom {
+  const metric = canonicalRectToMetres(plan, room);
+  return {
+    room,
+    x: transform.offsetX + (metric.x - transform.bounds.minX) * transform.scale,
+    y: transform.offsetY + (metric.y - transform.bounds.minY) * transform.scale,
+    width: Math.max(12, metric.width * transform.scale),
+    height: Math.max(12, metric.height * transform.scale),
+  };
+}
+
+function foundationRoomLabelSvg(plan: CanonicalPlanSpec, item: ScreenRoom) {
+  const metric = roomMetric(plan, item.room);
+  const shortest = Math.min(item.width, item.height);
+  const fontSize = Math.max(12, Math.min(20, shortest * 0.13));
+  const lines = labelLines(item.room.name, Math.max(11, Math.floor(item.width / (fontSize * 0.62))));
+  const centerX = item.x + item.width / 2;
+  const centerY = item.y + item.height / 2;
+  const totalHeight = lines.length * fontSize + Math.max(10, fontSize * 0.8);
+  const startY = centerY - totalHeight / 2 + fontSize * 0.35;
+  return `<g pointer-events="none">
+    <text x="${centerX}" y="${startY}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700" fill="${INK}">
+      ${lines.map((line, index) => `<tspan x="${centerX}" dy="${index ? fontSize * 1.02 : 0}">${esc(line.toUpperCase())}</tspan>`).join("")}
+    </text>
+    <text x="${centerX}" y="${startY + lines.length * fontSize + 8}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(10, fontSize - 4)}" fill="${MID}">${metric.width.toFixed(1)} × ${metric.depth.toFixed(1)} m</text>
+  </g>`;
+}
+
+function foundationWindowSvg(room: ScreenRoom, edge: Edge, widthPx: number) {
+  const width = Math.max(24, Math.min(widthPx, edge === "top" || edge === "bottom" ? room.width * 0.72 : room.height * 0.72));
+  if (edge === "top" || edge === "bottom") {
+    const x = room.x + room.width / 2 - width / 2;
+    const y = edge === "top" ? room.y : room.y + room.height;
+    return `<g><line x1="${x}" y1="${y}" x2="${x + width}" y2="${y}" stroke="#fff" stroke-width="10"/><line x1="${x}" y1="${y - 3}" x2="${x + width}" y2="${y - 3}" stroke="${INK}" stroke-width="1.8"/><line x1="${x}" y1="${y + 3}" x2="${x + width}" y2="${y + 3}" stroke="${INK}" stroke-width="1.8"/><line x1="${x + width / 2}" y1="${y - 4}" x2="${x + width / 2}" y2="${y + 4}" stroke="${MID}" stroke-width="1.2"/></g>`;
+  }
+  const x = edge === "left" ? room.x : room.x + room.width;
+  const y = room.y + room.height / 2 - width / 2;
+  return `<g><line x1="${x}" y1="${y}" x2="${x}" y2="${y + width}" stroke="#fff" stroke-width="10"/><line x1="${x - 3}" y1="${y}" x2="${x - 3}" y2="${y + width}" stroke="${INK}" stroke-width="1.8"/><line x1="${x + 3}" y1="${y}" x2="${x + 3}" y2="${y + width}" stroke="${INK}" stroke-width="1.8"/><line x1="${x - 4}" y1="${y + width / 2}" x2="${x + 4}" y2="${y + width / 2}" stroke="${MID}" stroke-width="1.2"/></g>`;
+}
+
+function foundationScheduledOpeningSvg(
+  room: ScreenRoom,
+  opening: NonNullable<CanonicalPlanLevel["openings"]>[number],
+  transform: FoundationTransform,
+) {
+  const position = clamp(opening.position) / 100;
+  const wall = opening.wall;
+  const openingWidth = Math.max(26, Math.min(130, Number(opening.width_m || 0.9) * transform.scale));
+  const boundaryLength = wall === "north" || wall === "south" ? room.width : room.height;
+  const boundary = wall === "north"
+    ? { edge: "top" as Edge, x: room.x, y: room.y, length: boundaryLength, distance: 0 }
+    : wall === "south"
+      ? { edge: "bottom" as Edge, x: room.x, y: room.y + room.height, length: boundaryLength, distance: 0 }
+      : wall === "west"
+        ? { edge: "left" as Edge, x: room.x, y: room.y, length: boundaryLength, distance: 0 }
+        : { edge: "right" as Edge, x: room.x + room.width, y: room.y, length: boundaryLength, distance: 0 };
+
+  if (opening.type === "door" || opening.type === "sliding_door" || opening.type === "garage_door") {
+    // Preserve the requested position along the wall instead of always centring the opening.
+    if (wall === "north" || wall === "south") {
+      boundary.x = room.x + room.width * position - boundaryLength / 2;
+    } else {
+      boundary.y = room.y + room.height * position - boundaryLength / 2;
+    }
+    return doorSvg(boundary, openingWidth);
+  }
+
+  const windowWidth = Math.max(28, Math.min(150, Number(opening.width_m || 1.5) * transform.scale));
+  if (wall === "north" || wall === "south") {
+    const x = room.x + room.width * position - windowWidth / 2;
+    const y = wall === "north" ? room.y : room.y + room.height;
+    return `<g><line x1="${x}" y1="${y}" x2="${x + windowWidth}" y2="${y}" stroke="#fff" stroke-width="10"/><line x1="${x}" y1="${y - 3}" x2="${x + windowWidth}" y2="${y - 3}" stroke="${INK}" stroke-width="1.8"/><line x1="${x}" y1="${y + 3}" x2="${x + windowWidth}" y2="${y + 3}" stroke="${INK}" stroke-width="1.8"/></g>`;
+  }
+  const x = wall === "west" ? room.x : room.x + room.width;
+  const y = room.y + room.height * position - windowWidth / 2;
+  return `<g><line x1="${x}" y1="${y}" x2="${x}" y2="${y + windowWidth}" stroke="#fff" stroke-width="10"/><line x1="${x - 3}" y1="${y}" x2="${x - 3}" y2="${y + windowWidth}" stroke="${INK}" stroke-width="1.8"/><line x1="${x + 3}" y1="${y}" x2="${x + 3}" y2="${y + windowWidth}" stroke="${INK}" stroke-width="1.8"/></g>`;
+}
+
+function foundationVerticalCoresSvg(
+  plan: CanonicalPlanSpec,
+  level: CanonicalPlanLevel,
+  transform: FoundationTransform,
+) {
+  return (plan.vertical_cores || [])
+    .filter((core) => (core.serves_level_ids || []).includes(level.id))
+    .map((core) => {
+      const metric = canonicalRectToMetres(plan, core);
+      const box: ScreenRoom = {
+        room: { id: core.id, name: "Stair", zone: "circulation", x: core.x, y: core.y, width: core.width, height: core.height },
+        x: transform.offsetX + (metric.x - transform.bounds.minX) * transform.scale,
+        y: transform.offsetY + (metric.y - transform.bounds.minY) * transform.scale,
+        width: Math.max(18, metric.width * transform.scale),
+        height: Math.max(18, metric.height * transform.scale),
+      };
+      if (core.type === "stair") {
+        const steps = Math.max(7, Math.min(14, Math.floor(box.height / 15)));
+        const inset = Math.max(5, Math.min(12, box.width * 0.1));
+        const innerX = box.x + inset;
+        const innerY = box.y + inset;
+        const innerW = Math.max(12, box.width - inset * 2);
+        const innerH = Math.max(12, box.height - inset * 2);
+        return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#fff" stroke="${INK}" stroke-width="3.5"/>${Array.from({ length: steps + 1 }, (_, index) => `<line x1="${innerX}" y1="${innerY + innerH * index / steps}" x2="${innerX + innerW}" y2="${innerY + innerH * index / steps}" stroke="${MID}" stroke-width="1.3"/>`).join("")}<path d="M ${innerX + innerW / 2} ${innerY + innerH - 8} V ${innerY + 12}" stroke="${INK}" stroke-width="1.8" fill="none" marker-end="url(#arrowBlack)"/><text x="${box.x + box.width / 2}" y="${box.y + box.height - 7}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="${MID}">${level === plan.levels?.[0] ? "UP" : "DN"}</text></g>`;
+      }
+      const label = core.type === "service_lift" ? "SERVICE LIFT" : core.type === "lift" ? "LIFT" : "SHAFT";
+      return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#fff" stroke="${INK}" stroke-width="3.5"/><line x1="${box.x}" y1="${box.y}" x2="${box.x + box.width}" y2="${box.y + box.height}" stroke="${MID}" stroke-width="1.5"/><line x1="${box.x + box.width}" y1="${box.y}" x2="${box.x}" y2="${box.y + box.height}" stroke="${MID}" stroke-width="1.5"/><text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 4}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700">${label}</text></g>`;
+    }).join("");
+}
+
+function foundationEntrySvg(
+  plan: CanonicalPlanSpec,
+  level: CanonicalPlanLevel,
+  transform: FoundationTransform,
+) {
+  if (level !== plan.levels?.[0] || !plan.entry) return "";
+  const outline = levelOutline(plan, level);
+  const canonicalBounds = pointBounds(outline);
+  const entry = { x: clamp(plan.entry.x || 50), y: clamp(plan.entry.y || 95) };
+  const distances = {
+    left: Math.abs(entry.x - canonicalBounds.minX),
+    right: Math.abs(entry.x - canonicalBounds.maxX),
+    top: Math.abs(entry.y - canonicalBounds.minY),
+    bottom: Math.abs(entry.y - canonicalBounds.maxY),
+  };
+  const edge = (Object.entries(distances).sort((a, b) => a[1] - b[1])[0]?.[0] || "bottom") as Edge;
+  const mapped = foundationMapPoint(plan, transform, entry);
+  const opening = Math.max(34, Math.min(70, 1.2 * transform.scale));
+  const boundary = edge === "left" || edge === "right"
+    ? { edge, x: mapped.x, y: mapped.y - opening / 2, length: opening, distance: 0 }
+    : { edge, x: mapped.x - opening / 2, y: mapped.y, length: opening, distance: 0 };
+  const labelX = edge === "left" ? mapped.x - 12 : edge === "right" ? mapped.x + 12 : mapped.x;
+  const labelY = edge === "top" ? mapped.y - 18 : edge === "bottom" ? mapped.y + 28 : mapped.y - 14;
+  return `${doorSvg(boundary, opening)}<text x="${labelX}" y="${labelY}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="800" fill="${BLUE}">${esc(plan.entry.label || "MAIN ENTRY")}</text>`;
+}
+
+function foundationScaleBar(transform: FoundationTransform, x: number, y: number) {
+  const metres = transform.scale > 65 ? 2 : transform.scale > 34 ? 5 : 10;
+  const length = metres * transform.scale;
+  const half = length / 2;
+  return `<g transform="translate(${x} ${y})"><rect x="0" y="0" width="${half}" height="8" fill="${INK}"/><rect x="${half}" y="0" width="${half}" height="8" fill="#fff" stroke="${INK}" stroke-width="1"/><line x1="0" y1="0" x2="0" y2="15" stroke="${INK}" stroke-width="1.3"/><line x1="${half}" y1="0" x2="${half}" y2="15" stroke="${INK}" stroke-width="1.3"/><line x1="${length}" y1="0" x2="${length}" y2="15" stroke="${INK}" stroke-width="1.3"/><text x="0" y="30" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="${MID}">0</text><text x="${half}" y="30" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="${MID}">${metres / 2}</text><text x="${length}" y="30" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="${MID}">${metres} m</text></g>`;
+}
+
+function renderPlanFoundationLevel(args: {
+  plan: CanonicalPlanSpec;
+  level: CanonicalPlanLevel;
+  index: number;
+  panel: Rect;
+  sharedBounds: FoundationMetricBounds;
+}) {
+  const { plan, level, index, panel, sharedBounds } = args;
+  const titleHeight = 72;
+  const footerHeight = 76;
+  const drawingTarget: Rect = {
+    x: panel.x + 54,
+    y: panel.y + titleHeight + 20,
+    width: panel.width - 108,
+    height: panel.height - titleHeight - footerHeight - 38,
+  };
+  const transform = foundationTransform(sharedBounds, drawingTarget);
+  const rooms = (level.rooms || []).map((room) => foundationMapRoom(plan, transform, room));
+  const outline = levelOutline(plan, level).map((point) => foundationMapPoint(plan, transform, point));
+  const outlineMetric = foundationBoundsFromPoints(levelOutline(plan, level).map((point) => canonicalPointToMetres(plan, point)));
+  const minX = Math.min(...outline.map((point) => point.x));
+  const minY = Math.min(...outline.map((point) => point.y));
+  const maxX = Math.max(...outline.map((point) => point.x));
+  const maxY = Math.max(...outline.map((point) => point.y));
+  const widthM = Math.max(0, outlineMetric.maxX - outlineMetric.minX);
+  const depthM = Math.max(0, outlineMetric.maxY - outlineMetric.minY);
+
+  const roomBodies = rooms.map((item) => {
+    const short = Math.min(item.width, item.height);
+    const furniture = short >= 62 ? fixtureSvg(item) : "";
+    return `<g><rect x="${item.x}" y="${item.y}" width="${item.width}" height="${item.height}" fill="#fff" stroke="${INK}" stroke-width="3.2" stroke-linejoin="miter"/>${furniture}${foundationRoomLabelSvg(plan, item)}</g>`;
+  }).join("");
+
+  const scheduledOpenings = (level.openings || []).map((opening) => {
+    const room = rooms.find((item) => item.room.id === opening.room_id);
+    return room ? foundationScheduledOpeningSvg(room, opening, transform) : "";
+  }).join("");
+
+  const fallbackDoors = !level.openings?.length ? (level.circulation || []).map((link) => {
+    const from = rooms.find((room) => room.room.id === link.from_room_id);
+    const to = rooms.find((room) => room.room.id === link.to_room_id);
+    if (!from || !to) return "";
+    return doorSvg(sharedBoundary(from, to), Math.max(30, Math.min(64, transform.scale * 0.9)));
+  }).join("") : "";
+
+  const fallbackWindows = !level.openings?.length ? rooms.map((room) => {
+    const name = room.room.name.toLowerCase();
+    if (/garage|storage|pantry|closet|robe/.test(name)) return "";
+    const preferredWidthM = /living|dining|master|family|lounge/.test(name) ? 2.4 : 1.5;
+    return (["top", "right", "bottom", "left"] as Edge[])
+      .filter((edge) => isExteriorEdge(room, edge, rooms))
+      .slice(0, /living|dining|master|family|lounge/.test(name) ? 2 : 1)
+      .map((edge) => foundationWindowSvg(room, edge, preferredWidthM * transform.scale))
+      .join("");
+  }).join("") : "";
+
+  const mapSiteRect = (rect: { x: number; y: number; width: number; height: number }) => {
+    const metric = canonicalRectToMetres(plan, rect);
+    return {
+      x: transform.offsetX + (metric.x - transform.bounds.minX) * transform.scale,
+      y: transform.offsetY + (metric.y - transform.bounds.minY) * transform.scale,
+      width: metric.width * transform.scale,
+      height: metric.height * transform.scale,
+    };
+  };
+
+  const showSite = index === 0;
+  const pool = showSite && plan.pool?.present ? (() => {
+    const box = mapSiteRect(plan.pool);
+    return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#edf8ff" stroke="#334155" stroke-width="2.4"/><path d="M ${box.x + 10} ${box.y + box.height * 0.35} C ${box.x + box.width * 0.28} ${box.y + box.height * 0.2}, ${box.x + box.width * 0.7} ${box.y + box.height * 0.5}, ${box.x + box.width - 10} ${box.y + box.height * 0.35}" fill="none" stroke="#6fb9e6" stroke-width="1.8"/><text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 4}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="${MID}">POOL</text></g>`;
+  })() : "";
+  const driveway = showSite && plan.driveway?.present ? (() => {
+    const box = mapSiteRect(plan.driveway);
+    return `<g><rect x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="#f5f5f3" stroke="#8a8a86" stroke-width="1.8" stroke-dasharray="7 5"/><path d="M ${box.x + 8} ${box.y + box.height - 8} L ${box.x + box.width - 8} ${box.y + 8}" stroke="#d0d0cb" stroke-width="1.2"/><text x="${box.x + box.width / 2}" y="${box.y + box.height / 2 + 4}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="${MID}">DRIVEWAY</text></g>`;
+  })() : "";
+
+  const floorLabel = String(level.label || (index === 0 ? "Ground Floor" : `Level ${index + 1}`)).replace(/\bplan\b/gi, "").trim();
+  const floorTitle = /floor/i.test(floorLabel) ? `${floorLabel} Plan` : `${floorLabel} Floor Plan`;
+  const clipId = `foundation-clip-${index}`;
+
+  return `<g>
+    <rect x="${panel.x}" y="${panel.y}" width="${panel.width}" height="${panel.height}" rx="18" fill="#fff" stroke="#d7dce3" stroke-width="1.5"/>
+    <text x="${panel.x + 34}" y="${panel.y + 37}" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" fill="${INK}">${esc(floorTitle.toUpperCase())}</text>
+    <text x="${panel.x + panel.width - 34}" y="${panel.y + 36}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="${MID}">COMMON SCALE · ${widthM.toFixed(1)} × ${depthM.toFixed(1)} m APPROX.</text>
+    <line x1="${panel.x + 34}" y1="${panel.y + 56}" x2="${panel.x + panel.width - 34}" y2="${panel.y + 56}" stroke="#e5e7eb" stroke-width="1.5"/>
+    <defs><clipPath id="${clipId}"><rect x="${drawingTarget.x}" y="${drawingTarget.y}" width="${drawingTarget.width}" height="${drawingTarget.height}"/></clipPath></defs>
+    <g clip-path="url(#${clipId})">${driveway}${pool}${roomBodies}<polygon points="${outline.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${INK}" stroke-width="7" stroke-linejoin="miter"/>${scheduledOpenings}${fallbackDoors}${fallbackWindows}${foundationVerticalCoresSvg(plan, level, transform)}${foundationEntrySvg(plan, level, transform)}</g>
+    ${dimensionLine(minX, Math.min(panel.y + panel.height - 80, maxY + 38), maxX, Math.min(panel.y + panel.height - 80, maxY + 38), `${widthM.toFixed(1)} m`)}
+    ${dimensionLine(Math.max(panel.x + 18, minX - 38), minY, Math.max(panel.x + 18, minX - 38), maxY, `${depthM.toFixed(1)} m`, true)}
+    <g transform="translate(${panel.x + panel.width - 88} ${panel.y + 78})"><path d="M0 45 L18 0 L36 45 L18 34 Z" fill="${INK}"/><text x="18" y="62" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="800">${esc(plan.site?.north_label || "N")}</text></g>
+    ${foundationScaleBar(transform, panel.x + 36, panel.y + panel.height - 54)}
+    <text x="${panel.x + panel.width - 34}" y="${panel.y + panel.height - 30}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="${MID}">Concept plan · dimensions indicative</text>
+  </g>`;
+}
+
 export function renderPlanFoundationSheetSvg(args: {
   plan: CanonicalPlanSpec;
   projectName: string;
@@ -893,50 +1249,53 @@ export function renderPlanFoundationSheetSvg(args: {
   const levels = Array.isArray(args.plan.levels) ? args.plan.levels : [];
   const columns = levels.length <= 1 ? 1 : 2;
   const rows = Math.max(1, Math.ceil(levels.length / columns));
-  const sourceWidth = WIDTH;
-  const sourceHeight = HEIGHT;
-  const panelWidth = columns === 1 ? 1640 : 1360;
-  const scale = panelWidth / sourceWidth;
-  const panelHeight = sourceHeight * scale;
-  const gapX = 44;
-  const gapY = 86;
-  const marginX = 70;
-  const top = 220;
-  const sheetWidth = Math.ceil(marginX * 2 + columns * panelWidth + (columns - 1) * gapX);
-  const sheetHeight = Math.ceil(top + rows * panelHeight + (rows - 1) * gapY + 125);
+  const sheetWidth = columns === 1 ? 1500 : 2600;
+  const marginX = 72;
+  const gapX = 54;
+  const headerHeight = 126;
+  const panelTop = 148;
+  const panelHeight = 1110;
+  const gapY = 54;
+  const footerHeight = 74;
+  const panelWidth = columns === 1
+    ? sheetWidth - marginX * 2
+    : (sheetWidth - marginX * 2 - gapX) / 2;
+  const sheetHeight = panelTop + rows * panelHeight + (rows - 1) * gapY + footerHeight;
+  const sharedBounds = foundationSharedBounds(args.plan);
 
   const panels = levels.map((level, index) => {
     const column = index % columns;
     const row = Math.floor(index / columns);
-    const x = marginX + column * (panelWidth + gapX);
-    const y = top + row * (panelHeight + gapY);
-    const visualType = index === 0 ? "ground_floor" : index === 1 ? "upper_floor" : `level_${index}_floor`;
-    const label = String(level.label || (index === 0 ? "Ground Floor" : `Level ${index}`)).replace(/\bplan\b/gi, "").trim();
-    return `<g transform="translate(${x} ${y})">
-      <rect x="0" y="-42" width="${panelWidth}" height="36" rx="18" fill="#eff6ff"/>
-      <text x="18" y="-17" font-family="Arial, sans-serif" font-size="18" font-weight="800" fill="${INK}">${esc(label)} · COMMON SCALE</text>
-      <g transform="scale(${scale})">${renderFloorPlan(args.plan, level, visualType)}</g>
-    </g>`;
+    return renderPlanFoundationLevel({
+      plan: args.plan,
+      level,
+      index,
+      sharedBounds,
+      panel: {
+        x: marginX + column * (panelWidth + gapX),
+        y: panelTop + row * (panelHeight + gapY),
+        width: panelWidth,
+        height: panelHeight,
+      },
+    });
   }).join("");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${sheetWidth}" height="${sheetHeight}" viewBox="0 0 ${sheetWidth} ${sheetHeight}">
   <defs>
-    <linearGradient id="foundationHeader" x1="0" x2="1"><stop offset="0%" stop-color="#f8fafc"/><stop offset="100%" stop-color="#eef2ff"/></linearGradient>
     <marker id="arrowBlack" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="${INK}"/></marker>
     <marker id="arrowBlue" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="${BLUE}"/></marker>
   </defs>
-  <rect width="${sheetWidth}" height="${sheetHeight}" fill="#fff"/>
-  <rect width="${sheetWidth}" height="155" fill="url(#foundationHeader)"/>
-  <text x="70" y="45" font-family="Arial, sans-serif" font-size="15" font-weight="800" letter-spacing="1.8" fill="${BLUE}">HEYY STUDIO · COORDINATED PLAN FOUNDATION</text>
-  <text x="70" y="96" font-family="Arial, sans-serif" font-size="38" font-weight="800" fill="${INK}">${esc(args.projectName)}</text>
-  <text x="${sheetWidth - 70}" y="51" text-anchor="end" font-family="Arial, sans-serif" font-size="17" font-weight="800" fill="${INK}">${levels.length} COORDINATED LEVEL${levels.length === 1 ? "" : "S"}</text>
-  <text x="${sheetWidth - 70}" y="82" text-anchor="end" font-family="Arial, sans-serif" font-size="14" fill="${MID}">Every floor uses the same canonical coordinate transform and drawing scale.</text>
-  <text x="${sheetWidth - 70}" y="111" text-anchor="end" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="${BLUE}">Shared stairs / lifts / shafts remain identical in size and position across served floors.</text>
+  <rect width="${sheetWidth}" height="${sheetHeight}" fill="#f7f8fa"/>
+  <rect x="0" y="0" width="${sheetWidth}" height="${headerHeight}" fill="#fff"/>
+  <text x="${marginX}" y="40" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="800" letter-spacing="1.6" fill="${BLUE}">HEYY STUDIO · PLAN FOUNDATION</text>
+  <text x="${marginX}" y="82" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800" fill="${INK}">${esc(args.projectName)}</text>
+  <text x="${sheetWidth - marginX}" y="48" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="${INK}">${levels.length} LEVEL${levels.length === 1 ? "" : "S"} · SAME DRAWING SCALE</text>
+  <text x="${sheetWidth - marginX}" y="78" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="${MID}">Ground and upper plans share one metres-to-pixels scale; setbacks remain visible.</text>
   ${panels}
-  <line x1="70" y1="${sheetHeight - 82}" x2="${sheetWidth - 70}" y2="${sheetHeight - 82}" stroke="${LIGHT}" stroke-width="2"/>
-  <text x="70" y="${sheetHeight - 47}" font-family="Arial, sans-serif" font-size="13" fill="${MID}">One canonical geometry model · one common scale · conceptual only · not for permit, construction or measurement.</text>
-  <text x="${sheetWidth - 70}" y="${sheetHeight - 47}" text-anchor="end" font-family="Arial, sans-serif" font-size="13" fill="${MID}">${esc(args.architectureDna?.identity_name || "Selected Architecture Direction connected")}</text>
+  <line x1="${marginX}" y1="${sheetHeight - 52}" x2="${sheetWidth - marginX}" y2="${sheetHeight - 52}" stroke="#d8dde5" stroke-width="1.5"/>
+  <text x="${marginX}" y="${sheetHeight - 25}" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="${MID}">Concept-stage architecture only · not for permit, construction or measurement.</text>
+  <text x="${sheetWidth - marginX}" y="${sheetHeight - 25}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="${MID}">${esc(args.architectureDna?.identity_name || "Selected Architecture Direction")}</text>
 </svg>`;
 }
 
