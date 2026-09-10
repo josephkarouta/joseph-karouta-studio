@@ -1172,6 +1172,254 @@ function generatedCapacityCount(plan: CanonicalPlanSpec, constraint: Architectur
 }
 
 
+
+function planFoundationLevelId(index: number) {
+  if (index === 0) return "level_ground";
+  if (index === 1) return "level_upper";
+  return `level_${index + 1}`;
+}
+
+function planFoundationLevelLabel(index: number) {
+  if (index === 0) return "Ground Floor";
+  if (index === 1) return "Upper Floor";
+  return `Level ${index + 1}`;
+}
+
+function planFoundationOutlineForIndex(
+  contract: DirectionGeometryContract,
+  index: number,
+): CanonicalPlanPoint[] {
+  if (index === 0) return contract.ground_outline.map((point) => ({ x: point.x, y: point.y }));
+  const upper = contract.upper_level_outlines.find((item) => item.level_index === index);
+  return (upper?.points || contract.ground_outline).map((point) => ({ x: point.x, y: point.y }));
+}
+
+function lockedPlanFoundationStructure(
+  contract: DirectionGeometryContract | null | undefined,
+  requestedStoreys: number | null | undefined,
+) {
+  if (!contract) return null;
+  const storeys = Math.max(1, requestedStoreys || contract.storeys || 1);
+  const levelIds = Array.from({ length: storeys }, (_, index) => planFoundationLevelId(index));
+  return {
+    storeys,
+    front_edge: contract.front_edge,
+    entry: contract.entry,
+    garage_anchor: contract.garage,
+    driveway: contract.driveway,
+    pool: contract.pool,
+    outdoor_living: contract.outdoor_living,
+    levels: levelIds.map((id, index) => ({
+      level_index: index,
+      id,
+      label: planFoundationLevelLabel(index),
+      outline: planFoundationOutlineForIndex(contract, index),
+    })),
+    vertical_core: contract.vertical_core.required && storeys > 1
+      ? {
+          id: "primary-stair-core",
+          type: "stair" as const,
+          x: contract.vertical_core.x,
+          y: contract.vertical_core.y,
+          width: contract.vertical_core.width,
+          height: contract.vertical_core.height,
+          serves_level_ids: levelIds,
+        }
+      : null,
+  };
+}
+
+function normalisePlanFoundationLevelSource(
+  sourceLevels: CanonicalPlanLevel[],
+  index: number,
+) {
+  const labelPattern = index === 0
+    ? /ground|entry|lower/i
+    : index === 1
+      ? /upper|first|level\s*2|second/i
+      : new RegExp(`level\\s*${index + 1}|floor\\s*${index + 1}`, "i");
+  const labelled = sourceLevels.find((level) => labelPattern.test(`${level.id || ""} ${level.label || ""}`));
+  return labelled || sourceLevels[index] || null;
+}
+
+/**
+ * Enforce the non-negotiable Plan Foundation skeleton in code.
+ *
+ * The text model is allowed to design room geometry, but it is not allowed to
+ * decide how many floors exist, delete a floor, rename structural level ids,
+ * move locked massing outlines, or break the shared vertical core. Those facts
+ * already exist in the selected Direction Geometry Contract and are restored
+ * deterministically after every model response/correction.
+ */
+function enforcePlanFoundationStructuralSkeleton(
+  planSet: LivePlanSet,
+  contract: DirectionGeometryContract | null | undefined,
+  requestedStoreys: number | null | undefined,
+): LivePlanSet {
+  if (!contract) return planSet;
+  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
+  const plan = repaired.canonical_plan;
+  if (!plan) return repaired;
+
+  const structure = lockedPlanFoundationStructure(contract, requestedStoreys);
+  if (!structure) return repaired;
+
+  const sourceLevels = Array.isArray(plan.levels) ? plan.levels : [];
+  const oldToNewLevelIds = new Map<string, string>();
+  sourceLevels.forEach((level, index) => {
+    if (level?.id) oldToNewLevelIds.set(level.id, planFoundationLevelId(index));
+  });
+
+  const levels: CanonicalPlanLevel[] = structure.levels.map((locked, index) => {
+    const source = normalisePlanFoundationLevelSource(sourceLevels, index);
+    if (source?.id) oldToNewLevelIds.set(source.id, locked.id);
+    return {
+      id: locked.id,
+      label: locked.label,
+      outline: locked.outline.map((point) => ({ ...point })),
+      rooms: Array.isArray(source?.rooms) ? source!.rooms : [],
+      circulation: Array.isArray(source?.circulation) ? source!.circulation : [],
+      stairs: [],
+      openings: Array.isArray(source?.openings) ? source!.openings : [],
+      fixtures: Array.isArray(source?.fixtures) ? source!.fixtures : [],
+    };
+  });
+
+  plan.levels = levels;
+  const groundOutline = structure.levels[0].outline;
+  const groundBounds = pointBounds(groundOutline);
+  plan.building_outline = {
+    shape_label: plan.building_outline?.shape_label || "Selected Direction massing",
+    points: groundOutline.map((point) => ({ ...point })),
+  };
+  plan.footprint = {
+    x: groundBounds.minX,
+    y: groundBounds.minY,
+    width: Math.max(1, groundBounds.maxX - groundBounds.minX),
+    height: Math.max(1, groundBounds.maxY - groundBounds.minY),
+  };
+  plan.entry = { x: contract.entry.x, y: contract.entry.y, label: plan.entry?.label || "Main Entry" };
+  plan.pool = {
+    present: contract.pool.present,
+    x: contract.pool.x,
+    y: contract.pool.y,
+    width: contract.pool.width,
+    height: contract.pool.height,
+  };
+  plan.driveway = {
+    present: contract.driveway.present,
+    x: contract.driveway.x,
+    y: contract.driveway.y,
+    width: contract.driveway.width,
+    height: contract.driveway.height,
+  };
+
+  if (structure.vertical_core) {
+    const core = structure.vertical_core;
+    plan.vertical_cores = [{ ...core }];
+    levels.forEach((level, index) => {
+      level.stairs = [{
+        id: core.id,
+        x: core.x,
+        y: core.y,
+        width: core.width,
+        height: core.height,
+        connects_to_level_id: levels[index + 1]?.id || levels[index - 1]?.id || level.id,
+      }];
+    });
+  } else {
+    plan.vertical_cores = (plan.vertical_cores || []).filter((core) => core.type === "shaft");
+  }
+
+  // Re-map any geometric circulation route level references onto the locked ids.
+  plan.circulation_routes = (plan.circulation_routes || []).map((route) => ({
+    ...route,
+    serves_level_ids: (route.serves_level_ids || [])
+      .map((id) => oldToNewLevelIds.get(id) || id)
+      .filter((id) => levels.some((level) => level.id === id)),
+  })).filter((route) => route.serves_level_ids.length > 0);
+
+  // Section cuts are presentation metadata. Keep valid model cuts, but never
+  // allow stale/missing level ids to break an otherwise valid structural plan.
+  const sectionCuts = (plan.section_cuts || []).map((cut, index) => ({
+    ...cut,
+    level_id: oldToNewLevelIds.get(cut.level_id) || levels[Math.min(index, levels.length - 1)]?.id || levels[0].id,
+  })).filter((cut) => levels.some((level) => level.id === cut.level_id));
+  const core = structure.vertical_core;
+  while (sectionCuts.length < 2) {
+    const index = sectionCuts.length;
+    sectionCuts.push({
+      id: index === 0 ? "section-a-a" : "section-b-b",
+      label: index === 0 ? "A—A" : "B—B",
+      orientation: index === 0 ? "longitudinal" : "transverse",
+      axis: index === 0 ? (core?.x ?? 50) : (core?.y ?? 50),
+      direction: index === 0 ? "south" : "east",
+      level_id: levels[0].id,
+      passes_through_room_ids: [],
+      passes_through_stair: Boolean(core && index === 0),
+    });
+  }
+  if (core && !sectionCuts.some((cut) => cut.passes_through_stair)) {
+    sectionCuts[0].passes_through_stair = true;
+    sectionCuts[0].axis = core.x;
+  }
+  plan.section_cuts = sectionCuts.slice(0, 4);
+
+  return repaired;
+}
+
+function isOpenPlanCanonicalRoom(room: CanonicalPlanRoom) {
+  const text = `${room.name || ""} ${room.zone || ""}`.toLowerCase();
+  return /living|family|lounge|dining|kitchen|breakfast|great room|open plan|open-plan/.test(text)
+    && !/bath|toilet|powder|bed|office|study|laundry|storage|garage/.test(text);
+}
+
+function ensureLockedMainEntryDoor(
+  planSet: LivePlanSet,
+  contract: DirectionGeometryContract | null | undefined,
+): LivePlanSet {
+  if (!contract || !planSet.canonical_plan?.levels?.[0]) return planSet;
+  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
+  const ground = repaired.canonical_plan.levels[0];
+  const rooms = (ground.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
+  if (!rooms.length) return repaired;
+
+  const edge = contract.entry.edge;
+  const candidates = rooms
+    .map((room) => {
+      const touchingEdge = roomTouchesLevelBoundary(room, ground) === edge;
+      const center = edge === "north" || edge === "south"
+        ? room.x + room.width / 2
+        : room.y + room.height / 2;
+      const target = edge === "north" || edge === "south" ? contract.entry.x : contract.entry.y;
+      const nameBonus = /entry|foyer|vestibule|lobby|hall/i.test(room.name) ? -12 : 0;
+      return { room, touchingEdge, score: Math.abs(center - target) + nameBonus };
+    })
+    .filter((item) => item.touchingEdge)
+    .sort((a, b) => a.score - b.score);
+  const source = candidates[0]?.room;
+  if (!source) return repaired;
+
+  const rawPosition = edge === "north" || edge === "south"
+    ? ((contract.entry.x - source.x) / Math.max(source.width, 0.1)) * 100
+    : ((contract.entry.y - source.y) / Math.max(source.height, 0.1)) * 100;
+  const position = Math.max(8, Math.min(92, rawPosition));
+  const openings = Array.isArray(ground.openings) ? ground.openings : [];
+  const withoutCompetingMainEntry = openings.filter((opening) =>
+    !(opening.id === "locked-main-entry" || (/door/.test(opening.type) && /entry|outside|exterior|street/i.test(String(opening.connects_to || "")) && opening.room_id === source.id)),
+  );
+  ground.openings = [{
+    id: "locked-main-entry",
+    type: "door",
+    room_id: source.id,
+    wall: edge,
+    position,
+    width_m: 1.2,
+    connects_to: "outside-main-entry",
+  }, ...withoutCompetingMainEntry];
+  return repaired;
+}
+
 function canonicalOutlineForLevel(plan: CanonicalPlanSpec, level: CanonicalPlanLevel) {
   if (Array.isArray(level.outline) && level.outline.length >= 4) return level.outline;
   if (Array.isArray(plan.building_outline?.points) && plan.building_outline!.points.length >= 4) {
@@ -1412,6 +1660,22 @@ function repairCanonicalPlanAccess(planSet: LivePlanSet): LivePlanSet {
         (opening.room_id === room.id || String(opening.connects_to || "") === room.id),
       );
       if (alreadyAccessible) continue;
+
+      // Living / dining / kitchen zones are often intentionally open-plan and
+      // should not be rejected merely because there is no hinged door symbol.
+      // When an open-plan room physically shares a wall with another open-plan
+      // room, preserve that as an explicit circulation/open-boundary relation.
+      if (isOpenPlanCanonicalRoom(room)) {
+        const openNeighbor = rooms.find((candidate) =>
+          candidate.id !== room.id
+          && isOpenPlanCanonicalRoom(candidate)
+          && Boolean(sharedOpeningWall(room, candidate)),
+        );
+        if (openNeighbor) {
+          ensureCirculation(room, openNeighbor);
+          continue;
+        }
+      }
 
       const candidates = rooms
         .filter((candidate) => candidate.id !== room.id)
@@ -1955,15 +2219,19 @@ function resolveResidualCanonicalRoomOverlaps(planSet: LivePlanSet): LivePlanSet
 function prepareCanonicalPlanCandidate(
   planSet: LivePlanSet,
   contract: DirectionGeometryContract | null | undefined,
+  requestedStoreys?: number | null,
 ) {
-  return repairCanonicalPlanAccess(
-    resolveResidualCanonicalRoomOverlaps(
-      repairLocalCanonicalConflicts(
-        repairMinorCanonicalGeometry(
-          applyDirectionContractLocks(planSet, contract),
-        ),
+  const structurallyLocked = enforcePlanFoundationStructuralSkeleton(planSet, contract, requestedStoreys);
+  const geometryPrepared = resolveResidualCanonicalRoomOverlaps(
+    repairLocalCanonicalConflicts(
+      repairMinorCanonicalGeometry(
+        applyDirectionContractLocks(structurallyLocked, contract),
       ),
     ),
+  );
+  return ensureLockedMainEntryDoor(
+    repairCanonicalPlanAccess(geometryPrepared),
+    contract,
   );
 }
 
@@ -1984,6 +2252,10 @@ function geometryCoordinationIssues(args: {
 
   levels.forEach((level, levelIndex) => {
     const outline = canonicalOutlineForLevel(plan, level);
+    const enclosedRooms = (level.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
+    if (!enclosedRooms.length) {
+      issues.push(`${level.label || `Level ${levelIndex}`}: contains no enclosed programme rooms. Every required storey must be explicitly designed, not returned as an empty placeholder.`);
+    }
     const bounds = pointBounds(outline);
     if (
       bounds.minX < masterBounds.minX - 1.5 || bounds.minY < masterBounds.minY - 1.5 ||
@@ -2039,6 +2311,13 @@ function geometryCoordinationIssues(args: {
         (opening.room_id === room.id || String(opening.connects_to || "") === room.id),
       );
       if (!doorOpenings.length) {
+        const hasValidOpenPlanConnection = isOpenPlanCanonicalRoom(room) && (level.circulation || []).some((link) => {
+          const otherId = link.from_room_id === room.id ? link.to_room_id : link.to_room_id === room.id ? link.from_room_id : null;
+          if (!otherId) return false;
+          const other = roomList.find((candidate) => candidate.id === otherId);
+          return Boolean(other && isOpenPlanCanonicalRoom(other) && sharedOpeningWall(room, other));
+        });
+        if (hasValidOpenPlanConnection) continue;
         issues.push(`${level.label || `Level ${levelIndex}`}: ${room.name} has no explicit door opening. Every enclosed room must be physically accessible.`);
         continue;
       }
@@ -2912,6 +3191,7 @@ export async function generateArchitecturePlanSet(args: {
     args.planFoundationMode && args.directionGeometryContract
       ? [
           "A DIRECTION GEOMETRY CONTRACT was created at the same time as the selected Direction, before its image was rendered. It is the shared spatial parent of the Direction render and this Canonical Plan.",
+          "A LOCKED PLAN FOUNDATION STRUCTURE is also supplied in the payload. Copy its exact storey count, level_index order, level ids, labels, outlines and shared vertical core. You design the rooms inside that structure; you do not redesign or omit the structure itself.",
           "Treat its front/street edge, storey count, ground/upper massing outlines, entry, garage/driveway, pool/outdoor-living relationship and primary vertical-core zone as non-negotiable spatial anchors.",
           "Do NOT reverse-engineer room geometry from the Direction image. Fit the user Space Program into the contract skeleton while preserving these anchors.",
           directionGeometryContractPrompt(args.directionGeometryContract),
@@ -2957,6 +3237,9 @@ export async function generateArchitecturePlanSet(args: {
     selected_direction: args.direction,
     architecture_dna: args.architectureDna,
     selected_direction_geometry_contract: args.directionGeometryContract || null,
+    locked_plan_foundation_structure: args.planFoundationMode
+      ? lockedPlanFoundationStructure(args.directionGeometryContract, requestedStoreys)
+      : null,
     concept: args.planFoundationMode ? null : args.concept,
     site: args.site,
     planning_assumptions: args.planning,
@@ -3012,7 +3295,7 @@ export async function generateArchitecturePlanSet(args: {
     payload,
   });
 
-  let value = prepareCanonicalPlanCandidate(first.value, args.directionGeometryContract);
+  let value = prepareCanonicalPlanCandidate(first.value, args.directionGeometryContract, args.planFoundationMode ? requestedStoreys : null);
   let correctionUsage: unknown = null;
   let correctionAuditUsage: unknown = null;
 
@@ -3042,14 +3325,15 @@ export async function generateArchitecturePlanSet(args: {
     // frequently introduced a new floor, rewrote room assignments, or created
     // fresh overlaps while fixing another one. Returning only canonical_plan
     // keeps the problem small and preserves the already-generated narrative.
-    for (let correctionAttempt = 1; correctionAttempt <= 3 && deterministicIssues.length; correctionAttempt += 1) {
+    for (let correctionAttempt = 1; correctionAttempt <= 2 && deterministicIssues.length; correctionAttempt += 1) {
       const corrected = await structuredCompletion<{ canonical_plan: CanonicalPlanSpec }>({
         plan: args.plan,
         schema: canonicalPlanRepairSchema,
         system: [
           "You are Heyy Studio's architectural geometry correction engine. Repair only the supplied Canonical Plan; return canonical_plan only.",
-          `This is correction pass ${correctionAttempt} of 3. The current geometry failed deterministic validation.`,
+          `This is correction pass ${correctionAttempt} of 2. The current geometry failed deterministic validation.`,
           "Do not explain the failures. Do not create a new design direction. Do not mirror or rotate the property.",
+          "The LOCKED PLAN FOUNDATION STRUCTURE in the payload is authoritative. Return every locked level in the same order and design actual rooms on every required storey. Never delete a required floor, add another floor, rename a locked level, change an outline, or change the shared stair/core relationship.",
           requestedStoreys
             ? `HARD FLOOR COUNT: return exactly ${requestedStoreys} level${requestedStoreys === 1 ? "" : "s"}. Never create an extra level.`
             : "Preserve the intended floor count from the selected Direction Contract.",
@@ -3066,6 +3350,7 @@ export async function generateArchitecturePlanSet(args: {
         ].join(" "),
         payload: {
           selected_direction_geometry_contract: args.directionGeometryContract || null,
+          locked_plan_foundation_structure: lockedPlanFoundationStructure(args.directionGeometryContract, requestedStoreys),
           requested_storeys: requestedStoreys,
           project_type: args.project.project_type || null,
           saved_space_program: args.spaceProgram,
@@ -3078,6 +3363,7 @@ export async function generateArchitecturePlanSet(args: {
       value = prepareCanonicalPlanCandidate(
         { ...value, canonical_plan: corrected.value.canonical_plan },
         args.directionGeometryContract,
+        requestedStoreys,
       );
       correctionUsages.push(corrected.usage);
       deterministicIssues = [...new Set(foundationIssues(value))];
