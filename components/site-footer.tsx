@@ -46,16 +46,16 @@ const columns = [
 
 export default function SiteFooter() {
   return (
-    <footer className="relative overflow-hidden border-t border-white/10 bg-[#15091f] px-5 py-14 text-white sm:px-8 lg:px-12">
+    <footer className="relative overflow-hidden border-t border-white/10 bg-[#120819] px-5 py-9 text-white sm:px-8 sm:py-11 lg:px-12 lg:py-12">
       <div className="pointer-events-none absolute -right-20 -top-32 h-80 w-80 rounded-full bg-violet-600/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 left-1/4 h-72 w-72 rounded-full bg-fuchsia-500/12 blur-3xl" />
 
-      <div className="relative mx-auto max-w-[1450px]">
-        <div className="grid gap-10 lg:grid-cols-[1.35fr_repeat(4,1fr)]">
+      <div className="relative mx-auto max-w-[1500px]">
+        <div className="grid gap-8 lg:grid-cols-[1.35fr_repeat(4,1fr)] lg:gap-10">
           <div>
-            <HeyyLogo variant="full-colour-light" height={36} />
-            <p className="mt-5 max-w-sm text-sm leading-7 text-white/58">
-              Create with AI. Build with Experts. Start with an idea, explore it your way, and get professional help when you need it.
+            <HeyyLogo variant="full-colour-light" height={38} />
+            <p className="mt-4 max-w-xs text-sm leading-6 text-white/58">
+              Create with AI. Build with Experts. From first idea to finished work.
             </p>
             <a
               href="mailto:hello@heyystudio.com"
@@ -65,27 +65,29 @@ export default function SiteFooter() {
             </a>
           </div>
 
-          {columns.map((column) => (
-            <div key={column.title}>
-              <p className="text-[0.66rem] font-black uppercase tracking-[0.22em] text-white/35">
-                {column.title}
-              </p>
-              <div className="mt-5 grid gap-3">
-                {column.links.map(([label, href]) => (
-                  <Link
-                    key={label}
-                    href={href}
-                    className="text-sm font-semibold text-white/58 transition hover:translate-x-0.5 hover:text-violet-300"
-                  >
-                    {label}
-                  </Link>
-                ))}
+          <div className="grid grid-cols-2 gap-x-8 gap-y-8 lg:contents">
+            {columns.map((column) => (
+              <div key={column.title}>
+                <p className="text-[0.62rem] font-black uppercase tracking-[0.2em] text-white/35 sm:text-[0.66rem] sm:tracking-[0.22em]">
+                  {column.title}
+                </p>
+                <div className="mt-3.5 grid gap-2.5 sm:mt-4 sm:gap-2.5">
+                  {column.links.map(([label, href]) => (
+                    <Link
+                      key={label}
+                      href={href}
+                      className="text-[0.82rem] font-semibold text-white/58 transition-colors hover:text-violet-300 sm:text-sm"
+                    >
+                      {label}
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-3 border-t border-white/10 pt-7 text-xs text-white/38 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-8 flex flex-col gap-2 border-t border-white/10 pt-5 text-[0.7rem] text-white/38 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-6 sm:text-xs">
           <p>© 2026 Heyy Studio. All rights reserved.</p>
           <p>US English · USD · Built for creators worldwide</p>
         </div>

@@ -5,18 +5,11 @@ import { toFile } from "openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOpenAI } from "@/lib/ai/openai-server";
 import { imageQualityForTier, type AiPlanConfig, type ImageGenerationTier } from "@/lib/ai/config";
-import { renderArchitecturalDrawingSvg, renderPlanFoundationSheetSvg } from "@/lib/ai/architecture-drawing";
+import { renderArchitecturalDrawingSvg } from "@/lib/ai/architecture-drawing";
 import {
   ARCHITECTURE_PROJECT_TYPES,
   getArchitectureProjectTemplate,
 } from "@/lib/architecture/project-templates";
-import {
-  directionGeometryContractFromUnknown,
-  directionGeometryContractPrompt,
-  validateCanonicalPlanAgainstDirectionContract,
-  validateDirectionGeometryContract,
-  type DirectionGeometryContract,
-} from "@/lib/architecture/direction-geometry-contract";
 
 export type LiveDirection = {
   title: string;
@@ -246,108 +239,6 @@ const directionSchema = {
     },
   },
 } as const;
-
-const directionGeometryContractSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "version", "coordinate_system", "front_edge", "storeys", "massing_summary",
-    "site_relationship_summary", "ground_outline", "upper_level_outlines", "entry",
-    "garage", "driveway", "pool", "outdoor_living", "vertical_core", "must_preserve",
-  ],
-  properties: {
-    version: { type: "integer", enum: [1] },
-    coordinate_system: { type: "string", enum: ["site_grid_0_100"] },
-    front_edge: { type: "string", enum: ["north", "south", "east", "west"] },
-    storeys: { type: "integer", minimum: 1, maximum: 12 },
-    massing_summary: { type: "string" },
-    site_relationship_summary: { type: "string" },
-    ground_outline: {
-      type: "array", minItems: 4, maxItems: 12,
-      items: { type: "object", additionalProperties: false, required: ["x", "y"], properties: { x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 } } },
-    },
-    upper_level_outlines: {
-      type: "array", maxItems: 11,
-      items: {
-        type: "object", additionalProperties: false, required: ["level_index", "relationship", "points"],
-        properties: {
-          level_index: { type: "integer", minimum: 1, maximum: 11 },
-          relationship: { type: "string" },
-          points: {
-            type: "array", minItems: 4, maxItems: 12,
-            items: { type: "object", additionalProperties: false, required: ["x", "y"], properties: { x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 } } },
-          },
-        },
-      },
-    },
-    entry: {
-      type: "object", additionalProperties: false, required: ["edge", "position_0_100", "x", "y", "description"],
-      properties: {
-        edge: { type: "string", enum: ["north", "south", "east", "west"] },
-        position_0_100: { type: "number", minimum: 0, maximum: 100 },
-        x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 }, description: { type: "string" },
-      },
-    },
-    garage: {
-      type: "object", additionalProperties: false, required: ["present", "edge", "position_0_100", "x", "y", "width", "height", "description"],
-      properties: {
-        present: { type: "boolean" }, edge: { type: "string", enum: ["north", "south", "east", "west"] },
-        position_0_100: { type: "number", minimum: 0, maximum: 100 }, x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 },
-        width: { type: "number", minimum: 0, maximum: 100 }, height: { type: "number", minimum: 0, maximum: 100 }, description: { type: "string" },
-      },
-    },
-    driveway: {
-      type: "object", additionalProperties: false, required: ["present", "access_edge", "x", "y", "width", "height", "description"],
-      properties: {
-        present: { type: "boolean" }, access_edge: { type: "string", enum: ["north", "south", "east", "west"] },
-        x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 },
-        width: { type: "number", minimum: 0, maximum: 100 }, height: { type: "number", minimum: 0, maximum: 100 }, description: { type: "string" },
-      },
-    },
-    pool: {
-      type: "object", additionalProperties: false, required: ["present", "x", "y", "width", "height", "relationship_to_entry", "description"],
-      properties: {
-        present: { type: "boolean" }, x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 },
-        width: { type: "number", minimum: 0, maximum: 100 }, height: { type: "number", minimum: 0, maximum: 100 },
-        relationship_to_entry: { type: "string", enum: ["left", "right", "front", "rear", "none"] }, description: { type: "string" },
-      },
-    },
-    outdoor_living: {
-      type: "object", additionalProperties: false, required: ["present", "x", "y", "width", "height", "description"],
-      properties: {
-        present: { type: "boolean" }, x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 },
-        width: { type: "number", minimum: 0, maximum: 100 }, height: { type: "number", minimum: 0, maximum: 100 }, description: { type: "string" },
-      },
-    },
-    vertical_core: {
-      type: "object", additionalProperties: false, required: ["required", "x", "y", "width", "height", "description"],
-      properties: {
-        required: { type: "boolean" }, x: { type: "number", minimum: 0, maximum: 100 }, y: { type: "number", minimum: 0, maximum: 100 },
-        width: { type: "number", minimum: 0, maximum: 100 }, height: { type: "number", minimum: 0, maximum: 100 }, description: { type: "string" },
-      },
-    },
-    must_preserve: { type: "array", minItems: 5, maxItems: 16, items: { type: "string" } },
-  },
-} as const;
-
-const directionGenerationSchema = {
-  name: "architecture_direction_with_geometry_contract",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["direction", "geometry_contract"],
-    properties: {
-      direction: directionSchema.schema,
-      geometry_contract: directionGeometryContractSchema,
-    },
-  },
-} as const;
-
-type LiveDirectionGeneration = {
-  direction: LiveDirection;
-  geometry_contract: DirectionGeometryContract;
-};
 
 const architectureDnaSchema = {
   name: "architecture_visual_identity",
@@ -770,22 +661,6 @@ const planSchema = {
   },
 } as const;
 
-const canonicalPlanRepairSchema = {
-  name: "architecture_canonical_plan_repair",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["canonical_plan"],
-    properties: {
-      // Reuse the exact canonical-plan schema from the full Plan Foundation.
-      // Correction passes return geometry only, which is faster and prevents
-      // the model from rewriting the project narrative on every repair.
-      canonical_plan: planSchema.schema.properties.canonical_plan,
-    },
-  },
-} as const;
-
 const architectureRequirementContractSchema = {
   name: "architecture_requirement_contract",
   strict: true,
@@ -889,11 +764,9 @@ const visualPromptsSchema = {
 
 type ArchitectureSchema =
   | typeof directionSchema
-  | typeof directionGenerationSchema
   | typeof architectureDnaSchema
   | typeof conceptSchema
   | typeof planSchema
-  | typeof canonicalPlanRepairSchema
   | typeof architectureRequirementContractSchema
   | typeof architectureRequirementAuditSchema
   | typeof visualPromptsSchema;
@@ -973,6 +846,95 @@ async function structuredCompletion<T>(args: {
     throw new Error(
       `Architecture generation returned invalid project data.`,
     );
+  }
+}
+
+async function structuredCompletionWithImage<T>(args: {
+  plan: AiPlanConfig;
+  schema: ArchitectureSchema;
+  system: string;
+  payload: Record<string, unknown>;
+  supabase: SupabaseClient;
+  referenceImage: ArchitectureImageReference;
+  correctionIssues?: string[];
+}) {
+  const openai = getOpenAI();
+  const asset = await loadReferenceAsset(args.supabase, args.referenceImage, 0);
+  const imageUrl = asset
+    ? `data:${asset.mimeType};base64,${asset.bytes.toString("base64")}`
+    : args.referenceImage.url && /^https?:\/\//i.test(args.referenceImage.url)
+      ? args.referenceImage.url
+      : null;
+
+  if (!imageUrl) {
+    throw new Error("The selected Design Direction image could not be loaded for Plan Foundation reasoning.");
+  }
+
+  const correctionText = args.correctionIssues?.length
+    ? [
+        "The previous structured plan had the following coordination issues. Correct the plan while continuing to obey the selected Direction image:",
+        ...args.correctionIssues.map((issue, index) => `${index + 1}. ${issue}`),
+      ].join("\n")
+    : "";
+
+  const userText = [
+    "DESIGN THE CANONICAL PLAN DIRECTLY FROM THE ATTACHED SELECTED DESIGN DIRECTION IMAGE AND THE PROJECT DATA BELOW.",
+    "The attached image is not mood/style inspiration only. It is the visible architectural source of truth for this house.",
+    "Preserve every relationship that can actually be seen: garage side, main entry position, dominant glazed/living side, pool position relative to the house and entry, outdoor-living relationship, visible storey count, upper-floor footprint/setbacks, major projections/recesses and roof form.",
+    "Do NOT try to infer hidden rooms from the image. Resolve hidden bedrooms, bathrooms, laundry, wardrobes, storage, circulation and exact stair layout from the Space Program and project brief, but make them fit behind the visible exterior relationships instead of moving those exterior anchors.",
+    "LEFT/RIGHT are from the viewer's perspective in the attached main exterior view unless project/site data explicitly establishes another orientation.",
+    "If the project data conflicts with a purely stylistic detail in the image, the explicit user requirement wins. If the image clearly establishes a spatial relationship and the project data does not contradict it, preserve the image relationship.",
+    correctionText,
+    `PROJECT DATA: ${JSON.stringify(args.payload)}`,
+  ].filter(Boolean).join("\n\n");
+
+  const request: Record<string, unknown> = {
+    model: args.plan.textModel,
+    input: [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: args.system }],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "input_text", text: userText },
+          { type: "input_image", image_url: imageUrl, detail: "high" },
+        ],
+      },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: args.schema.name,
+        schema: args.schema.schema,
+        strict: true,
+      },
+    },
+    max_output_tokens: args.plan.maxOutputTokens,
+  };
+
+  if (/^gpt-5(?:[.-]|$)/i.test(args.plan.textModel)) {
+    request.reasoning = { effort: "high" };
+  }
+
+  const response = await openai.responses.create(request as never);
+  const content = String(response.output_text || "").trim();
+  if (!content) {
+    throw new Error("Architecture Plan Foundation reasoning returned no usable structured plan.");
+  }
+
+  try {
+    return {
+      value: JSON.parse(content) as T,
+      usage: {
+        ...(response.usage || {}),
+        model_used: args.plan.textModel,
+        multimodal_direction_reference: true,
+      },
+    };
+  } catch {
+    throw new Error("Architecture Plan Foundation reasoning returned invalid structured project data.");
   }
 }
 
@@ -1171,254 +1133,6 @@ function generatedCapacityCount(plan: CanonicalPlanSpec, constraint: Architectur
   return Math.max(roomCapacity, fixtureCapacity);
 }
 
-
-
-function planFoundationLevelId(index: number) {
-  if (index === 0) return "level_ground";
-  if (index === 1) return "level_upper";
-  return `level_${index + 1}`;
-}
-
-function planFoundationLevelLabel(index: number) {
-  if (index === 0) return "Ground Floor";
-  if (index === 1) return "Upper Floor";
-  return `Level ${index + 1}`;
-}
-
-function planFoundationOutlineForIndex(
-  contract: DirectionGeometryContract,
-  index: number,
-): CanonicalPlanPoint[] {
-  if (index === 0) return contract.ground_outline.map((point) => ({ x: point.x, y: point.y }));
-  const upper = contract.upper_level_outlines.find((item) => item.level_index === index);
-  return (upper?.points || contract.ground_outline).map((point) => ({ x: point.x, y: point.y }));
-}
-
-function lockedPlanFoundationStructure(
-  contract: DirectionGeometryContract | null | undefined,
-  requestedStoreys: number | null | undefined,
-) {
-  if (!contract) return null;
-  const storeys = Math.max(1, requestedStoreys || contract.storeys || 1);
-  const levelIds = Array.from({ length: storeys }, (_, index) => planFoundationLevelId(index));
-  return {
-    storeys,
-    front_edge: contract.front_edge,
-    entry: contract.entry,
-    garage_anchor: contract.garage,
-    driveway: contract.driveway,
-    pool: contract.pool,
-    outdoor_living: contract.outdoor_living,
-    levels: levelIds.map((id, index) => ({
-      level_index: index,
-      id,
-      label: planFoundationLevelLabel(index),
-      outline: planFoundationOutlineForIndex(contract, index),
-    })),
-    vertical_core: contract.vertical_core.required && storeys > 1
-      ? {
-          id: "primary-stair-core",
-          type: "stair" as const,
-          x: contract.vertical_core.x,
-          y: contract.vertical_core.y,
-          width: contract.vertical_core.width,
-          height: contract.vertical_core.height,
-          serves_level_ids: levelIds,
-        }
-      : null,
-  };
-}
-
-function normalisePlanFoundationLevelSource(
-  sourceLevels: CanonicalPlanLevel[],
-  index: number,
-) {
-  const labelPattern = index === 0
-    ? /ground|entry|lower/i
-    : index === 1
-      ? /upper|first|level\s*2|second/i
-      : new RegExp(`level\\s*${index + 1}|floor\\s*${index + 1}`, "i");
-  const labelled = sourceLevels.find((level) => labelPattern.test(`${level.id || ""} ${level.label || ""}`));
-  return labelled || sourceLevels[index] || null;
-}
-
-/**
- * Enforce the non-negotiable Plan Foundation skeleton in code.
- *
- * The text model is allowed to design room geometry, but it is not allowed to
- * decide how many floors exist, delete a floor, rename structural level ids,
- * move locked massing outlines, or break the shared vertical core. Those facts
- * already exist in the selected Direction Geometry Contract and are restored
- * deterministically after every model response/correction.
- */
-function enforcePlanFoundationStructuralSkeleton(
-  planSet: LivePlanSet,
-  contract: DirectionGeometryContract | null | undefined,
-  requestedStoreys: number | null | undefined,
-): LivePlanSet {
-  if (!contract) return planSet;
-  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
-  const plan = repaired.canonical_plan;
-  if (!plan) return repaired;
-
-  const structure = lockedPlanFoundationStructure(contract, requestedStoreys);
-  if (!structure) return repaired;
-
-  const sourceLevels = Array.isArray(plan.levels) ? plan.levels : [];
-  const oldToNewLevelIds = new Map<string, string>();
-  sourceLevels.forEach((level, index) => {
-    if (level?.id) oldToNewLevelIds.set(level.id, planFoundationLevelId(index));
-  });
-
-  const levels: CanonicalPlanLevel[] = structure.levels.map((locked, index) => {
-    const source = normalisePlanFoundationLevelSource(sourceLevels, index);
-    if (source?.id) oldToNewLevelIds.set(source.id, locked.id);
-    return {
-      id: locked.id,
-      label: locked.label,
-      outline: locked.outline.map((point) => ({ ...point })),
-      rooms: Array.isArray(source?.rooms) ? source!.rooms : [],
-      circulation: Array.isArray(source?.circulation) ? source!.circulation : [],
-      stairs: [],
-      openings: Array.isArray(source?.openings) ? source!.openings : [],
-      fixtures: Array.isArray(source?.fixtures) ? source!.fixtures : [],
-    };
-  });
-
-  plan.levels = levels;
-  const groundOutline = structure.levels[0].outline;
-  const groundBounds = pointBounds(groundOutline);
-  plan.building_outline = {
-    shape_label: plan.building_outline?.shape_label || "Selected Direction massing",
-    points: groundOutline.map((point) => ({ ...point })),
-  };
-  plan.footprint = {
-    x: groundBounds.minX,
-    y: groundBounds.minY,
-    width: Math.max(1, groundBounds.maxX - groundBounds.minX),
-    height: Math.max(1, groundBounds.maxY - groundBounds.minY),
-  };
-  plan.entry = { x: contract.entry.x, y: contract.entry.y, label: plan.entry?.label || "Main Entry" };
-  plan.pool = {
-    present: contract.pool.present,
-    x: contract.pool.x,
-    y: contract.pool.y,
-    width: contract.pool.width,
-    height: contract.pool.height,
-  };
-  plan.driveway = {
-    present: contract.driveway.present,
-    x: contract.driveway.x,
-    y: contract.driveway.y,
-    width: contract.driveway.width,
-    height: contract.driveway.height,
-  };
-
-  if (structure.vertical_core) {
-    const core = structure.vertical_core;
-    plan.vertical_cores = [{ ...core }];
-    levels.forEach((level, index) => {
-      level.stairs = [{
-        id: core.id,
-        x: core.x,
-        y: core.y,
-        width: core.width,
-        height: core.height,
-        connects_to_level_id: levels[index + 1]?.id || levels[index - 1]?.id || level.id,
-      }];
-    });
-  } else {
-    plan.vertical_cores = (plan.vertical_cores || []).filter((core) => core.type === "shaft");
-  }
-
-  // Re-map any geometric circulation route level references onto the locked ids.
-  plan.circulation_routes = (plan.circulation_routes || []).map((route) => ({
-    ...route,
-    serves_level_ids: (route.serves_level_ids || [])
-      .map((id) => oldToNewLevelIds.get(id) || id)
-      .filter((id) => levels.some((level) => level.id === id)),
-  })).filter((route) => route.serves_level_ids.length > 0);
-
-  // Section cuts are presentation metadata. Keep valid model cuts, but never
-  // allow stale/missing level ids to break an otherwise valid structural plan.
-  const sectionCuts = (plan.section_cuts || []).map((cut, index) => ({
-    ...cut,
-    level_id: oldToNewLevelIds.get(cut.level_id) || levels[Math.min(index, levels.length - 1)]?.id || levels[0].id,
-  })).filter((cut) => levels.some((level) => level.id === cut.level_id));
-  const core = structure.vertical_core;
-  while (sectionCuts.length < 2) {
-    const index = sectionCuts.length;
-    sectionCuts.push({
-      id: index === 0 ? "section-a-a" : "section-b-b",
-      label: index === 0 ? "A—A" : "B—B",
-      orientation: index === 0 ? "longitudinal" : "transverse",
-      axis: index === 0 ? (core?.x ?? 50) : (core?.y ?? 50),
-      direction: index === 0 ? "south" : "east",
-      level_id: levels[0].id,
-      passes_through_room_ids: [],
-      passes_through_stair: Boolean(core && index === 0),
-    });
-  }
-  if (core && !sectionCuts.some((cut) => cut.passes_through_stair)) {
-    sectionCuts[0].passes_through_stair = true;
-    sectionCuts[0].axis = core.x;
-  }
-  plan.section_cuts = sectionCuts.slice(0, 4);
-
-  return repaired;
-}
-
-function isOpenPlanCanonicalRoom(room: CanonicalPlanRoom) {
-  const text = `${room.name || ""} ${room.zone || ""}`.toLowerCase();
-  return /living|family|lounge|dining|kitchen|breakfast|great room|open plan|open-plan/.test(text)
-    && !/bath|toilet|powder|bed|office|study|laundry|storage|garage/.test(text);
-}
-
-function ensureLockedMainEntryDoor(
-  planSet: LivePlanSet,
-  contract: DirectionGeometryContract | null | undefined,
-): LivePlanSet {
-  if (!contract || !planSet.canonical_plan?.levels?.[0]) return planSet;
-  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
-  const ground = repaired.canonical_plan.levels[0];
-  const rooms = (ground.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
-  if (!rooms.length) return repaired;
-
-  const edge = contract.entry.edge;
-  const candidates = rooms
-    .map((room) => {
-      const touchingEdge = roomTouchesLevelBoundary(room, ground) === edge;
-      const center = edge === "north" || edge === "south"
-        ? room.x + room.width / 2
-        : room.y + room.height / 2;
-      const target = edge === "north" || edge === "south" ? contract.entry.x : contract.entry.y;
-      const nameBonus = /entry|foyer|vestibule|lobby|hall/i.test(room.name) ? -12 : 0;
-      return { room, touchingEdge, score: Math.abs(center - target) + nameBonus };
-    })
-    .filter((item) => item.touchingEdge)
-    .sort((a, b) => a.score - b.score);
-  const source = candidates[0]?.room;
-  if (!source) return repaired;
-
-  const rawPosition = edge === "north" || edge === "south"
-    ? ((contract.entry.x - source.x) / Math.max(source.width, 0.1)) * 100
-    : ((contract.entry.y - source.y) / Math.max(source.height, 0.1)) * 100;
-  const position = Math.max(8, Math.min(92, rawPosition));
-  const openings = Array.isArray(ground.openings) ? ground.openings : [];
-  const withoutCompetingMainEntry = openings.filter((opening) =>
-    !(opening.id === "locked-main-entry" || (/door/.test(opening.type) && /entry|outside|exterior|street/i.test(String(opening.connects_to || "")) && opening.room_id === source.id)),
-  );
-  ground.openings = [{
-    id: "locked-main-entry",
-    type: "door",
-    room_id: source.id,
-    wall: edge,
-    position,
-    width_m: 1.2,
-    connects_to: "outside-main-entry",
-  }, ...withoutCompetingMainEntry];
-  return repaired;
-}
 
 function canonicalOutlineForLevel(plan: CanonicalPlanSpec, level: CanonicalPlanLevel) {
   if (Array.isArray(level.outline) && level.outline.length >= 4) return level.outline;
@@ -1661,22 +1375,6 @@ function repairCanonicalPlanAccess(planSet: LivePlanSet): LivePlanSet {
       );
       if (alreadyAccessible) continue;
 
-      // Living / dining / kitchen zones are often intentionally open-plan and
-      // should not be rejected merely because there is no hinged door symbol.
-      // When an open-plan room physically shares a wall with another open-plan
-      // room, preserve that as an explicit circulation/open-boundary relation.
-      if (isOpenPlanCanonicalRoom(room)) {
-        const openNeighbor = rooms.find((candidate) =>
-          candidate.id !== room.id
-          && isOpenPlanCanonicalRoom(candidate)
-          && Boolean(sharedOpeningWall(room, candidate)),
-        );
-        if (openNeighbor) {
-          ensureCirculation(room, openNeighbor);
-          continue;
-        }
-      }
-
       const candidates = rooms
         .filter((candidate) => candidate.id !== room.id)
         .map((candidate) => {
@@ -1738,503 +1436,262 @@ function repairCanonicalPlanAccess(planSet: LivePlanSet): LivePlanSet {
   return repaired;
 }
 
-function isStandalonePoolRoom(room: CanonicalPlanRoom) {
-  const text = `${room.name || ""} ${room.zone || ""}`.toLowerCase();
-  return /\bpool\b/.test(text)
-    && !/pool (?:plant|equipment|pump)|plant room|equipment room|pool bath|pool change|pool locker/.test(text);
-}
 
 /**
- * Apply only geometry that is already locked by the selected Direction
- * Contract. This is not a layout generator: it prevents the text model from
- * moving the agreed massing/site anchors between correction passes.
+ * Last-resort deterministic geometry stabiliser for Plan Foundation.
+ *
+ * The text model is allowed to propose the architecture, but Heyy Studio must
+ * not fail a paid Plan Foundation job just because that proposal contains
+ * rectangle overlaps, an oversized upper outline, or incomplete door metadata.
+ * After the normal AI correction passes, this stabiliser converts the returned
+ * programme into one physically coherent shared building envelope with a
+ * circulation spine. It preserves every named programme room while making the
+ * geometry machine-valid and renderable from one canonical model.
+ *
+ * This is deliberately deterministic: it does not weaken validation and it
+ * does not ask another image model to invent a different floor.
  */
-function applyDirectionContractLocks(
-  planSet: LivePlanSet,
-  contract: DirectionGeometryContract | null | undefined,
-): LivePlanSet {
-  if (!contract) return planSet;
-  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
-  const plan = repaired.canonical_plan;
-  if (!plan) return repaired;
+function stabilizeCanonicalPlanGeometry(planSet: LivePlanSet): LivePlanSet {
+  const stabilized = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
+  const plan = stabilized.canonical_plan;
+  const levels = plan?.levels || [];
+  if (!plan || !levels.length) return stabilized;
 
-  const groundOutline = contract.ground_outline.map((point) => ({ x: point.x, y: point.y }));
-  const groundBounds = pointBounds(groundOutline);
+  const sourceOutline = Array.isArray(plan.building_outline?.points) && plan.building_outline!.points.length >= 4
+    ? plan.building_outline!.points
+    : canonicalOutlineForLevel(plan, levels[0]);
+  const sourceBounds = pointBounds(sourceOutline);
+
+  // Keep the model comfortably inside the canonical 0–100 canvas. If the
+  // model returned a degenerate outline, fall back to the saved footprint.
+  const fallback = plan.footprint || { x: 12, y: 12, width: 76, height: 72 };
+  let minX = Math.max(4, Math.min(88, Number.isFinite(sourceBounds.minX) ? sourceBounds.minX : Number(fallback.x || 12)));
+  let minY = Math.max(4, Math.min(88, Number.isFinite(sourceBounds.minY) ? sourceBounds.minY : Number(fallback.y || 12)));
+  let maxX = Math.min(96, Math.max(12, Number.isFinite(sourceBounds.maxX) ? sourceBounds.maxX : minX + Number(fallback.width || 76)));
+  let maxY = Math.min(96, Math.max(12, Number.isFinite(sourceBounds.maxY) ? sourceBounds.maxY : minY + Number(fallback.height || 72)));
+  if (maxX - minX < 42) {
+    const center = (minX + maxX) / 2;
+    minX = Math.max(4, center - 21);
+    maxX = Math.min(96, center + 21);
+  }
+  if (maxY - minY < 38) {
+    const center = (minY + maxY) / 2;
+    minY = Math.max(4, center - 19);
+    maxY = Math.min(96, center + 19);
+  }
+
+  const masterOutline: CanonicalPlanPoint[] = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+  const masterWidth = maxX - minX;
+  const masterHeight = maxY - minY;
+  const corridorHeight = Math.max(6, Math.min(10, masterHeight * 0.12));
+  const corridorY = minY + (masterHeight - corridorHeight) / 2;
+  const upperBandHeight = corridorY - minY;
+  const lowerBandY = corridorY + corridorHeight;
+  const lowerBandHeight = maxY - lowerBandY;
+
   plan.building_outline = {
-    shape_label: plan.building_outline?.shape_label || "Selected Direction massing",
-    points: groundOutline,
+    shape_label: String(plan.building_outline?.shape_label || "coordinated plan foundation"),
+    points: masterOutline,
   };
-  plan.footprint = {
-    x: groundBounds.minX,
-    y: groundBounds.minY,
-    width: Math.max(1, groundBounds.maxX - groundBounds.minX),
-    height: Math.max(1, groundBounds.maxY - groundBounds.minY),
-  };
-  plan.entry = {
-    x: contract.entry.x,
-    y: contract.entry.y,
-    label: plan.entry?.label || "Main Entry",
-  };
-  plan.pool = {
-    present: contract.pool.present,
-    x: contract.pool.x,
-    y: contract.pool.y,
-    width: contract.pool.width,
-    height: contract.pool.height,
-  };
-  plan.driveway = {
-    present: contract.driveway.present,
-    x: contract.driveway.x,
-    y: contract.driveway.y,
-    width: contract.driveway.width,
-    height: contract.driveway.height,
-  };
+  plan.footprint = { x: minX, y: minY, width: masterWidth, height: masterHeight };
 
-  const levels = plan.levels || [];
-  if (levels[0]) levels[0].outline = groundOutline;
-  for (const expected of contract.upper_level_outlines) {
-    const level = levels[expected.level_index];
-    if (level) level.outline = expected.points.map((point) => ({ x: point.x, y: point.y }));
+  // A multi-floor foundation always owns one shared vertical core. Normalize
+  // the primary stair to one coordinate and mirror it exactly on every level.
+  const existingCores = Array.isArray(plan.vertical_cores) ? plan.vertical_cores : [];
+  let primaryStair = existingCores.find((core) => core.type === "stair") || null;
+  if (levels.length > 1) {
+    const coreWidth = Math.max(5, Math.min(8, masterWidth * 0.1));
+    const coreHeight = Math.max(5, Math.min(corridorHeight, 8));
+    const coreX = minX + masterWidth * 0.46;
+    const coreY = corridorY + (corridorHeight - coreHeight) / 2;
+    if (!primaryStair) {
+      primaryStair = {
+        id: "plan-foundation-stair",
+        type: "stair",
+        x: coreX,
+        y: coreY,
+        width: coreWidth,
+        height: coreHeight,
+        serves_level_ids: levels.map((level) => level.id),
+      };
+      plan.vertical_cores = [...existingCores, primaryStair];
+    } else {
+      primaryStair.x = coreX;
+      primaryStair.y = coreY;
+      primaryStair.width = coreWidth;
+      primaryStair.height = coreHeight;
+      primaryStair.serves_level_ids = levels.map((level) => level.id);
+      plan.vertical_cores = existingCores;
+    }
   }
 
-  // The pool is always a site element. Remove only accidental standalone Pool
-  // rooms; pool plant/bath/change rooms remain legitimate interior spaces.
-  for (const level of levels) {
-    level.rooms = (level.rooms || []).filter((room) => !isStandalonePoolRoom(room));
+  function roomWeight(room: CanonicalPlanRoom) {
+    const name = String(room.name || "").toLowerCase();
+    if (/garage|carport/.test(name)) return 2.1;
+    if (/living|family|lounge/.test(name)) return 1.75;
+    if (/kitchen/.test(name)) return 1.45;
+    if (/dining/.test(name)) return 1.3;
+    if (/master.*bed|primary.*bed/.test(name)) return 1.4;
+    if (/bed|office|study|gym/.test(name)) return 1.15;
+    if (/bath|ensuite|toilet|powder|wc|laundry|storage|pantry|robe/.test(name)) return 0.8;
+    return 1;
   }
 
-  // Do NOT snap the garage room to the contract rectangle here. The contract
-  // garage is a facade/site anchor, not a literal room box. Earlier builds
-  // overwrote an otherwise valid AI layout after every correction pass, which
-  // could put the locked garage back on top of Laundry / Robe / Bathroom rooms.
-  // The validator below already enforces the correct side/zone relationship,
-  // while leaving the planner enough tolerance to fit the actual garage cleanly.
+  function distributeRow(rooms: CanonicalPlanRoom[], y: number, height: number) {
+    if (!rooms.length) return;
+    const weights = rooms.map(roomWeight);
+    const weightTotal = Math.max(1, weights.reduce((sum, weight) => sum + weight, 0));
+    let cursor = minX;
+    rooms.forEach((room, index) => {
+      const isLast = index === rooms.length - 1;
+      const width = isLast
+        ? maxX - cursor
+        : masterWidth * weights[index] / weightTotal;
+      room.x = cursor;
+      room.y = y;
+      room.width = Math.max(3.5, width);
+      room.height = Math.max(3.5, height);
+      cursor += width;
+    });
+  }
 
-  if (contract.vertical_core.required && levels.length > 1) {
-    const existingPrimary = (plan.vertical_cores || []).find((core) =>
-      core.type === "stair" || core.type === "lift" || core.type === "service_lift",
+  levels.forEach((level, levelIndex) => {
+    level.outline = masterOutline.map((point) => ({ ...point }));
+    const originalRooms = Array.isArray(level.rooms) ? level.rooms : [];
+    const hallCandidates = originalRooms.filter((room) =>
+      /corridor|hall|landing|lobby|foyer|circulation/i.test(String(room.name || "")),
     );
-    const servedLevelIds = levels.slice(0, contract.storeys).map((level) => level.id);
-    const primary: CanonicalVerticalCore = {
-      id: existingPrimary?.id || "primary-stair-core",
-      type: existingPrimary?.type || "stair",
-      x: contract.vertical_core.x,
-      y: contract.vertical_core.y,
-      width: contract.vertical_core.width,
-      height: contract.vertical_core.height,
-      serves_level_ids: servedLevelIds,
-    };
-    plan.vertical_cores = [
-      primary,
-      ...(plan.vertical_cores || []).filter((core) => core.id !== primary.id && core.type === "shaft"),
-    ];
+    let hall = hallCandidates[0] || null;
+    if (!hall) {
+      hall = {
+        id: `plan-foundation-hall-${levelIndex}`,
+        name: levelIndex === 0 ? "Main Circulation Hall" : "Upper Floor Hall",
+        zone: "circulation",
+        x: minX,
+        y: corridorY,
+        width: masterWidth,
+        height: corridorHeight,
+      };
+      originalRooms.push(hall);
+    }
 
-    if (primary.type === "stair") {
-      levels.slice(0, contract.storeys).forEach((level, levelIndex) => {
-        const otherStairs = (level.stairs || []).filter((stair) => stair.id !== primary.id);
-        level.stairs = [
-          {
-            id: primary.id,
-            x: primary.x,
-            y: primary.y,
-            width: primary.width,
-            height: primary.height,
-            connects_to_level_id:
-              levels[levelIndex + 1]?.id || levels[levelIndex - 1]?.id || level.id,
-          },
-          ...otherStairs,
-        ].slice(0, 4);
+    // One circulation spine is enough. Other lobby/foyer/landing spaces stay
+    // in the programme and are packed like normal rooms so nothing is deleted.
+    hall.x = minX;
+    hall.y = corridorY;
+    hall.width = masterWidth;
+    hall.height = corridorHeight;
+    hall.zone = hall.zone || "circulation";
+
+    const programmeRooms = originalRooms.filter((room) => room.id !== hall!.id);
+    // Preserve the model's broad public/private tendency when possible, while
+    // guaranteeing two non-overlapping bands that share a wall with the hall.
+    const sorted = [...programmeRooms].sort((a, b) => {
+      const aPrivate = /private|bed|bath|ensuite|robe/i.test(`${a.zone} ${a.name}`) ? 1 : 0;
+      const bPrivate = /private|bed|bath|ensuite|robe/i.test(`${b.zone} ${b.name}`) ? 1 : 0;
+      if (aPrivate !== bPrivate) return aPrivate - bPrivate;
+      return Number(a.y || 0) - Number(b.y || 0) || Number(a.x || 0) - Number(b.x || 0);
+    });
+    const split = Math.ceil(sorted.length / 2);
+    const upperRooms = sorted.slice(0, split);
+    const lowerRooms = sorted.slice(split);
+    distributeRow(upperRooms, minY, upperBandHeight);
+    distributeRow(lowerRooms, lowerBandY, lowerBandHeight);
+
+    level.rooms = [...upperRooms, hall, ...lowerRooms];
+
+    // Keep non-door openings only when their room still exists. Door metadata
+    // is rebuilt from the actual shared geometry below.
+    const roomIds = new Set(level.rooms.map((room) => room.id));
+    const retainedOpenings = (level.openings || []).filter((opening) =>
+      !/door/.test(opening.type) && roomIds.has(opening.room_id),
+    );
+    const newOpenings: NonNullable<CanonicalPlanLevel["openings"]> = [...retainedOpenings];
+    const newCirculation: CanonicalPlanLevel["circulation"] = [];
+
+    for (const room of programmeRooms) {
+      if (isOutdoorCanonicalRoom(room)) continue;
+      const wall = sharedOpeningWall(room, hall);
+      if (!wall) continue;
+      newOpenings.push({
+        id: `foundation-door-${levelIndex}-${room.id}`,
+        type: /garage|carport/.test(String(room.name || "").toLowerCase()) ? "door" : "door",
+        room_id: room.id,
+        wall,
+        position: 0.5,
+        width_m: /garage|carport/.test(String(room.name || "").toLowerCase()) ? 1.1 : 0.9,
+        connects_to: hall.id,
+      });
+      newCirculation.push({
+        from_room_id: hall.id,
+        to_room_id: room.id,
+        label: `${hall.name} to ${room.name}`,
       });
     }
-  }
 
-  return repaired;
-}
-
-/**
- * Repair only tiny numeric collisions/edge drift caused by model rounding.
- * Large overlaps remain validation failures and must be replanned by the
- * geometry-only correction model; we never fall back to generic row packing.
- */
-function repairMinorCanonicalGeometry(planSet: LivePlanSet): LivePlanSet {
-  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
-  for (const level of repaired.canonical_plan?.levels || []) {
-    const outline = canonicalOutlineForLevel(repaired.canonical_plan, level);
-    const bounds = pointBounds(outline);
-    const indoorRooms = (level.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
-
-    for (const room of indoorRooms) {
-      const width = Math.max(0.5, Number(room.width || 0));
-      const height = Math.max(0.5, Number(room.height || 0));
-      const minX = Number(room.x || 0);
-      const minY = Number(room.y || 0);
-      const maxX = minX + width;
-      const maxY = minY + height;
-      const leftDrift = Math.max(0, bounds.minX - minX);
-      const rightDrift = Math.max(0, maxX - bounds.maxX);
-      const topDrift = Math.max(0, bounds.minY - minY);
-      const bottomDrift = Math.max(0, maxY - bounds.maxY);
-      if (Math.max(leftDrift, rightDrift, topDrift, bottomDrift) <= 2.25) {
-        room.x = Math.min(Math.max(minX, bounds.minX), Math.max(bounds.minX, bounds.maxX - width));
-        room.y = Math.min(Math.max(minY, bounds.minY), Math.max(bounds.minY, bounds.maxY - height));
-      }
-    }
-
-    // Resolve only hairline overlaps. Anything substantial is architectural
-    // geometry and is intentionally left for the correction pass.
-    for (let iteration = 0; iteration < 3; iteration += 1) {
-      let changed = false;
-      for (let i = 0; i < indoorRooms.length; i += 1) {
-        const a = indoorRooms[i];
-        const ax2 = a.x + a.width;
-        const ay2 = a.y + a.height;
-        for (let j = i + 1; j < indoorRooms.length; j += 1) {
-          const b = indoorRooms[j];
-          const bx2 = b.x + b.width;
-          const by2 = b.y + b.height;
-          const overlapX = Math.min(ax2, bx2) - Math.max(a.x, b.x);
-          const overlapY = Math.min(ay2, by2) - Math.max(a.y, b.y);
-          if (overlapX <= 0 || overlapY <= 0) continue;
-          if (overlapX > 1.35 && overlapY > 1.35) continue;
-
-          const moveX = overlapX <= overlapY;
-          if (moveX) {
-            const amount = overlapX + 0.15;
-            const preferPositive = (b.x + b.width / 2) >= (a.x + a.width / 2);
-            const candidates = preferPositive ? [amount, -amount] : [-amount, amount];
-            for (const delta of candidates) {
-              const next = b.x + delta;
-              if (next >= bounds.minX && next + b.width <= bounds.maxX) {
-                b.x = next;
-                changed = true;
-                break;
-              }
-            }
-          } else {
-            const amount = overlapY + 0.15;
-            const preferPositive = (b.y + b.height / 2) >= (a.y + a.height / 2);
-            const candidates = preferPositive ? [amount, -amount] : [-amount, amount];
-            for (const delta of candidates) {
-              const next = b.y + delta;
-              if (next >= bounds.minY && next + b.height <= bounds.maxY) {
-                b.y = next;
-                changed = true;
-                break;
-              }
-            }
-          }
-        }
-      }
-      if (!changed) break;
-    }
-  }
-  return repaired;
-}
-
-function canonicalPointInPolygon(point: CanonicalPlanPoint, polygon: CanonicalPlanPoint[]) {
-  if (polygon.length < 3) return true;
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = Number(polygon[i].x);
-    const yi = Number(polygon[i].y);
-    const xj = Number(polygon[j].x);
-    const yj = Number(polygon[j].y);
-    const crosses = ((yi > point.y) !== (yj > point.y))
-      && (point.x < ((xj - xi) * (point.y - yi)) / ((yj - yi) || 1e-9) + xi);
-    if (crosses) inside = !inside;
-  }
-  return inside;
-}
-
-function canonicalRoomInsideOutline(room: CanonicalPlanRoom, outline: CanonicalPlanPoint[]) {
-  const inset = 0.12;
-  const points = [
-    { x: room.x + inset, y: room.y + inset },
-    { x: room.x + room.width - inset, y: room.y + inset },
-    { x: room.x + room.width - inset, y: room.y + room.height - inset },
-    { x: room.x + inset, y: room.y + room.height - inset },
-  ];
-  return points.every((point) => canonicalPointInPolygon(point, outline));
-}
-
-function canonicalRoomsOverlap(a: CanonicalPlanRoom, b: CanonicalPlanRoom, tolerance = 0.72) {
-  const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
-  const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
-  return overlapX > tolerance && overlapY > tolerance;
-}
-
-function canonicalRoomIsLayoutAnchor(room: CanonicalPlanRoom) {
-  const text = `${room.name || ""} ${room.zone || ""}`.toLowerCase();
-  return /garage|carport|entry|foyer|vestibule|lobby|stair|lift|elevator|core/.test(text);
-}
-
-function canonicalRoomDistance(a: CanonicalPlanRoom, b: CanonicalPlanRoom) {
-  const ax = a.x + a.width / 2;
-  const ay = a.y + a.height / 2;
-  const bx = b.x + b.width / 2;
-  const by = b.y + b.height / 2;
-  return Math.hypot(ax - bx, ay - by);
-}
-
-/**
- * Last-mile constraint repair for an otherwise useful AI plan.
- *
- * This intentionally does NOT redesign the floor into rows or a generic grid.
- * It keeps every room's original size, level and approximate location, fixes
- * only illegal collisions/out-of-outline placement, and searches first for the
- * nearest legal position that touches another room wall. Large moves are not
- * permitted: if a room cannot be repaired locally, validation still fails and
- * the geometry correction model must re-plan it.
- */
-function repairLocalCanonicalConflicts(planSet: LivePlanSet): LivePlanSet {
-  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
-  const plan = repaired.canonical_plan;
-  if (!plan) return repaired;
-
-  for (const level of plan.levels || []) {
-    const outline = canonicalOutlineForLevel(plan, level);
-    const bounds = pointBounds(outline);
-    const indoor = (level.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
-    if (indoor.length < 2) continue;
-
-    const original = new Map(indoor.map((room) => [room.id, { x: room.x, y: room.y }]));
-    const anchored = indoor.filter(canonicalRoomIsLayoutAnchor);
-    const ordinary = indoor.filter((room) => !canonicalRoomIsLayoutAnchor(room));
-
-    // Keep valid anchors first. Other rooms are checked in descending area so
-    // tiny service rooms do not consume the only viable position for a larger
-    // bedroom/living space.
-    const ordered = [
-      ...anchored,
-      ...ordinary.sort((a, b) => (b.width * b.height) - (a.width * a.height)),
+    // Give the circulation spine one explicit exterior entrance. Choose the
+    // closest side to the model's saved entry so the site relationship remains
+    // recognizable instead of becoming random on each floor.
+    const entryX = Number(plan.entry?.x || minX);
+    const entryY = Number(plan.entry?.y || corridorY + corridorHeight / 2);
+    const sideDistances: Array<{ wall: CanonicalOpeningWall; distance: number }> = [
+      { wall: "west", distance: Math.abs(entryX - minX) },
+      { wall: "east", distance: Math.abs(entryX - maxX) },
+      { wall: "north", distance: Math.abs(entryY - minY) },
+      { wall: "south", distance: Math.abs(entryY - maxY) },
     ];
-    const placed: CanonicalPlanRoom[] = [];
+    const preferredSide = sideDistances.sort((a, b) => a.distance - b.distance)[0]?.wall || "west";
+    // The horizontal hall physically touches west/east. If the saved entry was
+    // north/south, use the nearest hall end rather than inventing a floating door.
+    const entranceWall: CanonicalOpeningWall = preferredSide === "east" ? "east" : "west";
+    newOpenings.push({
+      id: `foundation-entry-${levelIndex}`,
+      type: "door",
+      room_id: hall.id,
+      wall: entranceWall,
+      position: 0.5,
+      width_m: levelIndex === 0 ? 1.2 : 0.9,
+      connects_to: levelIndex === 0 ? "outside" : "core",
+    });
 
-    const isLegal = (room: CanonicalPlanRoom) =>
-      canonicalRoomInsideOutline(room, outline)
-      && placed.every((other) => !canonicalRoomsOverlap(room, other));
+    level.openings = newOpenings;
+    level.circulation = newCirculation;
 
-    for (const room of ordered) {
-      if (isLegal(room)) {
-        placed.push(room);
-        continue;
-      }
-
-      // Anchors such as Garage and Entry are never moved by this fallback.
-      // Their conflicts must be resolved by moving the non-anchor room around
-      // them, preserving the selected Direction's facade/site logic.
-      if (canonicalRoomIsLayoutAnchor(room)) {
-        placed.push(room);
-        continue;
-      }
-
-      const start = original.get(room.id) || { x: room.x, y: room.y };
-      const candidates: Array<{ x: number; y: number; score: number }> = [];
-      const seen = new Set<string>();
-      const pushCandidate = (x: number, y: number, adjacencyBonus = 0) => {
-        const key = `${x.toFixed(2)}:${y.toFixed(2)}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        const trial = { ...room, x, y };
-        if (!canonicalRoomInsideOutline(trial, outline)) return;
-        if (placed.some((other) => canonicalRoomsOverlap(trial, other))) return;
-        const move = Math.hypot(x - start.x, y - start.y);
-        // Refuse a major redesign. A move beyond 18 canonical units is left
-        // unresolved for the AI correction pass instead of being hidden.
-        if (move > 18) return;
-        const neighborDistance = placed.length
-          ? Math.min(...placed.map((other) => canonicalRoomDistance(trial, other)))
-          : 0;
-        candidates.push({ x, y, score: move + neighborDistance * 0.04 - adjacencyBonus });
-      };
-
-      // Prefer positions sharing a wall with an already placed room. This is
-      // much more useful for circulation than arbitrary empty-space nudging.
-      for (const other of placed) {
-        pushCandidate(other.x - room.width, other.y, 1.5);
-        pushCandidate(other.x + other.width, other.y, 1.5);
-        pushCandidate(other.x, other.y - room.height, 1.5);
-        pushCandidate(other.x, other.y + other.height, 1.5);
-        // Also align opposite ends when room sizes differ.
-        pushCandidate(other.x + other.width - room.width, other.y, 0.8);
-        pushCandidate(other.x, other.y + other.height - room.height, 0.8);
-      }
-
-      // Search a compact local grid around the model's intended position.
-      for (let radius = 1; radius <= 18; radius += 1) {
-        const steps = [
-          [radius, 0], [-radius, 0], [0, radius], [0, -radius],
-          [radius, radius], [radius, -radius], [-radius, radius], [-radius, -radius],
-        ];
-        for (const [dx, dy] of steps) pushCandidate(start.x + dx, start.y + dy);
-        if (candidates.length >= 8) break;
-      }
-
-      // Edge-aligned fallback stays near the original zone and often gives
-      // bedrooms/living spaces a useful exterior wall without changing sides.
-      pushCandidate(bounds.minX, Math.min(Math.max(start.y, bounds.minY), bounds.maxY - room.height), 0.5);
-      pushCandidate(bounds.maxX - room.width, Math.min(Math.max(start.y, bounds.minY), bounds.maxY - room.height), 0.5);
-      pushCandidate(Math.min(Math.max(start.x, bounds.minX), bounds.maxX - room.width), bounds.minY, 0.5);
-      pushCandidate(Math.min(Math.max(start.x, bounds.minX), bounds.maxX - room.width), bounds.maxY - room.height, 0.5);
-
-      candidates.sort((a, b) => a.score - b.score);
-      const best = candidates[0];
-      if (best) {
-        room.x = best.x;
-        room.y = best.y;
-      }
-      placed.push(room);
+    if (primaryStair) {
+      const nextLevel = levels[Math.min(levelIndex + 1, levels.length - 1)];
+      level.stairs = [{
+        id: primaryStair.id,
+        x: primaryStair.x,
+        y: primaryStair.y,
+        width: primaryStair.width,
+        height: primaryStair.height,
+        connects_to_level_id: nextLevel?.id || level.id,
+      }];
     }
+  });
+
+  if (levels.length > 1 && !(plan.circulation_routes || []).length) {
+    plan.circulation_routes = [{
+      id: "plan-foundation-main-circulation",
+      type: "mixed",
+      width_m: 1.5,
+      points: [
+        { x: minX, y: corridorY + corridorHeight / 2 },
+        { x: maxX, y: corridorY + corridorHeight / 2 },
+      ],
+      serves_level_ids: levels.map((level) => level.id),
+    }];
   }
 
-  return repaired;
+  // Regenerate access metadata once more using the same geometry rules as the
+  // validator. This catches any edge case introduced by legacy openings.
+  return repairCanonicalPlanAccess(stabilized);
 }
-
-
-/**
- * Resolve the last few ordinary-room collisions with minimal displacement.
- *
- * This is deliberately different from the rejected row/grid packer: it never
- * invents a new room sequence or normalises the whole floor. It only relaxes
- * rooms that are still colliding after the model correction/local repair,
- * keeps Direction anchors fixed, and chooses the smallest move that reduces
- * total collision area while staying inside the real level outline.
- */
-function resolveResidualCanonicalRoomOverlaps(planSet: LivePlanSet): LivePlanSet {
-  const repaired = JSON.parse(JSON.stringify(planSet)) as LivePlanSet;
-  const plan = repaired.canonical_plan;
-  if (!plan) return repaired;
-
-  const rawOverlapArea = (a: CanonicalPlanRoom, b: CanonicalPlanRoom) => {
-    const overlapX = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
-    const overlapY = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
-    return overlapX > 0 && overlapY > 0 ? overlapX * overlapY : 0;
-  };
-
-  const collisionAreaFor = (room: CanonicalPlanRoom, rooms: CanonicalPlanRoom[]) =>
-    rooms.reduce((sum, other) => {
-      if (other.id === room.id) return sum;
-      return sum + rawOverlapArea(room, other);
-    }, 0);
-
-  for (const level of plan.levels || []) {
-    const outline = canonicalOutlineForLevel(plan, level);
-    const bounds = pointBounds(outline);
-    const indoor = (level.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
-    if (indoor.length < 2) continue;
-
-    const original = new Map(indoor.map((room) => [room.id, { x: room.x, y: room.y }]));
-
-    for (let iteration = 0; iteration < 36; iteration += 1) {
-      let conflict: { a: CanonicalPlanRoom; b: CanonicalPlanRoom; area: number } | null = null;
-
-      for (let i = 0; i < indoor.length; i += 1) {
-        for (let j = i + 1; j < indoor.length; j += 1) {
-          const a = indoor[i];
-          const b = indoor[j];
-          if (!canonicalRoomsOverlap(a, b)) continue;
-          const area = rawOverlapArea(a, b);
-          if (!conflict || area > conflict.area) conflict = { a, b, area };
-        }
-      }
-
-      if (!conflict) break;
-
-      const aAnchor = canonicalRoomIsLayoutAnchor(conflict.a);
-      const bAnchor = canonicalRoomIsLayoutAnchor(conflict.b);
-      if (aAnchor && bAnchor) break;
-
-      // Prefer moving the smaller non-anchor room. This naturally keeps major
-      // living/bedroom zones stable while allowing bathrooms/robes/laundries to
-      // resolve local collisions around them.
-      const movable = aAnchor
-        ? conflict.b
-        : bAnchor
-          ? conflict.a
-          : (conflict.a.width * conflict.a.height <= conflict.b.width * conflict.b.height ? conflict.a : conflict.b);
-      const blocker = movable.id === conflict.a.id ? conflict.b : conflict.a;
-      const start = original.get(movable.id) || { x: movable.x, y: movable.y };
-      const currentArea = collisionAreaFor(movable, indoor);
-      const candidates: Array<{ x: number; y: number; score: number; collision: number }> = [];
-      const seen = new Set<string>();
-
-      const pushCandidate = (x: number, y: number, adjacencyBonus = 0) => {
-        const key = `${x.toFixed(2)}:${y.toFixed(2)}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        const trial = { ...movable, x, y };
-        if (!canonicalRoomInsideOutline(trial, outline)) return;
-        const move = Math.hypot(x - movable.x, y - movable.y);
-        const totalMove = Math.hypot(x - start.x, y - start.y);
-        if (totalMove > 24) return;
-        const collision = collisionAreaFor(trial, indoor);
-        const score = collision * 1000 + move * 2 + totalMove * 0.25 - adjacencyBonus;
-        candidates.push({ x, y, score, collision });
-      };
-
-      const gap = 0.18;
-      // Exact separating moves around the room causing the current collision.
-      pushCandidate(blocker.x - movable.width - gap, movable.y, 1.5);
-      pushCandidate(blocker.x + blocker.width + gap, movable.y, 1.5);
-      pushCandidate(movable.x, blocker.y - movable.height - gap, 1.5);
-      pushCandidate(movable.x, blocker.y + blocker.height + gap, 1.5);
-
-      // Alignment alternatives preserve the same local room cluster while
-      // giving the solver a way around a third neighbouring room.
-      pushCandidate(blocker.x - movable.width - gap, blocker.y, 1.0);
-      pushCandidate(blocker.x + blocker.width + gap, blocker.y, 1.0);
-      pushCandidate(blocker.x, blocker.y - movable.height - gap, 1.0);
-      pushCandidate(blocker.x, blocker.y + blocker.height + gap, 1.0);
-      pushCandidate(blocker.x + blocker.width - movable.width, blocker.y - movable.height - gap, 0.6);
-      pushCandidate(blocker.x + blocker.width - movable.width, blocker.y + blocker.height + gap, 0.6);
-
-      // Half-unit local search is intentionally fine-grained. The previous
-      // whole-unit search could miss a perfectly valid nearby position and
-      // then abort the entire paid generation over one Bedroom/Bathroom clash.
-      for (let radius = 0.5; radius <= 24; radius += 0.5) {
-        const steps = [
-          [radius, 0], [-radius, 0], [0, radius], [0, -radius],
-          [radius, radius], [radius, -radius], [-radius, radius], [-radius, -radius],
-        ];
-        for (const [dx, dy] of steps) pushCandidate(movable.x + dx, movable.y + dy);
-      }
-
-      pushCandidate(bounds.minX, Math.min(Math.max(movable.y, bounds.minY), bounds.maxY - movable.height), 0.25);
-      pushCandidate(bounds.maxX - movable.width, Math.min(Math.max(movable.y, bounds.minY), bounds.maxY - movable.height), 0.25);
-      pushCandidate(Math.min(Math.max(movable.x, bounds.minX), bounds.maxX - movable.width), bounds.minY, 0.25);
-      pushCandidate(Math.min(Math.max(movable.x, bounds.minX), bounds.maxX - movable.width), bounds.maxY - movable.height, 0.25);
-
-      candidates.sort((left, right) => left.score - right.score);
-      const best = candidates.find((candidate) => candidate.collision + 0.02 < currentArea);
-      if (!best) break;
-
-      movable.x = best.x;
-      movable.y = best.y;
-    }
-  }
-
-  return repaired;
-}
-
-function prepareCanonicalPlanCandidate(
-  planSet: LivePlanSet,
-  contract: DirectionGeometryContract | null | undefined,
-  requestedStoreys?: number | null,
-) {
-  const structurallyLocked = enforcePlanFoundationStructuralSkeleton(planSet, contract, requestedStoreys);
-  const geometryPrepared = resolveResidualCanonicalRoomOverlaps(
-    repairLocalCanonicalConflicts(
-      repairMinorCanonicalGeometry(
-        applyDirectionContractLocks(structurallyLocked, contract),
-      ),
-    ),
-  );
-  return ensureLockedMainEntryDoor(
-    repairCanonicalPlanAccess(geometryPrepared),
-    contract,
-  );
-}
-
 
 function geometryCoordinationIssues(args: {
   planSet: LivePlanSet;
@@ -2252,10 +1709,6 @@ function geometryCoordinationIssues(args: {
 
   levels.forEach((level, levelIndex) => {
     const outline = canonicalOutlineForLevel(plan, level);
-    const enclosedRooms = (level.rooms || []).filter((room) => !isOutdoorCanonicalRoom(room));
-    if (!enclosedRooms.length) {
-      issues.push(`${level.label || `Level ${levelIndex}`}: contains no enclosed programme rooms. Every required storey must be explicitly designed, not returned as an empty placeholder.`);
-    }
     const bounds = pointBounds(outline);
     if (
       bounds.minX < masterBounds.minX - 1.5 || bounds.minY < masterBounds.minY - 1.5 ||
@@ -2272,22 +1725,14 @@ function geometryCoordinationIssues(args: {
       const roomMinY = Number(room.y || 0);
       const roomMaxX = roomMinX + Number(room.width || 0);
       const roomMaxY = roomMinY + Number(room.height || 0);
-      const roomIsOutdoor = isOutdoorCanonicalRoom(room);
       if (
-        !roomIsOutdoor && (
-          roomMinX < bounds.minX - 0.75 || roomMinY < bounds.minY - 0.75 ||
-          roomMaxX > bounds.maxX + 0.75 || roomMaxY > bounds.maxY + 0.75
-        )
+        roomMinX < bounds.minX - 0.75 || roomMinY < bounds.minY - 0.75 ||
+        roomMaxX > bounds.maxX + 0.75 || roomMaxY > bounds.maxY + 0.75
       ) {
         issues.push(`${level.label || `Level ${levelIndex}`}: ${room.name} extends outside the locked level outline.`);
       }
       for (let otherIndex = roomIndex + 1; otherIndex < roomList.length; otherIndex += 1) {
         const other = roomList[otherIndex];
-        // Terraces, balconies, outdoor dining and similar attached exterior
-        // zones are allowed to sit outside/along the building edge and may
-        // intentionally overlap one another as descriptive use-zones. They
-        // are not enclosed room rectangles and must not block Plan Foundation.
-        if (roomIsOutdoor || isOutdoorCanonicalRoom(other)) continue;
         const overlapWidth = Math.min(roomMaxX, Number(other.x || 0) + Number(other.width || 0)) - Math.max(roomMinX, Number(other.x || 0));
         const overlapHeight = Math.min(roomMaxY, Number(other.y || 0) + Number(other.height || 0)) - Math.max(roomMinY, Number(other.y || 0));
         if (overlapWidth > 0.75 && overlapHeight > 0.75) {
@@ -2311,19 +1756,12 @@ function geometryCoordinationIssues(args: {
         (opening.room_id === room.id || String(opening.connects_to || "") === room.id),
       );
       if (!doorOpenings.length) {
-        const hasValidOpenPlanConnection = isOpenPlanCanonicalRoom(room) && (level.circulation || []).some((link) => {
-          const otherId = link.from_room_id === room.id ? link.to_room_id : link.to_room_id === room.id ? link.from_room_id : null;
-          if (!otherId) return false;
-          const other = roomList.find((candidate) => candidate.id === otherId);
-          return Boolean(other && isOpenPlanCanonicalRoom(other) && sharedOpeningWall(room, other));
-        });
-        if (hasValidOpenPlanConnection) continue;
         issues.push(`${level.label || `Level ${levelIndex}`}: ${room.name} has no explicit door opening. Every enclosed room must be physically accessible.`);
         continue;
       }
       const hasCirculationEvidence = circulationRoomIds.has(room.id) || doorOpenings.some((opening) => {
         const destination = String(opening.connects_to || "");
-        return roomIds.has(destination) || /corridor|hall|landing|lobby|foyer|outside|exterior|entry|core|driveway|site|garden|terrace|balcony|pool/i.test(destination);
+        return roomIds.has(destination) || /corridor|hall|landing|lobby|foyer|outside|exterior|entry|core/i.test(destination);
       });
       if (!hasCirculationEvidence) {
         issues.push(`${level.label || `Level ${levelIndex}`}: ${room.name} has a door but no clear circulation/access connection.`);
@@ -2846,121 +2284,51 @@ export async function generateArchitectureDirection(args: {
   const letter = String.fromCharCode(64 + args.directionNumber);
   const projectType = String(args.project.project_type || "Other");
   const template = getArchitectureProjectTemplate(projectType);
-  const requestedStoreys = requestedProjectStoreys(args.project, args.site);
 
-  const system = [
-    "You are Heyy Studio's senior conceptual architect.",
-    "Create one clearly differentiated architectural direction from the supplied project data AND one Direction Geometry Contract for that same direction in the same response.",
-    args.planFoundation
-      ? "EXISTING-GEOMETRY MODE: an approved plan foundation already defines the building geometry. Do not invent, move, rotate, enlarge, shrink or replace the footprint, storeys, vertical cores, pool/site placement, entry relationship or major indoor-outdoor layout. Develop architectural character around that exact plan foundation."
-      : "DIRECTION-FIRST MODE: establish the architectural route before exact room geometry is developed. The Direction Geometry Contract must lock the visible site/massing anchors that the future Direction image and Canonical Plan will share: front/street edge, storey count, ground and upper massing outlines, entry position, garage/driveway position, pool position, outdoor-living zone and primary vertical-core zone.",
-    "The geometry contract is NOT a detailed floor plan and must not invent hidden room layouts. It is a coarse but spatially explicit 0–100 site-grid skeleton that both the Direction render and future Plan Foundation must obey.",
-    "Coordinate system: x increases west→east; y increases north→south. Every geometry-contract point and rectangle uses that same 0–100 site grid.",
-    "Keep the ground massing comfortably inside the site grid. Put the main entry anchor on the actual facade edge identified by entry.edge. entry.position_0_100 is measured along that same facade edge from left/top toward right/bottom.",
-    "If the brief/programme requires a garage, place the garage rectangle so it intersects the ground building outline and place the driveway next to it with access from the stated site edge. If no garage is requested or reasonably implied, set garage.present=false and driveway.present=false rather than inventing them.",
-    "If the brief/programme requires a pool, the pool rectangle MUST be fully outside the ground building outline. Never represent the pool as an internal building room. If no pool is requested, set pool.present=false rather than inventing one.",
-    "For multi-storey projects, provide one upper_level_outlines entry for every upper level. Upper outlines may step back, omit wings or cantilever only when that is part of the selected massing idea. Do not simply duplicate the ground outline unless that is genuinely the chosen massing.",
-    "For multi-storey projects, vertical_core.required=true and its zone must be plausible inside the ground outline and reusable in the same position on every served level.",
-    requestedStoreys
-      ? `HARD FLOOR COUNT: the Direction and geometry_contract.storeys must both preserve exactly ${requestedStoreys} storey${requestedStoreys === 1 ? "" : "s"}.`
-      : "If floor count is not explicitly supplied, choose a credible storey count from the programme, capacity, site and target area instead of defaulting automatically to two storeys.",
-    `This is a ${projectType} project. Never default to residential language unless the project type is residential.`,
-    `Focus on the correct users, operations and spatial priorities: ${template.directionFocus.join(", ")}.`,
-    "Treat explicit user capacity, floor-count, parking, pool, access and other site inputs as hard design requirements, not optional inspiration.",
-    "If a healthcare brief specifies beds, the direction must describe a genuine inpatient hospital strategy with wards/patient rooms and the clinical/service systems needed to support that bed count; do not turn it into an outpatient clinic.",
-    "Write concise but complete professional content suitable for an architecture design pack.",
-    "The direction.image_prompt must explicitly describe the SAME spatial anchors as geometry_contract in plain visual language. Do not write an image prompt that mirrors, rotates, swaps or relocates the entry, garage, driveway, pool, outdoor living or main massing.",
-    "geometry_contract.must_preserve must include the most important spatial anchors that later plan generation and visuals are forbidden to move.",
-    safetyInstruction,
-  ].join(" ");
-
-  const payload = {
-    requested_direction: `Direction ${letter}`,
-    differentiation_rule:
-      args.directionNumber === 1
-        ? "calm, restrained, practical and context-led"
-        : args.directionNumber === 2
-          ? "layered, landscape-integrated and spatially expressive"
-          : "bold, sculptural and landmark-oriented while remaining credible as a concept",
-    project: args.project,
-    site: args.site,
-    planning_assumptions: args.planning,
-    approved_plan_foundation: args.planFoundation || null,
-    saved_space_program: args.spaceProgram || [],
-    selected_materials: args.selectedMaterials,
-    project_type_template: template,
-    hard_project_requirements: {
-      capacity_text: projectCapacityText(args.project) || null,
-      parsed_capacity: parseCapacityConstraint(projectType, args.project),
-      requested_storeys: requestedStoreys,
-    },
-    geometry_contract_rules: {
-      source_of_truth: "Create the architectural direction and spatial contract together. The render must be generated from the contract; the future Plan Foundation must use the same contract rather than reverse-engineering the render.",
-      site_grid: "0–100; x west→east; y north→south",
-      entry: "Lock facade edge + position + anchor.",
-      garage_driveway: "Lock side/position and vehicle approach when required.",
-      pool: "Exterior-only site element; lock position/relationship when required; never place inside building.",
-      upper_levels: "Explicit outline/setback relationship for every upper storey.",
-      vertical_core: "One shared core zone for multi-storey projects.",
-    },
-    mandatory_disclaimer: "Conceptual architecture only; professional local verification is required.",
-  };
-
-  const first = await structuredCompletion<LiveDirectionGeneration>({
+  return structuredCompletion<LiveDirection>({
     plan: args.plan,
-    schema: directionGenerationSchema,
-    system,
-    payload,
-  });
-
-  let generation = first.value;
-  let geometryContract = directionGeometryContractFromUnknown(generation.geometry_contract);
-  let issues = geometryContract
-    ? validateDirectionGeometryContract(geometryContract)
-    : ["Direction Geometry Contract could not be parsed."];
-  let correctionUsage: unknown = null;
-
-  if (issues.length) {
-    const corrected = await structuredCompletion<LiveDirectionGeneration>({
-      plan: args.plan,
-      schema: directionGenerationSchema,
-      system: [
-        system,
-        "The first Direction Geometry Contract failed deterministic spatial validation. Return a complete corrected direction + geometry contract; do not explain the error.",
-        ...issues.map((issue, index) => `${index + 1}. ${issue}`),
-        "Correct the contract and make direction.image_prompt describe the corrected contract exactly. Preserve explicit user requirements and the requested differentiated design character.",
-      ].join(" "),
-      payload: {
-        ...payload,
-        previous_generation_to_correct: generation,
-        geometry_validation_failures: issues,
+    schema: directionSchema,
+    system: [
+      "You are Heyy Studio's senior conceptual architect.",
+      "Create one clearly differentiated architectural direction from the supplied project data.",
+      args.planFoundation
+        ? "EXISTING-GEOMETRY MODE: the approved plan foundation already defines the building geometry. Do not invent, move, rotate, enlarge, shrink or replace the footprint, storeys, vertical cores, pool/site placement, entry relationship or major indoor-outdoor layout. Develop architectural character around that exact plan foundation."
+        : "DIRECTION-FIRST MODE: establish the architectural route before exact floor geometry is developed. Define a coherent massing intent, storey logic, roof form, facade rhythm, entry expression, material placement, landscape relationship and spatial priorities from the brief, site and Space Program. Do not claim exact measured floor-plan geometry. The selected direction will guide the later Plan Foundation.",
+      `This is a ${projectType} project. Never default to residential language unless the project type is residential.`,
+      `Focus on the correct users, operations and spatial priorities: ${template.directionFocus.join(", ")}.`,
+      "Treat explicit user capacity and floor-count inputs as hard design requirements, not optional inspiration.",
+      "If a healthcare brief specifies beds, the direction must describe a genuine inpatient hospital strategy with wards/patient rooms and the clinical/service systems needed to support that bed count; do not turn it into an outpatient clinic.",
+      "If the user supplied an exact number of floors, the massing and image prompt must preserve exactly that number. If floors are unspecified, choose a credible storey count from the programme, capacity, site and target area instead of defaulting to two storeys.",
+      "Write concise but complete professional content suitable for an architecture design pack.",
+      safetyInstruction,
+      "The direction image prompt must clearly define a single repeatable building identity, including massing, roof geometry, facade rhythm, openings, material placement, pool and landscape relationship.",
+    ].join(" "),
+    payload: {
+      requested_direction: `Direction ${letter}`,
+      differentiation_rule:
+        args.directionNumber === 1
+          ? "calm, restrained, practical and context-led"
+          : args.directionNumber === 2
+            ? "layered, landscape-integrated and spatially expressive"
+            : "bold, sculptural and landmark-oriented while remaining credible as a concept",
+      project: args.project,
+      site: args.site,
+      planning_assumptions: args.planning,
+      approved_plan_foundation: args.planFoundation || null,
+      geometry_rule: args.planFoundation
+        ? "The approved plan foundation is the geometry source of truth. Directions may vary facade language, roof expression, materials, openings treatment, shading, landscape character and atmosphere, but may not redesign the plan geometry or site relationships."
+        : "This Direction establishes the architectural identity and massing intent. The later Plan Foundation must translate this selected Direction together with the Space Program and site requirements into coordinated plans.",
+      saved_space_program: args.spaceProgram || [],
+      selected_materials: args.selectedMaterials,
+      project_type_template: template,
+      hard_project_requirements: {
+        capacity_text: projectCapacityText(args.project) || null,
+        parsed_capacity: parseCapacityConstraint(projectType, args.project),
+        requested_storeys: requestedProjectStoreys(args.project, args.site),
       },
-    });
-    generation = corrected.value;
-    correctionUsage = corrected.usage;
-    geometryContract = directionGeometryContractFromUnknown(generation.geometry_contract);
-    issues = geometryContract
-      ? validateDirectionGeometryContract(geometryContract)
-      : ["Corrected Direction Geometry Contract could not be parsed."];
-  }
-
-  if (!geometryContract || issues.length) {
-    throw new Error(`Architecture Direction geometry validation failed: ${issues.join(" ")}`);
-  }
-
-  if (requestedStoreys && geometryContract.storeys !== requestedStoreys) {
-    throw new Error(`Architecture Direction geometry validation failed: expected exactly ${requestedStoreys} storeys but received ${geometryContract.storeys}.`);
-  }
-
-  return {
-    direction: generation.direction,
-    geometryContract,
-    geometryPrompt: directionGeometryContractPrompt(geometryContract),
-    usage: {
-      generation: first.usage,
-      correction: correctionUsage,
+      mandatory_disclaimer: "Conceptual architecture only; professional local verification is required.",
     },
-  };
+  }).then(({ value, usage }) => ({ direction: value, usage }));
 }
 
 export async function generateArchitectureDna(args: {
@@ -2970,8 +2338,6 @@ export async function generateArchitectureDna(args: {
   site: Record<string, unknown> | null;
   selectedMaterials: Array<Record<string, unknown>>;
 }) {
-  const directionJson = objectRecord(args.direction.generation_json);
-  const directionGeometryContract = directionGeometryContractFromUnknown(directionJson.direction_geometry_contract);
   return structuredCompletion<ArchitectureDna>({
     plan: args.plan,
     schema: architectureDnaSchema,
@@ -2980,7 +2346,6 @@ export async function generateArchitectureDna(args: {
       "Convert the selected Architecture Direction into one strict Architecture DNA record.",
       "This record is a non-negotiable identity lock for every later concept image, floor-plan diagram and architectural visual.",
       "Use the selected direction as the source of truth. Resolve ambiguity into specific, repeatable visual rules.",
-      directionGeometryContract ? "A Direction Geometry Contract is supplied. Its spatial anchors are stricter than descriptive prose: do not move, mirror or contradict its entry, garage/driveway, pool/outdoor relationship, storey count, upper-level massing or primary core zone." : "",
       "Explicit user programme requirements override a vague storey assumption in the direction text.",
       "If the user supplied desired_floors, architecture_dna.storeys must equal that exact number.",
       "If floors were not supplied, architecture_dna.storeys must be a credible programme-driven number based on requested capacity, target area and site. Do not automatically choose two storeys for large hospitals, hotels, schools or mixed-use projects.",
@@ -2991,7 +2356,6 @@ export async function generateArchitectureDna(args: {
     payload: {
       project: args.project,
       selected_direction: args.direction,
-      direction_geometry_contract: directionGeometryContract,
       site: args.site,
       selected_materials: args.selectedMaterials,
       hard_project_requirements: {
@@ -3021,15 +2385,12 @@ export async function generateArchitectureConcept(args: {
   selectedMaterials: Array<Record<string, unknown>>;
   spaceProgram: Array<Record<string, unknown>>;
 }) {
-  const directionJson = objectRecord(args.direction.generation_json);
-  const directionGeometryContract = directionGeometryContractFromUnknown(directionJson.direction_geometry_contract);
   return structuredCompletion<LiveConcept>({
     plan: args.plan,
     schema: conceptSchema,
     system: [
       "You are Heyy Studio's senior conceptual architect preparing a selected-direction concept strategy.",
       "Translate the selected direction into a clear spatial, environmental and material concept without redesigning the building.",
-      directionGeometryContract ? "Preserve the Direction Geometry Contract as a non-negotiable spatial skeleton; do not mirror or relocate its entry, garage/driveway, pool/outdoor relationship, storey count, upper-level massing or primary core zone." : "",
       "Use the saved Space Program as client intent, but never let an incomplete saved programme erase a hard user capacity requirement.",
       "Explicit bed, room, unit, student, staff, seat or other capacity requirements must be carried forward into the spatial strategy.",
       "If a healthcare brief specifies beds, the concept must include inpatient accommodation and supporting clinical/service zoning, not only reception, diagnostics and outpatient rooms.",
@@ -3042,7 +2403,6 @@ export async function generateArchitectureConcept(args: {
     payload: {
       project: args.project,
       selected_direction: args.direction,
-      direction_geometry_contract: directionGeometryContract,
       architecture_dna: args.architectureDna,
       site: args.site,
       planning_assumptions: args.planning,
@@ -3104,7 +2464,8 @@ export async function generateArchitecturePlanSet(args: {
   planning: Record<string, unknown> | null;
   selectedMaterials: Array<Record<string, unknown>>;
   spaceProgram: Array<Record<string, unknown>>;
-  directionGeometryContract?: DirectionGeometryContract | null;
+  directionImageReference?: ArchitectureImageReference | null;
+  supabase?: SupabaseClient | null;
   planFoundationMode?: boolean;
   existingPlan?: LivePlanSet;
   adjustmentInstruction?: string;
@@ -3174,7 +2535,6 @@ export async function generateArchitecturePlanSet(args: {
       : "Do not assume the absence of a recognized legacy capacity metric means there is no capacity requirement; use the universal Requirement Contract.",
     "For every canonical room, set capacity_type and capacity_count. Use capacity_count=0 and capacity_type='' when the room carries no measurable programme quantity. For capacity-bearing rooms, use the same normalized metric language as the Requirement Contract wherever practical.",
     "Coordinates use a 0 to 100 site grid. All rooms, pool, driveway, entry and footprint must fit within that grid.",
-    "SITE ELEMENT RULE: pool, garden, yard, driveway and landscape zones are not interior rooms. Never put a room named Pool inside canonical_plan.levels[].rooms. The pool exists only in canonical_plan.pool. Terraces/balconies may appear in a level only when they are actual building-attached floor areas and must remain outside enclosed room geometry.",
     "Use the full coordinate canvas: distribute each level between approximately 8 and 92 rather than clustering rooms in one small corner.",
     "Rooms on the same level must not overlap. Align shared walls, keep circulation legible and give every room a practical minimum width and height.",
     "Create a mostly contiguous architectural footprint. Avoid isolated floating room boxes; gaps are allowed only for real courtyards, patios, light wells or separated service buildings when the brief requires them.",
@@ -3186,19 +2546,10 @@ export async function generateArchitecturePlanSet(args: {
     "Define at least two perpendicular architectural section cuts in canonical_plan.section_cuts. Label them A—A and B—B, specify the cut axis and viewing direction, and list the rooms crossed by each cut.",
     "At least one section cut must pass through the principal vertical circulation so the section can show floor-to-floor relationships.",
     args.planFoundationMode
-      ? "DIRECTION-LED PLAN FOUNDATION MODE IS ACTIVE. The user has already selected an Architecture Direction. Translate that approved Direction together with the brief, site, planning information, Space Program and Requirement Contract into one Canonical Plan. The selected Direction governs massing intent, storey logic, entry/site response, roof/facade intent and spatial priorities; the Canonical Plan you create now becomes the exact geometry authority for all later Concept Visuals and the Design Pack."
+      ? "DIRECTION-LED PLAN FOUNDATION MODE IS ACTIVE. The selected Direction image is supplied directly to you together with the user brief, site, planning information, Space Program and Requirement Contract. The image is the visible architectural source of truth. Preserve its garage side, front-entry relationship, pool/outdoor relationship, dominant glazed living side, visible storey count, roof form and upper-level massing while resolving hidden interior rooms from the Space Program. The resulting Plan Foundation becomes the geometry reference for all later Concept Visuals."
       : "All levels must align vertically and describe one single building represented by the selected Architecture Direction and Architecture DNA.",
-    args.planFoundationMode && args.directionGeometryContract
-      ? [
-          "A DIRECTION GEOMETRY CONTRACT was created at the same time as the selected Direction, before its image was rendered. It is the shared spatial parent of the Direction render and this Canonical Plan.",
-          "A LOCKED PLAN FOUNDATION STRUCTURE is also supplied in the payload. Copy its exact storey count, level_index order, level ids, labels, outlines and shared vertical core. You design the rooms inside that structure; you do not redesign or omit the structure itself.",
-          "Treat its front/street edge, storey count, ground/upper massing outlines, entry, garage/driveway, pool/outdoor-living relationship and primary vertical-core zone as non-negotiable spatial anchors.",
-          "Do NOT reverse-engineer room geometry from the Direction image. Fit the user Space Program into the contract skeleton while preserving these anchors.",
-          directionGeometryContractPrompt(args.directionGeometryContract),
-        ].join(" ")
-      : "",
     args.planFoundationMode
-      ? "Create one explicit canonical building_outline polygon by translating the SELECTED DIRECTION's massing/form strategy into the site envelope, programme, access, outdoor requirements and room relationships. Do not invent a second architectural identity that conflicts with the selected Direction."
+      ? "Create one explicit canonical building_outline polygon by translating the selected Direction's massing/form strategy into the site envelope, programme, access, outdoor requirements and room relationships. Keep the plan recognisably connected to the selected Direction rather than inventing a different building."
       : "Translate architecture_dna.massing, roof_form, entry_expression and visual_prompt_anchor into one explicit canonical building_outline polygon. The master outline is the geometry lock for the building massing; do not let each floor invent its own unrelated perimeter.",
     args.planFoundationMode
       ? "Every level must return level.outline. Ground defines the primary footprint. Upper floors must stack logically over the lower floor, stay within the master outline unless a legitimate cantilever is explicitly required, and keep stairs/cores aligned exactly."
@@ -3232,14 +2583,10 @@ export async function generateArchitecturePlanSet(args: {
   const payload: Record<string, unknown> = {
     project: args.project,
     workflow_authority: args.planFoundationMode
-      ? "SELECTED DIRECTION → PLAN FOUNDATION: the approved Direction defines design intent; this Canonical Plan locks exact geometry for all later visuals."
+      ? "SELECTED DIRECTION → PLAN FOUNDATION: the approved Direction defines architectural intent; the Plan Foundation develops the coordinated layout used by later visuals."
       : "SELECTED DIRECTION: geometry must remain coordinated with the approved direction.",
     selected_direction: args.direction,
     architecture_dna: args.architectureDna,
-    selected_direction_geometry_contract: args.directionGeometryContract || null,
-    locked_plan_foundation_structure: args.planFoundationMode
-      ? lockedPlanFoundationStructure(args.directionGeometryContract, requestedStoreys)
-      : null,
     concept: args.planFoundationMode ? null : args.concept,
     site: args.site,
     planning_assumptions: args.planning,
@@ -3270,15 +2617,12 @@ export async function generateArchitecturePlanSet(args: {
       room_geometry: "No overlapping room rectangles. Shared walls should align. Keep coordinates and dimensions practical and readable.",
       requirement_evidence: "Every hard plan requirement must have explicit evidence in the canonical model. Quantities use capacity_type/capacity_count or countable rooms/fixtures; relationships use circulation/openings/level placement/site elements.",
       same_property_rule: args.planFoundationMode
-        ? "Every level and diagram is the same property and uses one locked master building outline, one site arrangement and one common coordinate system. The selected Direction informs the plan; this Plan Foundation controls all later Concept Visuals."
+        ? "Every level and diagram is the same property and uses one coordinated building outline and site arrangement derived from the selected Direction plus the user brief. This Plan Foundation controls all later Concept Visuals."
         : "Every level and diagram is the same property and uses one locked master building outline, one site arrangement and one coordinated massing logic derived from the selected Direction.",
       building_outline_rules: args.planFoundationMode
-        ? "building_outline is the master geometry authority created from the selected Direction plus brief/site/programme. Ground normally matches it; upper levels must coordinate vertically and preserve exact shared cores. Later visuals are not allowed to replace it."
+        ? "building_outline is the master geometry authority created from the selected Direction plus brief/site/programme. Ground normally matches it; upper levels must coordinate vertically and preserve cores. Later Concept Visuals are not allowed to replace it."
         : "building_outline is the master massing footprint polygon. Every level.outline is coordinated to it; ground normally matches it and upper levels may only step back within it when consistent with the selected Architecture DNA.",
       opening_rules: "Every enclosed room has an explicit door in level.openings and a valid circulation/access path; occupied rooms have appropriate exterior openings where relevant; required access/separation is explicit.",
-      direction_geometry_contract: args.directionGeometryContract
-        ? "The selected Direction Geometry Contract is the non-negotiable parent of both the Direction render and this Plan Foundation. Preserve its front edge, storey count, entry, garage/driveway, pool/outdoor relationship, massing outlines and shared vertical-core zone while fitting the saved Space Program inside. Hidden room planning comes from the brief/programme; do not infer it from pixels."
-        : "Use the selected Direction text and Architecture DNA as the design-intent source.",
       vertical_rules: "vertical_cores are master coordinates. The same stair/lift/shaft has identical x, y, width and height on every served level; level.stairs mirrors master stair cores exactly.",
       circulation_geometry: "circulation_routes contain geometric route spines on the same 0-100 grid so circulation is coordinated across floors instead of being redrawn independently.",
       healthcare_coordination: "Hospital plans explicitly model public/service/clinical circulation logic and inpatient bedroom-to-ensuite access. User-requested 1/2/3-bed room mixes are represented as real patient bedrooms, not aggregate empty ward rectangles.",
@@ -3288,99 +2632,79 @@ export async function generateArchitecturePlanSet(args: {
     },
   };
 
-  const first = await structuredCompletion<LivePlanSet>({
-    plan: args.plan,
-    schema: planSchema,
-    system: baseSystem,
-    payload,
-  });
+  const useDirectionImage = Boolean(
+    args.planFoundationMode && args.directionImageReference && args.supabase,
+  );
+  const first = useDirectionImage
+    ? await structuredCompletionWithImage<LivePlanSet>({
+        plan: args.plan,
+        schema: planSchema,
+        system: baseSystem,
+        payload,
+        supabase: args.supabase as SupabaseClient,
+        referenceImage: args.directionImageReference as ArchitectureImageReference,
+      })
+    : await structuredCompletion<LivePlanSet>({
+        plan: args.plan,
+        schema: planSchema,
+        system: baseSystem,
+        payload,
+      });
 
-  let value = prepareCanonicalPlanCandidate(first.value, args.directionGeometryContract, args.planFoundationMode ? requestedStoreys : null);
+  let value = repairCanonicalPlanAccess(first.value);
   let correctionUsage: unknown = null;
   let correctionAuditUsage: unknown = null;
 
-  // Direction-led Plan Foundation: generate → deterministic validation → model correction.
-  // Never repair a bad architectural layout by repacking rooms into generic rows.
-  // If the model cannot satisfy the shared Direction Geometry Contract after two
-  // correction attempts, fail the paid generation so the credit lifecycle can refund it.
+  // Focused Concept Studio: Plan Foundation should be fast and dependable.
+  // One structured plan-generation call is enough. We run local geometry checks and,
+  // only when necessary, the deterministic stabiliser. We deliberately do NOT run
+  // independent AI audits or two additional AI correction rounds in this mode.
+  // Those extra calls were the main source of multi-minute waits and intermittent
+  // "validation failed" refunds for conceptual projects.
   if (args.planFoundationMode) {
-    const buildFromScratch = String(args.project.workflow_mode || "") === "build_from_scratch";
-    if (buildFromScratch && !args.directionGeometryContract) {
-      throw new Error("The selected Design Direction is missing its Geometry Contract. Regenerate the selected Direction and its visual before preparing the Plan Foundation.");
-    }
-
-    const foundationIssues = (candidate: LivePlanSet) => [
-      ...planValidationIssues({ planSet: candidate, project: args.project, site: args.site }),
-      ...geometryCoordinationIssues({ planSet: candidate, project: args.project }),
-      ...(args.directionGeometryContract
-        ? validateCanonicalPlanAgainstDirectionContract(candidate.canonical_plan, args.directionGeometryContract)
-        : []),
+    const initialGeometryIssues = [
+      ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
     ];
+    const geometryFailurePattern = /overlaps|outside the (?:master building|locked level) outline|no explicit door opening|no clear circulation|door .* wall|opening .* missing source room|stair core .* not stacked|multi-floor building must define|floor count|storeys/i;
+    const blockingGeometryIssues = initialGeometryIssues.filter((issue) => geometryFailurePattern.test(issue));
 
-    let deterministicIssues = [...new Set(foundationIssues(value))];
-    const correctionUsages: unknown[] = [];
-
-    // Repair Canonical Plan geometry only. The earlier implementation asked
-    // the model to regenerate the entire plan set for every correction, which
-    // frequently introduced a new floor, rewrote room assignments, or created
-    // fresh overlaps while fixing another one. Returning only canonical_plan
-    // keeps the problem small and preserves the already-generated narrative.
-    for (let correctionAttempt = 1; correctionAttempt <= 2 && deterministicIssues.length; correctionAttempt += 1) {
-      const corrected = await structuredCompletion<{ canonical_plan: CanonicalPlanSpec }>({
+    if (blockingGeometryIssues.length && useDirectionImage) {
+      const corrected = await structuredCompletionWithImage<LivePlanSet>({
         plan: args.plan,
-        schema: canonicalPlanRepairSchema,
-        system: [
-          "You are Heyy Studio's architectural geometry correction engine. Repair only the supplied Canonical Plan; return canonical_plan only.",
-          `This is correction pass ${correctionAttempt} of 2. The current geometry failed deterministic validation.`,
-          "Do not explain the failures. Do not create a new design direction. Do not mirror or rotate the property.",
-          "The LOCKED PLAN FOUNDATION STRUCTURE in the payload is authoritative. Return every locked level in the same order and design actual rooms on every required storey. Never delete a required floor, add another floor, rename a locked level, change an outline, or change the shared stair/core relationship.",
-          requestedStoreys
-            ? `HARD FLOOR COUNT: return exactly ${requestedStoreys} level${requestedStoreys === 1 ? "" : "s"}. Never create an extra level.`
-            : "Preserve the intended floor count from the selected Direction Contract.",
-          "Preserve every required Space Program item and its intended level. You may reposition/rescale room rectangles intelligently to make the plan physically valid, but do not delete required indoor spaces.",
-          "ROOM GEOMETRY: enclosed indoor rooms on the same level may share boundaries but may never overlap. Keep every enclosed room within that level outline. Use varied, architecturally plausible proportions; do not pack rooms into equal strips or generic rows.",
-          "OUTDOOR GEOMETRY: pool, driveway, garden and yard are site elements, not indoor rooms. Attached terraces/balconies/outdoor-dining zones may sit outside the enclosed level outline and must not be used as filler rooms.",
-          "ACCESS: every enclosed room needs a real door to a physically adjacent room/hall or appropriate exterior edge. Door wall labels must match the actual shared wall. Use circulation relationships that match those physical adjacencies.",
-          "VERTICAL COORDINATION: use the locked shared vertical core in exactly the same x/y/width/height on every served floor. Upper-floor rooms must fit the locked upper outline/setback.",
-          "ENTRY/GARAGE/SITE: the Direction Contract locks the facade side and approximate zone. The main entry/pool/driveway anchors are immutable. The actual garage room rectangle may resize or shift modestly within the locked garage side/zone to avoid overlaps while remaining connected to the driveway; do not treat the contract garage rectangle as an exact room box.",
-          args.directionGeometryContract ? directionGeometryContractPrompt(args.directionGeometryContract) : "",
-          "The deterministic failures below are the exact defects to repair:",
-          ...deterministicIssues.map((issue, index) => `${index + 1}. ${issue}`),
-          "Return a complete canonical_plan object in the required schema and nothing else.",
-        ].join(" "),
+        schema: planSchema,
+        system: `${baseSystem} This is one correction pass. Preserve the attached Direction image relationships while correcting only the listed plan-coordination failures. Do not solve an overlap by moving the garage, entry, pool, outdoor-living zone or upper-floor massing to a different side of the house.`,
         payload: {
-          selected_direction_geometry_contract: args.directionGeometryContract || null,
-          locked_plan_foundation_structure: lockedPlanFoundationStructure(args.directionGeometryContract, requestedStoreys),
-          requested_storeys: requestedStoreys,
-          project_type: args.project.project_type || null,
-          saved_space_program: args.spaceProgram,
-          canonical_plan_to_repair: value.canonical_plan,
-          validation_failures_to_correct: deterministicIssues,
-          correction_attempt: correctionAttempt,
+          ...payload,
+          previous_plan: value,
         },
+        supabase: args.supabase as SupabaseClient,
+        referenceImage: args.directionImageReference as ArchitectureImageReference,
+        correctionIssues: blockingGeometryIssues.slice(0, 12),
       });
-
-      value = prepareCanonicalPlanCandidate(
-        { ...value, canonical_plan: corrected.value.canonical_plan },
-        args.directionGeometryContract,
-        requestedStoreys,
-      );
-      correctionUsages.push(corrected.usage);
-      deterministicIssues = [...new Set(foundationIssues(value))];
+      value = repairCanonicalPlanAccess(corrected.value);
+      correctionUsage = corrected.usage;
+    } else if (blockingGeometryIssues.length) {
+      // Legacy/non-visual fallback only. The multimodal Direction-first path never
+      // uses the old stabiliser because it can destroy the image-established layout.
+      value = stabilizeCanonicalPlanGeometry(value);
     }
 
-    if (deterministicIssues.length) {
-      throw new Error(
-        `Architecture Plan validation failed before the Plan Foundation was shown: ${deterministicIssues.join(" ")}`,
-      );
-    }
+    const remainingGeometryIssues = [
+      ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
+    ];
+    const foundationWarnings = remainingGeometryIssues.slice(0, 8);
 
     return {
       planSet: {
         ...value,
         planning_assumptions: [
           ...value.planning_assumptions,
-          "Plan Foundation validated against the selected Direction Geometry Contract and canonical geometry checks. Professional architectural development is still required for measured or construction documentation.",
+          "Plan Foundation prepared as a coordinated AI concept plan. Professional architectural development is required for measured or construction documentation.",
+          ...(foundationWarnings.length
+            ? [`Concept coordination notes: ${foundationWarnings.join(" ")}`]
+            : []),
         ],
         plan_images: expandedPlanViews(value, args.architectureDna),
       },
@@ -3388,10 +2712,11 @@ export async function generateArchitecturePlanSet(args: {
         requirement_extraction: null,
         plan_generation: first.usage,
         requirement_audit: null,
-        correction: correctionUsages,
+        correction: correctionUsage,
         correction_audit: null,
-        plan_foundation_contract_validation: Boolean(args.directionGeometryContract),
-        coordination_warnings: [],
+        plan_foundation_fast_path: true,
+        multimodal_direction_reference: useDirectionImage,
+        coordination_warnings: foundationWarnings,
       },
     };
   }
@@ -3425,7 +2750,7 @@ export async function generateArchitecturePlanSet(args: {
         "If a room is inaccessible, add or correct a real opening and circulation connection. If a stair/core moves between levels, move the level stair back onto the exact master-core coordinates.",
         "If a capacity target is distributed across several spaces or floors, make the explicit capacity_count values sum to the required target without double counting the same physical capacity.",
         args.planFoundationMode
-          ? "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements, the selected Architecture Direction and the locked plan-foundation geometry relationships."
+          ? "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements, the selected Architecture Direction and the coordinated plan-foundation relationships."
           : "Return a complete corrected plan that satisfies every HARD plan requirement while preserving already-satisfied requirements and the selected Architecture DNA.",
       ].join(" "),
       payload: {
@@ -3455,6 +2780,27 @@ export async function generateArchitecturePlanSet(args: {
   correctionUsage = correctionUsages;
   correctionAuditUsage = correctionAuditUsages;
 
+  // If the reasoning model still returns structurally invalid rectangle
+  // geometry after both correction passes, stabilize the complete building
+  // deterministically instead of failing the paid Plan Foundation job. This
+  // keeps the validator strict: we fix the model first, then run every check
+  // again against the repaired source of truth.
+  const geometryFailurePattern = /overlaps|outside the (?:master building|locked level) outline|no explicit door opening|no clear circulation|door .* wall|opening .* missing source room|stair core .* not stacked|multi-floor building must define/i;
+  if (deterministicIssues.some((issue) => geometryFailurePattern.test(issue))) {
+    value = stabilizeCanonicalPlanGeometry(value);
+    deterministicIssues = [
+      ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
+      ...geometryCoordinationIssues({ planSet: value, project: args.project }),
+      ...deterministicRequirementIssues(value, requirementContract),
+    ];
+    auditResult = await auditArchitecturePlanRequirements({
+      plan: args.plan,
+      contract: requirementContract,
+      planSet: value,
+    });
+    correctionAuditUsages.push(auditResult.usage);
+    auditFailures = hardPlanAuditFailures(requirementContract, auditResult.value);
+  }
 
   const unresolved = [...new Set([...deterministicIssues, ...auditFailures])];
   if (unresolved.length) {
@@ -3514,7 +2860,7 @@ export async function generateArchitectureVisualPrompts(args: {
       `The gallery must reflect these priorities: ${template.directionFocus.join(", ")}.`,
       existingDesignSource
         ? "This is an Existing Design / Plan-to-Visual workflow. The uploaded drawings will be supplied directly to the image editor as authoritative geometry. Do not describe or invent a specific footprint, room layout, stair position, opening pattern, roof geometry or massing that is not explicitly stated by the user."
-        : "This is a DIRECTION-FIRST new-design workflow. The selected Direction established the approved architectural identity first; the subsequently approved Canonical Plan Foundation translated that direction into exact geometry. For all Concept Visuals, the Canonical Plan is the geometry source of truth and the selected Direction is the architectural/style source of truth. Neither may replace the other.",
+        : "This is a DIRECTION-FIRST new-design workflow. The selected Direction establishes the architectural identity first; the approved Plan Foundation then becomes the geometry reference for Concept Visuals. Preserve the approved plan footprint, floor stacking, entry, pool/site relationship and circulation while applying the selected Direction's architecture, facade, roof, materials and landscape language.",
       existingDesignSource
         ? "Prompts should describe only the requested camera/view, material character, atmosphere, lighting, landscape treatment and functional experience. Always say to reconstruct the exact uploaded design."
         : "Every prompt must explicitly preserve the approved plan footprint, floor stacking, stair/core positions, entry, pool/site relationship and circulation while applying the selected Direction's architectural language.",
@@ -4443,43 +3789,81 @@ export async function generateAndStorePlanFoundationSheetImage(args: {
   canonicalPlan: CanonicalPlanSpec;
   architectureDna?: ArchitectureDna | null;
   plan: AiPlanConfig;
+  directionImageReference?: ArchitectureImageReference | null;
 }) {
   const levels = Array.isArray(args.canonicalPlan.levels) ? args.canonicalPlan.levels : [];
   if (!levels.length) throw new Error("The Plan Foundation has no coordinated floors to render.");
 
-  // The Plan Foundation sheet is a technical geometry artifact, not an AI image.
-  // Rendering every level from the same canonical coordinate system guarantees that
-  // identical stairs/cores/walls remain the same size and position floor-to-floor.
-  const svg = renderPlanFoundationSheetSvg({
-    plan: args.canonicalPlan,
-    projectName: args.projectName,
-    architectureDna: args.architectureDna || null,
-  });
-  const png = await sharp(Buffer.from(svg, "utf8"), { density: 180 })
-    .flatten({ background: "#FFFFFF" })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
+  const floorBrief = levels.map((level, index) => ({
+    floor: floorPlanTitle(level, index),
+    rooms: (level.rooms || []).map((room) => ({
+      name: room.name,
+      zone: room.zone,
+      capacity_type: room.capacity_type || null,
+      capacity_count: Number(room.capacity_count || 0) || null,
+    })),
+  }));
 
-  const stored = await storeArchitectureImageVariants({
+  const sharedCore = Array.isArray(args.canonicalPlan.vertical_cores)
+    ? args.canonicalPlan.vertical_cores.map((core) => ({
+        type: core.type,
+        serves_level_ids: core.serves_level_ids,
+      }))
+    : [];
+
+  const canonicalRecord = args.canonicalPlan as unknown as Record<string, unknown>;
+  const siteElements = Object.entries(canonicalRecord)
+    .filter(([key, value]) => {
+      if (["site", "footprint", "building_outline", "vertical_cores", "circulation_routes", "entry", "section_cuts", "levels"].includes(key)) return false;
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+      return (value as Record<string, unknown>).present === true;
+    })
+    .map(([type, value]) => ({
+      type,
+      ...(value as Record<string, unknown>),
+    }));
+
+  const siteBrief = {
+    site: args.canonicalPlan.site || null,
+    footprint: args.canonicalPlan.footprint || null,
+    entry: args.canonicalPlan.entry || null,
+    site_elements: siteElements,
+  };
+
+  const prompt = [
+    `Create ONE premium architectural PLAN FOUNDATION presentation sheet for ${args.projectName}.`,
+    `The sheet must show ALL ${levels.length} floor plans together on the same page, side-by-side in a clean architectural presentation.`,
+    "THIS SINGLE IMAGE IS THE PROJECT'S PLAN GEOMETRY REFERENCE. Every floor shown must clearly belong to the same building.",
+    "Coordinate the floors as one building: same orientation, same main structural/vertical core, stairs directly aligned floor-to-floor, sensible upper-floor footprint over the ground floor, and consistent exterior/site relationships.",
+    "Do not create separate unrelated floor-plan designs. Do not rotate one floor relative to another.",
+    "Every enclosed room must have a real door opening connected to circulation or an adjacent accessible space. Doors must sit in walls; no floating symbols.",
+    "Use professional black-and-white architectural plan graphics with strong wall hierarchy, proper door swings, windows, stairs, fixtures and restrained furniture. The result should look like a high-quality architect concept-plan sheet, not a debug diagram, zoning block plan or wireframe.",
+    "Do NOT invent numeric site dimensions, scale bars, area schedules or construction dimensions. Do not print fake measurements. Room names may be shown clearly, but keep annotations minimal and legible.",
+    "Keep every site relationship and every project-specific program element represented in the canonical plan consistent across the sheet where relevant. Do not invent residential features for non-residential projects, and do not assume a pool, garage, terrace, loading area, parking area or any other feature unless it exists in the project data.",
+    `FLOOR PROGRAMS: ${JSON.stringify(floorBrief)}`,
+    sharedCore.length ? `SHARED VERTICAL CORES: ${JSON.stringify(sharedCore)}` : "",
+    `SITE RELATIONSHIPS: ${JSON.stringify(siteBrief)}`,
+    args.directionImageReference
+      ? "REFERENCE 1 is the selected Design Direction image. Preserve its visible building identity in plan: garage side, front-entry position, pool/outdoor-living side, major massing proportions, upper-level footprint/setback and roof-related footprint cues. Do not copy perspective distortion; translate the same house into plan."
+      : "",
+    "Composition: white presentation board, equal visual scale for all floors, generous margins, Ground Floor first then Upper/Level floors in order. No photorealistic render, no elevation, no perspective, no mood board.",
+  ].filter(Boolean).join("\n\n");
+
+  return generateAndStoreArchitectureImage({
     supabase: args.supabase,
     userId: args.userId,
     projectId: args.projectId,
     folder: "plans",
     filenamePrefix: args.filenamePrefix || "plan-foundation-sheet",
-    sourceBytes: png,
+    prompt,
+    plan: args.plan,
+    architectureDna: null,
+    referenceImages: args.directionImageReference ? [args.directionImageReference] : [],
+    sourceGeometryReferences: [],
+    preserveSourceGeometry: false,
+    targetRole: "Generate one coordinated multi-floor architectural plan sheet. All floors must be designed together in the same image and must read as one building. This sheet becomes the approved geometry reference for later Directions and Visuals.",
     tier: "preview",
   });
-
-  return {
-    ...stored,
-    provider: "heyy-renderer" as const,
-    model: "canonical-plan-sheet-renderer-v2",
-    generationMethod: "deterministic-canonical-plan-sheet",
-    quality: "deterministic",
-    tier: "preview" as const,
-    referenceCount: 0,
-    usage: null,
-  };
 }
 
 export async function generateAndStoreArchitectureDocumentImage(args: {

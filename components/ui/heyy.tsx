@@ -13,13 +13,13 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
 const buttonBase =
-  "heyy-button inline-flex items-center justify-center gap-2 rounded-full font-extrabold tracking-[-0.01em] transition duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--focus-ring)] disabled:pointer-events-none disabled:opacity-45";
+  "heyy-button heyy-control-motion inline-flex min-h-[var(--touch-target)] items-center justify-center gap-2 rounded-full font-extrabold tracking-[-0.01em] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--focus-ring)] disabled:pointer-events-none disabled:opacity-45";
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary:
-    "border border-transparent bg-[var(--button-primary)] !text-[var(--button-primary-text)] shadow-[var(--shadow-button)] hover:-translate-y-0.5 hover:bg-[var(--button-primary-hover)] hover:shadow-[var(--shadow-button-hover)]",
+    "border border-transparent bg-[var(--button-primary)] !text-[var(--button-primary-text)] shadow-[var(--shadow-button)] hover:bg-[var(--button-primary-hover)] hover:shadow-[var(--shadow-button-hover)]",
   secondary:
-    "border border-[var(--border-strong)] bg-[var(--surface-strong)] !text-[var(--text-primary)] hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
+    "border border-[var(--border-strong)] bg-[var(--surface-strong)] !text-[var(--text-primary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]",
   ghost:
     "border border-transparent bg-transparent !text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
   danger:
@@ -27,9 +27,9 @@ const buttonVariants: Record<ButtonVariant, string> = {
 };
 
 const buttonSizes: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-4 text-xs",
-  md: "min-h-11 px-5 text-sm",
-  lg: "min-h-13 px-6 text-sm",
+  sm: "min-h-11 px-5 text-xs",
+  md: "min-h-11 px-6 text-sm",
+  lg: "min-h-13 px-8 text-sm",
 };
 
 export function Button({

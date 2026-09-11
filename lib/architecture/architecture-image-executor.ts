@@ -9,10 +9,6 @@ import {
   type CanonicalPlanSpec,
 } from "@/lib/ai/architecture";
 import { getAiMode, getArchitectureAiPlanConfig, type AiPlan, type ImageGenerationTier } from "@/lib/ai/config";
-import {
-  directionGeometryContractFromUnknown,
-  directionGeometryContractPrompt,
-} from "@/lib/architecture/direction-geometry-contract";
 
 type ImageTarget = "direction" | "concept" | "visual";
 
@@ -490,7 +486,6 @@ export async function executeArchitectureImageGeneration(args: {
     if (error || !direction) throw new Error(error?.message || "Architecture Direction not found.");
 
     const previousPath = direction.image_storage_path as string | null;
-    const generationJson = metadataRecord(direction.generation_json);
     let imageUrl: string;
     let storagePath: string | null = null;
     let imageMetadata: Record<string, unknown> = {};
@@ -502,13 +497,6 @@ export async function executeArchitectureImageGeneration(args: {
       if (!savedPrompt) {
         throw new Error("This direction has no saved image prompt. Regenerate the direction text first.");
       }
-      const directionGeometryContract = directionGeometryContractFromUnknown(generationJson.direction_geometry_contract);
-      if (directionFirstScratch && !directionGeometryContract) {
-        throw new Error("This Design Direction was created before Direction Geometry Contracts were enabled. Regenerate the selected Direction text before generating its visual.");
-      }
-      const directionGeometryPrompt = directionGeometryContract
-        ? directionGeometryContractPrompt(directionGeometryContract)
-        : "";
       const currentReference = imageReference({
         label: "Current Direction image. Preserve this direction's architectural expression while refining it.",
         storagePath: direction.image_storage_path,
@@ -553,7 +541,7 @@ export async function executeArchitectureImageGeneration(args: {
         filenamePrefix: `direction-${direction.direction_number}`,
         prompt: sourceGeometryLocked
           ? existingDesignDirectionBoardPrompt(direction as Record<string, unknown>)
-          : [savedPrompt, directionGeometryPrompt].filter(Boolean).join("\n\n"),
+          : savedPrompt,
         plan,
         architectureDna: sourceGeometryLocked ? null : fallbackArchitectureDna(direction as Record<string, unknown>),
         sourceGeometryReferences: sourceGeometryLocked
@@ -564,7 +552,7 @@ export async function executeArchitectureImageGeneration(args: {
         targetRole: sourceGeometryLocked
           ? "Create a STYLE / MATERIAL DIRECTION BOARD only. The uploaded source drawings define the actual building and this direction image must not establish replacement geometry."
           : directionFirstScratch
-            ? "Create a DESIGN DIRECTION / MASSING CONCEPT from the supplied DIRECTION GEOMETRY CONTRACT. The contract is the spatial authority: preserve its front/street edge, exact storey count, ground/upper massing outlines, main-entry facade position, garage/driveway side, pool position, outdoor-living relationship and primary vertical-core zone. Do not mirror or swap sides. The image establishes architectural expression around those already-locked anchors; it is not measured construction documentation."
+            ? "Create a DESIGN DIRECTION / MASSING CONCEPT for this project before exact floor plans are developed. Establish one repeatable architectural identity: overall massing intent, exact requested storey count, roof language, facade rhythm, material placement, entry character, landscape and atmosphere. Do not present this image as measured or locked floor-plan geometry. The selected Direction will guide the later Canonical Plan Foundation."
             : "Create this Architecture Direction as an architectural expression of the APPROVED PLAN FOUNDATION. Keep the approved plan geometry fixed; develop only facade composition, roof expression compatible with that footprint, materials, openings, landscape character and atmosphere.",
         tier: quality,
       }));
@@ -578,7 +566,6 @@ export async function executeArchitectureImageGeneration(args: {
         image_quality: generated.quality,
         existing_design_style_board: sourceGeometryLocked,
         direction_first_sequence: directionFirstScratch,
-        direction_geometry_contract: directionGeometryContract,
         source_geometry_locked: sourceGeometryLocked,
         source_reference_fingerprint: sourceGeometryLocked ? sourceFingerprint : null,
         source_geometry_stale: false,
@@ -586,6 +573,7 @@ export async function executeArchitectureImageGeneration(args: {
       };
     }
 
+    const generationJson = metadataRecord(direction.generation_json);
     const { data: updated, error: updateError } = await supabase
       .from("architecture_directions")
       .update({
@@ -624,13 +612,6 @@ export async function executeArchitectureImageGeneration(args: {
     ? await loadSelectedDirection(supabase, project, authenticatedUserId)
     : null;
   const masterDirectionJson = metadataRecord(masterDirection?.generation_json);
-  const masterDirectionGeometryContract = directionGeometryContractFromUnknown(masterDirectionJson.direction_geometry_contract);
-  const masterDirectionGeometryPrompt = masterDirectionGeometryContract
-    ? directionGeometryContractPrompt(masterDirectionGeometryContract)
-    : "";
-  if (masterDirection && directionFirstScratch && !sourceGeometryLocked && !masterDirectionGeometryContract) {
-    throw new Error("The selected Design Direction is missing its Geometry Contract. Regenerate the selected Direction and its visual before continuing.");
-  }
   const masterReference = masterDirection
     ? imageReference({
         label: "Selected Architecture Direction. Apply its facade, roof, materials, openings, landscape character and atmosphere WITHOUT changing the approved plan geometry.",
@@ -695,7 +676,7 @@ export async function executeArchitectureImageGeneration(args: {
               "Show restrained diagram overlays, material intent, site/landscape relationship, daylight and circulation analysis while keeping the original architecture recognisable.",
               "Do not return a new hero building render. Avoid AI-generated paragraph text; use clean graphic composition and diagrammatic studies.",
             ].join("\n")
-          : [savedPrompt, masterDirectionGeometryPrompt].filter(Boolean).join("\n\n"),
+          : savedPrompt,
         plan,
         architectureDna: sourceGeometryLocked ? null : architectureDna,
         sourceGeometryReferences: sourceGeometryLocked ? sourceReferencesForVisual(orderedSourceDocuments, "concept") : [],
@@ -705,7 +686,7 @@ export async function executeArchitectureImageGeneration(args: {
           : uniqueReferences([masterReference, currentConceptReference]),
         targetRole: sourceGeometryLocked
           ? "Create a concept ANALYSIS BOARD for the existing uploaded design. Source drawings control geometry; style references control presentation only."
-          : "Create a premium architectural concept presentation board for the SAME property. The selected Direction image controls architectural expression and the Direction Geometry Contract controls spatial anchors. Preserve the exact storey count, front/street orientation, entry, garage/driveway, pool/outdoor-living position, upper-level massing relationship and primary core zone. Combine the building with visual studies for massing evolution, site response, zoning, circulation, sun orientation, material palette and indoor-outdoor relationships. Do not mirror or create another property. Avoid AI-generated paragraph text; use diagrams and clean graphic composition.",
+          : "Create a premium architectural concept presentation board derived from the exact Master Architecture Reference. Combine the approved building with visual studies for massing evolution, site response, zoning, circulation, sun orientation, material palette and indoor-outdoor relationships. Do not return another standalone facade render and do not create another property. Avoid AI-generated paragraph text; use diagrams and clean graphic composition.",
         tier: quality,
       }));
       imageUrl = generated.imageUrl;
@@ -716,7 +697,6 @@ export async function executeArchitectureImageGeneration(args: {
         image_generation_method: generated.generationMethod,
         image_tier: quality,
         image_quality: generated.quality,
-        direction_geometry_contract: masterDirectionGeometryContract,
         source_geometry_locked: sourceGeometryLocked,
         source_reference_fingerprint: sourceGeometryLocked ? sourceFingerprint : null,
         source_geometry_stale: false,
@@ -1051,7 +1031,6 @@ export async function executeArchitectureImageGeneration(args: {
             group === "tour"
               ? "TOUR OUTPUT RULES: create one immersive room panorama with a level horizon, camera at eye height and strong continuity at the left and right edges. Preserve all approved door, window and circulation positions. This is one node in a connected room-to-room tour, not an unrelated interior redesign."
               : "",
-            masterDirectionGeometryPrompt,
             canonicalPlan
               ? `Canonical site and plan relationship: ${JSON.stringify(canonicalPlan)}`
               : "",
@@ -1079,7 +1058,7 @@ export async function executeArchitectureImageGeneration(args: {
           : `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. The selected Direction may affect materials, facade character, landscape and lighting only.`
         : group === "tour"
           ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the APPROVED PLAN FOUNDATION. Approved plans define geometry; the selected Direction defines architectural expression.`
-          : `Create the ${String(visual.title || visual.visual_type)} as a premium multi-study ARCHITECTURE CONCEPT BOARD. Three authorities describe ONE property: the APPROVED PLAN FOUNDATION controls exact geometry, the Direction Geometry Contract locks the site/massing anchors that existed before the plan, and the selected Design Direction controls visual language. They must agree. Preserve the exact number of levels, canonical footprint/upper-floor setback, shared vertical-core location, main entry, garage/driveway, pool location and major indoor-outdoor relationships. Never mirror or swap left/right site elements. Combine one main atmospheric perspective with smaller coordinated material/detail, sketch/diagram, landscape/lighting and spatial studies. Keep generated text minimal and do not present the output as a measured elevation or construction visualization.`,
+          : `Create the ${String(visual.title || visual.visual_type)} as a premium multi-study ARCHITECTURE CONCEPT BOARD. The APPROVED PLAN FOUNDATION is the GEOMETRY AUTHORITY and the selected Design Direction is the VISUAL-LANGUAGE AUTHORITY. Reconstruct one consistent building from those two sources rather than inventing another house. Preserve the exact number of levels, canonical footprint/massing relationship, shared vertical-core location, main entry, garage/driveway, pool and major indoor-outdoor relationships shown by the plan. Combine one main atmospheric perspective with smaller coordinated material/detail, sketch/diagram, landscape/lighting and spatial studies. Keep generated text minimal and do not present the output as a measured elevation or construction visualization.`,
       tier: quality,
     }));
     imageUrl = generated.imageUrl;
@@ -1092,7 +1071,6 @@ export async function executeArchitectureImageGeneration(args: {
       image_generation_method: generated.generationMethod,
       image_tier: quality,
       image_quality: generated.quality,
-      direction_geometry_contract: masterDirectionGeometryContract,
       source_geometry_locked: sourceGeometryLocked,
       source_reference_fingerprint: sourceGeometryLocked ? sourceFingerprint : null,
       source_geometry_stale: false,

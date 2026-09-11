@@ -1162,3 +1162,56 @@ a {
 :root[data-theme="dark"] .heyy-studio-project-page .bg-emerald-50 { background-color: rgba(5,150,105,.14) !important; }
 :root[data-theme="dark"] .heyy-studio-project-page .bg-amber-50 { background-color: rgba(217,119,6,.14) !important; }
 :root[data-theme="dark"] .heyy-studio-project-page :is(.bg-rose-50,.bg-pink-50) { background-color: rgba(225,29,117,.13) !important; }
+
+/* Heyy Studio UI System v1 — shared interaction and responsive foundation */
+:root {
+  --motion-fast: 150ms;
+  --motion-standard: 220ms;
+  --motion-emphasized: 380ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+  --radius-control: 0.95rem;
+  --radius-panel: 1.25rem;
+  --touch-target: 44px;
+}
+
+.heyy-control-motion {
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-standard) var(--ease-standard),
+    transform var(--motion-standard) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+
+.heyy-interactive-card {
+  transition:
+    transform var(--motion-standard) var(--ease-standard),
+    border-color var(--motion-standard) var(--ease-standard),
+    box-shadow var(--motion-standard) var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .heyy-interactive-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent-border);
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
+.heyy-touch-target {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+}
+
+.heyy-mobile-snap-row {
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.heyy-mobile-snap-row::-webkit-scrollbar {
+  display: none;
+}

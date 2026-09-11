@@ -2,7 +2,6 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { generateArchitectureDirection } from "@/lib/ai/architecture";
 import { getArchitectureAiPlanConfig, type AiPlan } from "@/lib/ai/config";
 import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
-import type { DirectionGeometryContract } from "@/lib/architecture/direction-geometry-contract";
 
 export type ArchitectureDirectionJobInput = {
   projectId?: string;
@@ -141,42 +140,6 @@ function nextVariation(existing: ExistingDirection | undefined) {
   const stored = existing?.generation_json?.demo_variation;
   const current = typeof stored === "number" ? stored : 0;
   return current + 1;
-}
-
-function demoGeometryContract(
-  number: number,
-  project: ProjectRow,
-  site: SiteRow | null,
-): DirectionGeometryContract {
-  const storeys = Math.max(1, Math.min(12, Math.round(Number(project.source_brief?.desired_floors || site?.desired_floors || 2) || 2)));
-  const variants = {
-    1: { ground: [{ x: 18, y: 20 }, { x: 78, y: 20 }, { x: 78, y: 76 }, { x: 18, y: 76 }], entryX: 49, garageX: 20, poolX: 62, poolY: 80, coreX: 46 },
-    2: { ground: [{ x: 13, y: 25 }, { x: 84, y: 25 }, { x: 84, y: 70 }, { x: 13, y: 70 }], entryX: 50, garageX: 16, poolX: 66, poolY: 73, coreX: 48 },
-    3: { ground: [{ x: 22, y: 18 }, { x: 76, y: 18 }, { x: 82, y: 70 }, { x: 18, y: 70 }], entryX: 52, garageX: 22, poolX: 61, poolY: 74, coreX: 48 },
-  } as const;
-  const v = variants[number as 1 | 2 | 3] || variants[1];
-  const upper = Array.from({ length: Math.max(0, storeys - 1) }, (_, index) => ({
-    level_index: index + 1,
-    relationship: index === 0 ? "Upper level steps back from the ground floor while preserving the same central core." : "Upper level continues the coordinated stepped massing.",
-    points: [{ x: 24, y: 24 }, { x: 74, y: 24 }, { x: 74, y: 66 }, { x: 24, y: 66 }],
-  }));
-  return {
-    version: 1,
-    coordinate_system: "site_grid_0_100",
-    front_edge: "south",
-    storeys,
-    massing_summary: "Coordinated demonstration massing for Direction preview.",
-    site_relationship_summary: "Front access, attached garage, outdoor living and pool share one fixed site arrangement.",
-    ground_outline: v.ground.map((point) => ({ ...point })),
-    upper_level_outlines: upper,
-    entry: { edge: "south", position_0_100: 52, x: v.entryX, y: 76, description: "Main entrance on the front facade." },
-    garage: { present: true, edge: "west", position_0_100: 25, x: v.garageX, y: 42, width: 17, height: 27, description: "Attached garage in the left/front wing." },
-    driveway: { present: true, access_edge: "south", x: v.garageX, y: 69, width: 17, height: 24, description: "Driveway connects the front boundary to the garage." },
-    pool: { present: true, x: v.poolX, y: v.poolY, width: 23, height: 10, relationship_to_entry: "right", description: "Pool remains outside the building beside the main outdoor living area." },
-    outdoor_living: { present: true, x: 54, y: 68, width: 27, height: 10, description: "Outdoor living connects the principal living spaces to the pool." },
-    vertical_core: { required: storeys > 1, x: v.coreX, y: 43, width: 8, height: 10, description: "One shared stair/core zone across all storeys." },
-    must_preserve: ["front edge", "main-entry position", "garage/driveway relationship", "pool position", "outdoor-living relationship", "shared vertical core"],
-  };
 }
 
 function demoSourceDirection(
@@ -609,7 +572,6 @@ async function runArchitectureDirections(args: {
           ...(base.generation_json || {}),
           selected_material_keys: selectedMaterials.map((material) => material.material_key),
           selected_materials: selectedMaterials,
-          direction_geometry_contract: demoGeometryContract(number, project, site),
         },
       });
       continue;
@@ -642,8 +604,6 @@ async function runArchitectureDirections(args: {
         selected_materials: selectedMaterials,
         direction_first_sequence: project.workflow_mode === "build_from_scratch",
         saved_space_program: project.workflow_mode === "build_from_scratch" ? spaceProgram : [],
-        direction_geometry_contract: generated.geometryContract,
-        direction_geometry_prompt: generated.geometryPrompt,
         usage: generated.usage,
         image_usage: null,
         preview_assets: null,

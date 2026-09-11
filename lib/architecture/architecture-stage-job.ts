@@ -9,12 +9,8 @@ import {
   type CanonicalPlanSpec,
   type LiveVisualPrompt,
 } from "@/lib/ai/architecture";
-import { getArchitectureAiPlanConfig, type AiPlan } from "@/lib/ai/config";
+import { getArchitectureAiPlanConfig, getArchitecturePlanAiPlanConfig, type AiPlan } from "@/lib/ai/config";
 import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
-import {
-  directionGeometryContractFromUnknown,
-  type DirectionGeometryContract,
-} from "@/lib/architecture/direction-geometry-contract";
 
 export type ArchitectureStage = "concept" | "plans" | "visuals" | "design-pack" | "all";
 
@@ -211,18 +207,9 @@ function directionLedArchitectureDna(
 ): ArchitectureDna {
   const sourceBrief = metadataRecord(project.source_brief);
   const professionalBrief = metadataRecord(project.professional_brief);
-  const directionGeometryContract = directionGeometryContractFromUnknown(
-    metadataRecord(direction.generation_json).direction_geometry_contract,
-  );
   const requestedStoreys = Math.max(
     1,
-    Number(
-      site?.desired_floors ||
-      sourceBrief.desired_floors ||
-      professionalBrief.desired_floors ||
-      directionGeometryContract?.storeys ||
-      1
-    ) || 1,
+    Number(site?.desired_floors || sourceBrief.desired_floors || professionalBrief.desired_floors || 1) || 1,
   );
   const directionMaterials = Array.isArray(direction.materials)
     ? direction.materials.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
@@ -245,13 +232,9 @@ function directionLedArchitectureDna(
     roof_form: roofStrategy,
     facade_rhythm: facadeStrategy,
     window_language: facadeStrategy,
-    entry_expression: directionGeometryContract
-      ? `${siteResponse} Locked entry: ${directionGeometryContract.entry.edge} edge at ${Math.round(directionGeometryContract.entry.position_0_100)}% of the facade.`
-      : siteResponse,
+    entry_expression: siteResponse,
     landscape_relationship: landscapeStrategy,
-    pool_relationship: directionGeometryContract?.pool.present
-      ? `Preserve the locked exterior pool position and relationship: ${directionGeometryContract.pool.description}`
-      : "Do not invent a pool unless it is explicitly required by the project brief.",
+    pool_relationship: "Preserve any pool or outdoor-space requirement from the site/program while following the selected Direction.",
     material_placement: directionMaterials.map((material) => ({
       material: String(material.name || material.material || "Selected material"),
       location: String(material.role || material.description || "As established by the selected Direction"),
@@ -264,7 +247,6 @@ function directionLedArchitectureDna(
       `entry/site response: ${siteResponse}`,
       "exact requested floor count",
       "one shared vertical-core coordinate system across every served floor",
-      ...(directionGeometryContract?.must_preserve || []),
     ],
     prohibited_changes: [
       "do not invent a conflicting architectural identity",
@@ -273,18 +255,10 @@ function directionLedArchitectureDna(
       "do not contradict the selected Direction's massing and site response",
     ],
     visual_prompt_anchor: imagePrompt,
-    footprint_shape: directionGeometryContract
-      ? `${directionGeometryContract.massing_summary}. Ground outline: ${JSON.stringify(directionGeometryContract.ground_outline)}`
-      : formStrategy,
-    plan_massing_logic: directionGeometryContract
-      ? `${spatialStrategy}. Direction Geometry Contract is the spatial parent: ${directionGeometryContract.site_relationship_summary}`
-      : `${spatialStrategy}. Translate the selected Direction into one canonical footprint and coordinated level stack.`,
-    vertical_core_strategy: directionGeometryContract?.vertical_core.required
-      ? `Use the contract core zone x=${directionGeometryContract.vertical_core.x}, y=${directionGeometryContract.vertical_core.y}, width=${directionGeometryContract.vertical_core.width}, height=${directionGeometryContract.vertical_core.height} as the shared vertical-core location on every served level.`
-      : "Use one master vertical-core record when multiple storeys require it. Identical stairs/lifts/shafts must use exactly the same x, y, width and height on every served level.",
-    upper_level_setback_strategy: directionGeometryContract?.upper_level_outlines.length
-      ? directionGeometryContract.upper_level_outlines.map((level) => `Level ${level.level_index + 1}: ${level.relationship}`).join(" | ")
-      : `Upper-level outlines may step back only when consistent with the selected Direction: ${formStrategy}`,
+    footprint_shape: formStrategy,
+    plan_massing_logic: `${spatialStrategy}. Translate the selected Direction into one canonical footprint and coordinated level stack.`,
+    vertical_core_strategy: "Use one master vertical-core record. Identical stairs/lifts/shafts must use exactly the same x, y, width and height on every served level.",
+    upper_level_setback_strategy: `Upper-level outlines may step back only when consistent with the selected Direction: ${formStrategy}`,
   };
 }
 
@@ -348,10 +322,7 @@ function planFoundationAssetRecord(asset: {
   thumbnailStoragePath: string;
   quality?: string;
   tier?: string;
-  provider?: string;
-  model?: string;
-  generationMethod?: string;
-}) {
+}, model: string) {
   return {
     preview_url: asset.imageUrl,
     preview_storage_path: asset.storagePath,
@@ -359,11 +330,10 @@ function planFoundationAssetRecord(asset: {
     master_storage_path: asset.masterStoragePath,
     thumbnail_url: asset.thumbnailImageUrl,
     thumbnail_storage_path: asset.thumbnailStoragePath,
-    quality: asset.quality || "deterministic",
+    quality: asset.quality || "medium",
     tier: asset.tier || "preview",
-    provider: asset.provider || "heyy-renderer",
-    model: asset.model || "canonical-plan-sheet-renderer-v2",
-    generation_method: asset.generationMethod || "deterministic-canonical-plan-sheet",
+    provider: "openai",
+    model,
     generated_at: new Date().toISOString(),
   };
 }
@@ -446,23 +416,23 @@ async function runArchitectureStage(args: {
     const masterDirectionStoragePath = selectedDirection && typeof selectedDirection.image_storage_path === "string"
       ? selectedDirection.image_storage_path
       : null;
-    let directionGeometryContract: DirectionGeometryContract | null = null;
-
+    const planAiPlan = getArchitecturePlanAiPlanConfig(planName);
+    const selectedDirectionImageReference = selectedDirection
+      ? {
+          label: `${String((selectedDirection as Record<string, unknown>).title || project.project_name || "Selected Direction")} — visible architecture source`,
+          storagePath: masterDirectionStoragePath,
+          url: typeof selectedDirection.image_url === "string" ? selectedDirection.image_url : null,
+        }
+      : null;
     if (directionFirst && selectedDirection) {
       const directionImageReady = Boolean(masterDirectionStoragePath || selectedDirection.image_url);
       if (!directionImageReady) {
         throw new Error("Generate the selected Design Direction visual before preparing the Plan Foundation.");
       }
-
-      const existingDirectionJson = metadataRecord(selectedDirection.generation_json);
-      directionGeometryContract = directionGeometryContractFromUnknown(existingDirectionJson.direction_geometry_contract);
-      if (!directionGeometryContract) {
-        throw new Error("This selected Design Direction does not contain a Direction Geometry Contract. Regenerate the selected Direction text and visual before preparing the Plan Foundation.");
-      }
     }
 
     const generated = await generateArchitecturePlanSet({
-      plan: aiPlan,
+      plan: planAiPlan,
       project: project as unknown as Record<string, unknown>,
       direction: foundationDirection,
       architectureDna: foundationDna,
@@ -471,7 +441,8 @@ async function runArchitectureStage(args: {
       planning,
       selectedMaterials,
       spaceProgram,
-      directionGeometryContract,
+      directionImageReference: selectedDirectionImageReference,
+      supabase: admin,
       planFoundationMode: true,
     });
     const { plan_images, canonical_plan, ...planFields } = generated.planSet;
@@ -486,7 +457,8 @@ async function runArchitectureStage(args: {
           generation_mode: directionFirst ? "direction_first" : "plan_foundation",
           generation_json: {
             mode: directionFirst ? "direction_first" : "plan_foundation",
-            text_model: aiPlan.textModel,
+            text_model: planAiPlan.textModel,
+            multimodal_direction_reference: Boolean(selectedDirectionImageReference),
             usage: generated.usage,
             architecture_dna: foundationDna,
             canonical_plan,
@@ -494,7 +466,6 @@ async function runArchitectureStage(args: {
             plan_geometry_authority: true,
             selected_direction_id: selectedDirection?.id || null,
             master_direction_storage_path: masterDirectionStoragePath,
-            direction_geometry_contract: directionGeometryContract,
             selected_materials: selectedMaterials,
             saved_space_program: spaceProgram,
             prepared_at: new Date().toISOString(),
@@ -516,7 +487,7 @@ async function runArchitectureStage(args: {
       prompts: plan_images,
       group: "plans",
       existing: existingVisuals,
-      model: aiPlan.textModel,
+      model: planAiPlan.textModel,
       usage: generated.usage,
       architectureDna: foundationDna,
       canonicalPlan: canonical_plan,
@@ -528,7 +499,6 @@ async function runArchitectureStage(args: {
         plan_geometry_authority: true,
         master_direction_id: selectedDirection?.id || null,
         master_direction_storage_path: masterDirectionStoragePath,
-        direction_geometry_contract: directionGeometryContract,
       },
     }));
     await removeObsoleteVisualRows(admin, existingVisuals, "plans", planRows.map((row) => row.visual_type));
@@ -537,9 +507,8 @@ async function runArchitectureStage(args: {
       if (error) throw new Error(error.message);
     }
 
-    // Render the entire Plan Foundation from the canonical model as ONE deterministic
-    // multi-floor sheet. Every floor uses the identical coordinate transform and
-    // drawing scale, so shared stairs/cores cannot appear larger on another level.
+    // Generate one professional multi-floor Plan Foundation sheet using the proven pre-rebuild image workflow.
+    // The selected Direction guides the plan content, but the old professional plan-sheet generator is preserved.
     const generatedAsset = await generateAndStorePlanFoundationSheetImage({
       supabase: admin,
       userId: project.user_id,
@@ -548,7 +517,8 @@ async function runArchitectureStage(args: {
       projectName: project.project_name,
       canonicalPlan: canonical_plan,
       architectureDna: foundationDna,
-      plan: aiPlan,
+      plan: planAiPlan,
+      directionImageReference: selectedDirectionImageReference,
     });
 
     const foundationRow = planRows.find((item) => item.visual_type === "plan_foundation_sheet");
@@ -565,12 +535,10 @@ async function runArchitectureStage(args: {
           architecture_dna: foundationDna,
           active_plan_view: "technical",
           plan_foundation_sheet_authority: true,
-          plan_foundation_version: 3,
-          same_scale_sheet: true,
+          plan_foundation_version: 2,
           direction_first_sequence: directionFirst,
           selected_direction_id: selectedDirection?.id || null,
-          direction_geometry_contract: directionGeometryContract,
-          technical_assets: planFoundationAssetRecord(generatedAsset),
+          technical_assets: planFoundationAssetRecord(generatedAsset, aiPlan.imageModel),
         },
       })
       .eq("project_id", project.id)

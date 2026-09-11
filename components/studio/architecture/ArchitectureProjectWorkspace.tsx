@@ -406,6 +406,9 @@ type ProjectEstimate = {
   assumptions: string[];
 };
 
+const ARCHITECTURE_PROFESSIONAL_MODE_ENABLED =
+  process.env.NEXT_PUBLIC_ARCHITECTURE_PROFESSIONAL_MODE === "true";
+
 type TabId =
   | "overview"
   | "setup"
@@ -2481,8 +2484,12 @@ export default function ArchitectureProjectWorkspace({ projectId }: { projectId:
               description={[projectDraft.project_type, projectDraft.city, projectDraft.country].filter(Boolean).join(" · ") || workflowLabel(projectDraft.workflow_mode)}
               progress={projectDraft.completion || 0}
               statusLabel={workflowHeroMessage}
-              mode={projectDraft.working_mode === "professional" ? "professional" : "guided"}
-              onModeChange={(mode) => void changeWorkingMode(mode)}
+              mode={ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
+                ? (projectDraft.working_mode === "professional" ? "professional" : "guided")
+                : undefined}
+              onModeChange={ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
+                ? (mode) => void changeWorkingMode(mode)
+                : undefined}
               saving={saving === "working-mode"}
             />
 
@@ -4627,7 +4634,7 @@ function PlansTab({
       <StageLocked
         eyebrow="Direction Visual Required"
         title="Generate the selected Direction visual before the Plan Foundation"
-        body="The selected Direction and its visual now share one Direction Geometry Contract for the building massing, entry, garage/driveway, pool/outdoor relationship and upper-level form. The Plan Foundation uses that same contract plus the Space Program instead of trying to reverse-engineer geometry from the finished image."
+        body="Heyy Studio reads the selected Direction visual as a massing and site-reference layer, then combines it with the Space Program to create the canonical floor plans. Generate the selected Direction visual first so the plan can follow the building you approved."
         onOpenDirections={onOpenDirections}
         actionLabel="Generate Direction Visual →"
       />
@@ -4690,7 +4697,7 @@ function PlansTab({
           <p>
             {existingDesignSource
               ? "Your uploaded drawings remain the source of truth. This stage can organise them into the project, prepare optional faithful redraws and coordinate additional documentation without inventing a different plan."
-              : "The selected Design Direction and its locked Geometry Contract now guide the building massing and site anchors. Heyy Studio fits the Space Program into that same coordinated multi-floor property before any Concept Visual is generated."}
+              : "The selected Design Direction now guides the building massing. Heyy Studio turns that route, the site and the Space Program into one coordinated multi-floor Plan Foundation before any Concept Visual is generated."}
           </p>
           <div className="demo-explanation">
             <strong>{existingDesignSource ? "Existing geometry stays locked." : "These are not permit drawings."}</strong>
@@ -4702,7 +4709,7 @@ function PlansTab({
         <button type="button" className="primary-action" disabled={generating} onClick={onGenerate}>
           {generating ? "Preparing Plan Foundation..." : `Prepare Plan Foundation · ${ARCHITECTURE_CREDIT_COSTS.textGeneration} credits`}
         </button>
-        {generating && <StageGenerationLoading title="Preparing Plan Foundation" detail="Validating the selected Direction Geometry Contract, then fitting the Space Program into one canonical building with aligned floors, fixed site anchors and one shared vertical-core system." />}
+        {generating && <StageGenerationLoading title="Preparing Plan Foundation" detail="Turning the selected Design Direction, Space Program and site constraints into one canonical building geometry with aligned floors and one shared vertical-core system." />}
       </section>
     );
   }

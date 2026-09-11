@@ -62,6 +62,20 @@ export function getArchitectureAiPlanConfig(plan: AiPlan): AiPlanConfig {
   };
 }
 
+
+export function getArchitecturePlanAiPlanConfig(plan: AiPlan): AiPlanConfig {
+  // Plan Foundation is the highest-reasoning step in normal Architecture mode.
+  // Keep the rest of Architecture on the lower-cost text model, but let this
+  // one multimodal stage use a stronger model that can reason directly from
+  // the selected Direction image plus the full project/program data.
+  const base = getArchitectureAiPlanConfig(plan);
+  return {
+    ...base,
+    textModel: env("ARCHITECTURE_PLAN_MODEL", "gpt-5.6-sol"),
+    maxOutputTokens: Math.max(base.maxOutputTokens, 24000),
+  };
+}
+
 export function imageQualityForTier(
   plan: AiPlanConfig,
   tier: ImageGenerationTier,

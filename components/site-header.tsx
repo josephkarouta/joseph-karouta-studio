@@ -85,11 +85,11 @@ export default function SiteHeader() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-[var(--border)] bg-[color:var(--glass)] backdrop-blur-2xl">
-      <div className="mx-auto flex h-[var(--header-height)] max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-[var(--header-height)] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" onClick={handleLogoClick} className="shrink-0" aria-label="Heyy Studio home">
           <HeyyLogo
             variant={resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
-            height={31}
+            height={36}
           />
         </Link>
 
@@ -108,7 +108,7 @@ export default function SiteHeader() {
         <div className="flex items-center gap-2">
           <Link
             href="/contact?topic=expert"
-            className="hidden min-h-10 items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-xs font-black text-white shadow-[0_10px_24px_rgba(109,40,217,.24)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(109,40,217,.32)] lg:inline-flex"
+            className="hidden min-h-10 items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-5 text-xs font-black text-white shadow-[0_10px_24px_rgba(109,40,217,.24)] transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-[0_12px_28px_rgba(109,40,217,.3)] lg:inline-flex"
           >
             <UserRound size={15} /> Contact an Expert
           </Link>
@@ -167,14 +167,14 @@ export default function SiteHeader() {
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-3 w-[290px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-2 shadow-[var(--shadow-card-hover)] backdrop-blur-2xl"
+                  className="absolute right-0 mt-3 w-[304px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-2 shadow-[var(--shadow-card-hover)] backdrop-blur-2xl"
                 >
-                  <div className="rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-500 p-4 text-white">
-                    <p className="truncate text-sm font-black">{displayName}</p>
-                    <p className="mt-1 truncate text-xs text-white/70">{user.email}</p>
-                    <div className="mt-3 flex items-center justify-between rounded-xl bg-white/12 px-3 py-2">
-                      <span className="text-[0.65rem] font-black uppercase tracking-[0.14em]">{plan} plan</span>
-                      <span className="text-xs font-black">{credits.available} credits left</span>
+                  <div className="rounded-2xl border border-white/15 bg-[linear-gradient(135deg,#6f2dff_0%,#9b2cff_52%,#e235c7_100%)] p-4 text-white shadow-[0_16px_38px_rgba(111,45,255,0.24)]">
+                    <p className="truncate text-sm font-black text-white">{displayName}</p>
+                    <p className="mt-1 truncate text-xs font-semibold text-white/72">{user.email}</p>
+                    <div className="mt-3 flex items-center justify-between rounded-xl border border-white/15 bg-white/12 px-3 py-2 backdrop-blur-sm">
+                      <span className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-white/90">{plan} plan</span>
+                      <span className="text-xs font-black text-white">{credits.available} credits left</span>
                     </div>
                   </div>
 
@@ -221,12 +221,13 @@ export default function SiteHeader() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4 shadow-xl lg:hidden">
+        <div className="max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4 shadow-xl lg:hidden">
           <nav className="grid gap-1">
             {navItems.map(([label, href]) => (
               <Link
                 key={label}
                 href={href}
+                onClick={() => setMobileOpen(false)}
                 className="rounded-xl px-4 py-3 text-sm font-extrabold text-[var(--text-secondary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
               >
                 {label}
@@ -244,9 +245,9 @@ export default function SiteHeader() {
 
           {user ? (
             <div className="mt-3 grid gap-1 border-t border-[var(--border)] pt-3">
-              <div className="mb-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 p-4 text-white">
-                <p className="truncate text-sm font-black">{displayName}</p>
-                <p className="mt-1 text-xs font-bold text-white/75">{plan} plan · {credits.available} credits left</p>
+              <div className="mb-2 rounded-2xl border border-[var(--accent-border)] bg-[linear-gradient(135deg,var(--accent-soft),var(--surface-strong))] p-4">
+                <p className="truncate text-sm font-black text-[var(--text-primary)]">{displayName}</p>
+                <p className="mt-1 text-xs font-bold text-[var(--accent-strong)]">{plan} plan · {credits.available} credits left</p>
               </div>
               <MenuLink href="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
               {isExpert && <MenuLink href="/expert" icon={<BriefcaseBusiness size={16} />} label="Expert Portal" />}

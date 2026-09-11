@@ -128,6 +128,9 @@ type VisualType = "main_space" | "alternate_angle" | "focal_point" | "material_d
 type InteriorImageType = PlanType | VisualType;
 type GenerationStage = "technical" | "preview" | "final";
 type WorkMode = "guided" | "professional";
+
+const INTERIOR_PROFESSIONAL_MODE_ENABLED =
+  process.env.NEXT_PUBLIC_INTERIOR_PROFESSIONAL_MODE === "true";
 type RoomMapping = { id: string; name: string; notes?: string };
 type RoomVisualContext = { roomKey: string; roomName: string; floorLabel: string; sourcePlanAssetId: string; roomNotes?: string };
 type GenerationTarget = { viewType: InteriorImageType; stage: GenerationStage; roomKey?: string } | null;
@@ -300,7 +303,10 @@ function InteriorExperience() {
   const [error, setError] = useState("");
   const [resolvingProject, setResolvingProject] = useState(true);
 
-  const workMode: WorkMode = form.workMode === "professional" ? "professional" : "guided";
+  const workMode: WorkMode =
+    form.workMode === "professional" && (INTERIOR_PROFESSIONAL_MODE_ENABLED || Boolean(project?.id))
+      ? "professional"
+      : "guided";
   const activeSteps = useMemo(
     () => workMode === "professional" && config.professionalSteps?.length ? config.professionalSteps : config.steps,
     [workMode],
@@ -819,8 +825,10 @@ function InteriorExperience() {
             description={[String(form.roomType || form.projectScope || ""), String(form.location || "")].filter(Boolean).join(" · ") || "Interior design project"}
             progress={progress}
             statusLabel="Brief, plans, materials, furniture, lighting and concept visuals stay connected in one workspace."
-            mode={workMode}
-            onModeChange={(mode) => void changeWorkMode(mode)}
+            mode={INTERIOR_PROFESSIONAL_MODE_ENABLED ? workMode : undefined}
+            onModeChange={INTERIOR_PROFESSIONAL_MODE_ENABLED
+              ? (mode) => void changeWorkMode(mode)
+              : undefined}
           />
         ) : (
           <StudioHero
@@ -830,9 +838,15 @@ function InteriorExperience() {
             description={config.description}
             controls={(
               <>
-                <StudioModeToggle value={workMode} onChange={(mode) => void changeWorkMode(mode)} tone="interior" compact />
+                {INTERIOR_PROFESSIONAL_MODE_ENABLED ? (
+                  <StudioModeToggle value={workMode} onChange={(mode) => void changeWorkMode(mode)} tone="interior" compact />
+                ) : null}
                 <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                  <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple questions and a clear concept" : "Full fit-out, schedules and procurement package"}</span>
+                  <span className="text-xs font-bold text-[var(--text-secondary)]">
+                    {INTERIOR_PROFESSIONAL_MODE_ENABLED
+                      ? (workMode === "guided" ? "Simple questions and a clear concept" : "Full fit-out, schedules and procurement package")
+                      : "Concept-first guidance from brief to interior design package"}
+                  </span>
                   <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost} />
                 </div>
               </>
@@ -1050,7 +1064,9 @@ function OnboardingWorkspace({
       <GlassCard className="p-5 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Eyebrow>{workMode === "professional" ? "Professional mode" : "Guided mode"} · Step {step + 1} of {steps.length}</Eyebrow>
+            <Eyebrow>{INTERIOR_PROFESSIONAL_MODE_ENABLED
+          ? (workMode === "professional" ? "Professional mode" : "Guided mode")
+          : "Interior concept"} · Step {step + 1} of {steps.length}</Eyebrow>
             <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">{section.title}</h2>
             <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">{section.description}</p>
           </div>

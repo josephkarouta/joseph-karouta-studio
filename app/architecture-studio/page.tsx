@@ -24,6 +24,9 @@ import {
 
 type Mode = "build" | "upload";
 type WorkingMode = "guided" | "professional";
+
+const ARCHITECTURE_PROFESSIONAL_MODE_ENABLED =
+  process.env.NEXT_PUBLIC_ARCHITECTURE_PROFESSIONAL_MODE === "true";
 type LandStart = "owned" | "looking" | "exploring";
 type FileCategory = "source" | "planning" | "reference";
 
@@ -472,7 +475,7 @@ export default function ArchitectureStudioPage() {
           workflow_mode: workflowMode,
           project_type: savedProjectType || null,
           scope: mode === "build" ? scope || null : "Existing Design",
-          working_mode: workingMode,
+          working_mode: ARCHITECTURE_PROFESSIONAL_MODE_ENABLED ? workingMode : "guided",
           professional_brief: {
             target_gross_area_m2: toNullableNumber(form.targetGrossArea),
             budget_level: form.budgetLevel || null,
@@ -634,13 +637,19 @@ export default function ArchitectureStudioPage() {
               tone="architecture"
               eyebrow="Site planning & architecture direction"
               title="Architecture Studio"
-              description="Start a new design or develop a sketch, plan, drawing, photo or model you already have. Guided and Professional modes share one connected project workspace."
+              description={ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
+                ? "Start a new design or develop a sketch, plan, drawing, photo or model you already have. Guided and Professional modes share one connected project workspace."
+                : "Start a new design or develop a sketch, plan, drawing, photo or model you already have. Heyy Studio guides you through one connected concept-development workspace."}
               controls={(
                 <>
-                  <StudioModeToggle value={workingMode} onChange={setWorkingMode} tone="architecture" compact />
+                  {ARCHITECTURE_PROFESSIONAL_MODE_ENABLED ? (
+                    <StudioModeToggle value={workingMode} onChange={setWorkingMode} tone="architecture" compact />
+                  ) : null}
                   <div className="mt-3 flex items-center justify-between gap-3 px-1">
                     <span className="text-xs font-bold text-[var(--text-secondary)]">
-                      {workingMode === "guided" ? "Simple language and smart recommendations" : "Areas, structure, schedules and technical controls"}
+                      {ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
+                        ? (workingMode === "guided" ? "Simple language and smart recommendations" : "Areas, structure, schedules and technical controls")
+                        : "Concept-first guidance from brief to design package"}
                     </span>
                     <CreditPill credits={CREDIT_COSTS.architectureConcept} />
                   </div>
@@ -782,11 +791,15 @@ export default function ArchitectureStudioPage() {
                   tone="architecture"
                   eyebrow="Project summary"
                   title={form.projectName || "New Architecture Project"}
-                  subtitle={workingMode === "professional" ? "Professional architecture workspace" : "Guided architecture workspace"}
+                  subtitle={ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
+                    ? (workingMode === "professional" ? "Professional architecture workspace" : "Guided architecture workspace")
+                    : "Architecture concept workspace"}
                   progress={progress}
                   rows={[
                     { label: "Workflow", value: modeLabel(mode) },
-                    { label: "Working mode", value: workingMode === "professional" ? "Professional Mode" : "Guided Mode" },
+                    ...(ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
+                      ? [{ label: "Working mode", value: workingMode === "professional" ? "Professional Mode" : "Guided Mode" }]
+                      : []),
                     { label: "Project type", value: projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected" },
                     { label: "Scope", value: scope || "Not selected" },
                     { label: "Location", value: [form.city, form.country].filter(Boolean).join(", ") || "Not added" },
@@ -890,7 +903,7 @@ function BuildWorkflow({
 
   return <>
     <div className="info-panel blue"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Ready to Create</p><h3 className="mt-2 text-2xl font-black text-slate-950">Your project will open as an editable Architecture workspace.</h3><p className="mt-3 text-sm leading-7 text-slate-600">Materials, colours, planning details, Space Program and all generated content remain editable after creation.</p></div>
-    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"} /><SummaryRow label="Working Mode" value={workingMode === "professional" ? "Professional" : "Guided"} /><SummaryRow label="Site" value={landStart === "owned" ? "Confirmed land" : landStart === "looking" ? "Looking for land" : "Exploring without land"} /><SummaryRow label="Spaces" value={selectedSpaces.join(", ") || "Smart suggestions later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
+    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"} />{ARCHITECTURE_PROFESSIONAL_MODE_ENABLED && <SummaryRow label="Working Mode" value={workingMode === "professional" ? "Professional" : "Guided"} />}<SummaryRow label="Site" value={landStart === "owned" ? "Confirmed land" : landStart === "looking" ? "Looking for land" : "Exploring without land"} /><SummaryRow label="Spaces" value={selectedSpaces.join(", ") || "Smart suggestions later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
   </>;
 }
 

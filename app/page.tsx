@@ -1,38 +1,24 @@
 "use client";
 
-import { useEffect } from "react";
+import type { CSSProperties } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  ArrowRightLeft,
-  Building2,
-  Check,
-  CirclePlay,
-  FileText,
-  ImageIcon,
-  Images,
   Layers3,
   Lightbulb,
-  Megaphone,
   PackageCheck,
-  Palette,
-  Presentation,
-  Sofa,
-  Sparkles,
+  PlusCircle,
   WandSparkles,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-import CreditTopUps from "@/components/account/CreditTopUps";
 import PlanCards from "@/components/account/PlanCards";
 import SiteFooter from "@/components/site-footer";
 import SiteHeader from "@/components/site-header";
 import OpenAssistantButton from "@/components/home/OpenAssistantButton";
 import {
   ButtonLink,
-  CreditPill,
   Eyebrow,
-  GlassCard,
   PageContainer,
 } from "@/components/ui/heyy";
 import { PLATFORM_TOOLS, VISIBLE_STUDIOS } from "@/lib/platform/platform-registry";
@@ -41,107 +27,72 @@ import { PLANS } from "@/lib/platform/plans";
 const studioContent: Record<
   string,
   {
-    icon: LucideIcon;
     label: string;
-    title: string;
     description: string;
-    examples: string[];
+    image: string;
   }
 > = {
   brand_studio: {
-    icon: Palette,
     label: "Brand Studio",
-    title: "Create a brand",
-    description: "Build a clear identity people recognize.",
-    examples: ["Logo & identity", "Business cards & packaging", "Brand guidelines"],
-  },
-  architecture_studio: {
-    icon: Building2,
-    label: "Architecture Studio",
-    title: "Design a space",
-    description: "Turn an idea or plan into a clear design direction.",
-    examples: ["Ideas & layouts", "Materials & plans", "Exterior visuals"],
-  },
-  interior_studio: {
-    icon: Sofa,
-    label: "Interior Studio",
-    title: "Design an interior",
-    description: "Shape the look, layout and feeling of a room.",
-    examples: ["Room direction", "Furniture & materials", "Interior visuals"],
+    description: "Logos, identity, guidelines and real-world applications.",
+    image: "/home/studios/brand-studio.png",
   },
   marketing_studio: {
-    icon: Megaphone,
     label: "Marketing Studio",
-    title: "Create a campaign",
-    description: "Turn one message into a complete campaign direction.",
-    examples: ["Campaign idea", "Content & messaging", "Creative visuals"],
+    description: "Campaigns, content, messaging and creative direction.",
+    image: "/home/studios/marketing-studio.png",
+  },
+  architecture_studio: {
+    label: "Architecture Studio",
+    description: "Concepts, plans, visuals and detailed outputs.",
+    image: "/home/studios/architecture-studio.png",
+  },
+  interior_studio: {
+    label: "Interior Design Studio",
+    description: "Spaces, layouts, materials and polished interior visuals.",
+    image: "/home/studios/interior-studio.png",
   },
 };
 
-const toolIcons: Record<string, LucideIcon> = {
-  text_to_image: ImageIcon,
-  image_to_video: CirclePlay,
-  digital_adaptations: Layers3,
-  ai_upscaler: Images,
-  powerpoint_generator: Presentation,
-  pdf_tools: FileText,
-  file_converter: ArrowRightLeft,
+const toolVisuals: Record<string, string> = {
+  text_to_image: "/home/tools/text-to-image.webp",
+  image_to_video: "/home/tools/image-to-video.webp",
+  digital_adaptations: "/home/tools/digital-adaptations.webp",
+  ai_upscaler: "/home/tools/ai-upscaler.webp",
+  powerpoint_generator: "/home/tools/powerpoint-generator.webp",
+  pdf_tools: "/home/tools/pdf-tools.webp",
+  file_converter: "/home/tools/file-converter.webp",
 };
 
-const toolCopy: Record<string, { title: string; description: string }> = {
-  text_to_image: {
-    title: "Generate an image",
-    description: "Turn a simple prompt into a visual.",
-  },
-  image_to_video: {
-    title: "Turn an image into video",
-    description: "Add movement to an existing image.",
-  },
-  digital_adaptations: {
-    title: "Resize a design",
-    description: "Adapt one creative into new sizes and formats.",
-  },
-  ai_upscaler: {
-    title: "Improve image quality",
-    description: "Upscale an image when you need a cleaner result.",
-  },
-  powerpoint_generator: {
-    title: "Create a presentation",
-    description: "Build a polished presentation from your content.",
-  },
-  pdf_tools: {
-    title: "Work with a PDF",
-    description: "Compress, split, combine or protect a PDF.",
-  },
-  file_converter: {
-    title: "Convert a file",
-    description: "Switch between common PDF and image formats quickly.",
-  },
-};
 
 const simpleSteps = [
   {
     icon: Lightbulb,
-    number: "01",
-    title: "Tell us what you want to make",
-    text: "Answer a few simple questions or upload what you have.",
+    number: "1",
+    title: "Create",
+    text: "Start with an idea or a simple brief.",
   },
   {
     icon: WandSparkles,
-    number: "02",
-    title: "Create it with AI",
-    text: "Explore ideas, compare directions and choose what works.",
+    number: "2",
+    title: "Generate",
+    text: "Get strong AI-powered directions and results.",
+  },
+  {
+    icon: Layers3,
+    number: "3",
+    title: "Refine",
+    text: "Compare, adjust and make the work yours.",
   },
   {
     icon: PackageCheck,
-    number: "03",
-    title: "Finish it with an expert",
-    text: "Send your chosen direction for professional final files.",
+    number: "4",
+    title: "Go further",
+    text: "Bring in an expert when you need production-ready files.",
   },
 ] as const;
 
 export default function HomePage() {
-  useHomepageMotion();
   const { user, loading: accountLoading, plan: currentPlan, credits } = useAuth();
   const currentPlanId = String(currentPlan || "free").toLowerCase();
   return (
@@ -150,9 +101,9 @@ export default function HomePage() {
 
       <section className="home-hero relative isolate overflow-hidden pt-[var(--header-height)]">
         <div className="home-grid absolute inset-0 -z-20 opacity-60" />
-        <div data-home-parallax="0.08" className="home-motion-parallax absolute -left-52 top-10 -z-10 h-[540px] w-[540px] rounded-full bg-fuchsia-400/14 blur-[120px]" />
-        <div data-home-parallax="-0.06" className="home-motion-parallax absolute -right-52 top-4 -z-10 h-[620px] w-[620px] rounded-full bg-blue-400/12 blur-[130px]" />
-        <div data-home-parallax="0.04" className="home-motion-parallax absolute bottom-[-18rem] left-[38%] -z-10 h-[520px] w-[520px] rounded-full bg-violet-500/12 blur-[120px]" />
+        <div className="absolute -left-52 top-10 -z-10 h-[540px] w-[540px] rounded-full bg-fuchsia-400/14 blur-[120px]" />
+        <div className="absolute -right-52 top-4 -z-10 h-[620px] w-[620px] rounded-full bg-blue-400/12 blur-[130px]" />
+        <div className="absolute bottom-[-18rem] left-[38%] -z-10 h-[520px] w-[520px] rounded-full bg-violet-500/12 blur-[120px]" />
 <video
   autoPlay
   loop
@@ -161,233 +112,240 @@ export default function HomePage() {
   preload="metadata"
   poster="/hero-video-poster.jpg"
   aria-hidden="true"
-  className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-cover object-center lg:block"
+  className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover object-center"
 >
   <source src="/hero-video-web.mp4" type="video/mp4" />
 </video>
-        <div className="hero-image-overlay pointer-events-none absolute inset-0 z-[1] hidden lg:block" />
+        <div className="hero-image-overlay pointer-events-none absolute inset-0 z-[1]" />
 
-        <PageContainer className="relative z-10 min-h-0 py-10 sm:min-h-[690px] sm:py-16 lg:flex lg:items-center lg:py-24">
-          <div data-home-reveal className="relative z-10 max-w-[650px]">
-            <p className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-[var(--accent-strong)]">
+        <PageContainer className="relative z-10 flex min-h-[600px] items-end py-10 sm:min-h-[660px] sm:py-16 lg:min-h-[680px] lg:items-center lg:py-20">
+          <div className="relative z-10 w-full max-w-[1320px] mx-auto">
+            <div className="max-w-[650px]">
+            <p className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-white/80 lg:text-[var(--accent-strong)]">
               Create with AI. Build with Experts.
             </p>
 
-            <h1 className="mt-4 max-w-[680px] text-[2.65rem] font-bold leading-[0.98] tracking-[-0.045em] text-[var(--text-primary)] sm:mt-6 sm:text-[clamp(3.15rem,5.4vw,5.65rem)] sm:leading-[1.02]">
+            <h1 className="mt-4 max-w-[680px] text-[2.65rem] font-black leading-[0.98] tracking-[-0.045em] text-white drop-shadow-[0_8px_28px_rgba(0,0,0,0.28)] sm:mt-6 sm:text-[clamp(3.15rem,5.4vw,5.65rem)] sm:leading-[1.02] lg:text-[var(--text-primary)] lg:drop-shadow-none">
               <span className="block">Turn your idea</span>
               <span className="home-spectrum-text block">into finished work.</span>
             </h1>
 
-            <p className="mt-5 max-w-2xl text-base font-semibold leading-7 text-[var(--text-secondary)] sm:mt-8 sm:text-lg sm:leading-8">
+            <p className="mt-5 max-w-2xl text-base font-semibold leading-7 text-white/80 sm:mt-8 sm:text-lg sm:leading-8 lg:text-[var(--text-secondary)]">
               Play with ideas, shape what you love, and call in an expert when you are ready to finish it.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2.5 sm:mt-9 sm:gap-3">
-              <ButtonLink href="#create" size="lg">
+              <ButtonLink href="#create" size="lg" className="min-w-[154px]">
                 Start creating <ArrowRight size={16} />
               </ButtonLink>
-              <ButtonLink href="#tools" variant="secondary" size="lg">
+              <ButtonLink href="#tools" variant="secondary" size="lg" className="min-w-[154px]">
                 Use a quick tool
               </ButtonLink>
             </div>
           </div>
+          </div>
 
-          <HeroPlayground />
         </PageContainer>
       </section>
 
-      <section id="create" className="relative py-14 sm:py-32">
+      <section id="create" className="scroll-mt-[var(--header-height)] home-studios-section relative py-16 sm:py-24 lg:py-28">
         <PageContainer>
+          <div className="mx-auto w-full max-w-[1320px]">
           <SectionHeading
-            eyebrow="Studios"
+            eyebrow="AI Studios"
             title="What do you want to create?"
-            description="Pick a Studio and start playing with ideas."
+            description="Each Studio brings together specialised AI tools and workflows for a focused creative journey."
+            align="left"
           />
 
-          <div className="mt-8 grid gap-4 sm:mt-14 sm:gap-5 lg:grid-cols-2">
+          <div className="-mx-4 mt-8 snap-x snap-mandatory overflow-x-auto px-4 pb-3 [scrollbar-width:none] sm:-mx-6 sm:mt-10 sm:px-6 lg:mx-0 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden">
+            <div className="grid w-max grid-flow-col auto-cols-[82vw] gap-4 sm:auto-cols-[46vw] lg:w-full lg:grid-flow-row lg:grid-cols-4 lg:auto-cols-auto">
             {VISIBLE_STUDIOS.map((studio, studioIndex) => {
               const content = studioContent[studio.id];
               if (!content) return null;
-              const Icon = content.icon;
-
               return (
                 <Link
                   key={studio.id}
                   href={studio.href || "/dashboard"}
-                  data-home-reveal
-                  className="studio-card group block"
-                  style={{ transitionDelay: `${studioIndex * 80}ms` }}
+                  className="studio-card group block snap-start"
                 >
-                  <article
-                    className="relative min-h-[330px] overflow-hidden rounded-[1.6rem] border p-5 shadow-[var(--shadow-card)] transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-card-hover)] sm:min-h-[390px] sm:rounded-[2rem] sm:p-9"
-                    style={{
-                      borderColor: studio.border,
-                      background: `linear-gradient(145deg, ${studio.soft}, var(--surface-strong) 62%)`,
-                    }}
-                  >
-                    <div
-                      className="absolute -right-20 -top-20 h-72 w-72 rounded-full opacity-15 blur-3xl"
-                      style={{ background: studio.accent }}
-                    />
+                  <article className="studio-card-shell flex h-full flex-col overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#0d0b12] shadow-[0_18px_50px_rgba(18,10,35,0.14)] transition-[border-color,box-shadow] duration-200 hover:border-white/18 hover:shadow-[0_24px_64px_rgba(18,10,35,0.20)] sm:rounded-[1.55rem]">
+                    <div className="studio-card-image relative aspect-[1.5/1] shrink-0 overflow-hidden rounded-t-[1.25rem] bg-[#09070f] sm:rounded-t-[1.45rem]">
+                      <Image
+                        src={content.image}
+                        alt={`${content.label} preview`}
+                        fill
+                        priority={studioIndex < 2}
+                        sizes="(max-width: 639px) 82vw, (max-width: 1023px) 46vw, 25vw"
+                        className="scale-[1.08] object-cover transition-transform duration-700 ease-out group-hover:scale-[1.095]"
+                      />
+                    </div>
 
-                    <div className="relative grid h-full gap-5 sm:grid-cols-[0.92fr_1.08fr] sm:items-stretch sm:gap-8">
-                      <div className="flex flex-col">
-                      <div className="flex items-start justify-between gap-4">
+                    <div
+                      className="studio-card-footer relative flex min-h-[140px] flex-1 flex-col overflow-hidden p-[1.125rem] text-white sm:min-h-[156px] sm:p-5"
+                      style={{ "--studio-accent": studio.accent } as CSSProperties}
+                    >
+                      <div className="relative z-10">
+                        <h3 className="text-[0.98rem] font-black tracking-[-0.035em] text-white sm:text-lg">
+                          {content.label}
+                        </h3>
+                        <p className="mt-2 max-w-[18rem] text-[0.72rem] font-semibold leading-5 text-white/72 sm:text-xs sm:leading-5">
+                          {content.description}
+                        </p>
+                      </div>
+                      <div className="relative z-10 mt-auto flex justify-end pt-4">
                         <span
-                          className="grid h-12 w-12 place-items-center rounded-xl border shadow-sm sm:h-14 sm:w-14 sm:rounded-2xl"
-                          style={{ background: studio.soft, borderColor: studio.border, color: studio.accent }}
+                          className="studio-card-arrow grid h-9 w-9 place-items-center rounded-full border border-white/18 bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] backdrop-blur-sm transition-[background-color,border-color] duration-200 group-hover:border-white/32 group-hover:bg-white/16"
+                          aria-hidden="true"
                         >
-                          <Icon size={24} />
+                          <ArrowRight size={15} />
                         </span>
                       </div>
-
-                      <p className="mt-4 text-[0.6rem] font-black uppercase tracking-[0.16em] sm:mt-7 sm:text-[0.62rem]" style={{ color: studio.accent }}>
-                        {content.label}
-                      </p>
-                      <h3 className="mt-2 text-3xl font-black leading-[0.95] tracking-[-0.055em] sm:mt-3 sm:text-5xl">
-                        {content.title}
-                      </h3>
-                      <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-4 sm:text-base sm:leading-7">
-                        {content.description}
-                      </p>
-
-                      <div className="mt-4 space-y-1.5 sm:mt-6 sm:space-y-2">
-                        {content.examples.slice(0, 2).map((item) => (
-                          <p key={item} className="flex items-center gap-2 text-xs font-bold text-[var(--text-secondary)]">
-                            <Check size={13} style={{ color: studio.accent }} /> {item}
-                          </p>
-                        ))}
-                      </div>
-
-                      <div className="mt-auto flex items-center gap-2 pt-5 text-sm font-black sm:pt-9" style={{ color: studio.accent }}>
-                        Open Studio <ArrowRight size={16} className="transition-transform group-hover:translate-x-1.5" />
-                      </div>
-                      </div>
-
-                      <div data-home-parallax={studioIndex % 2 === 0 ? "0.018" : "-0.018"} className="home-motion-parallax">
-                        <StudioPreview studioId={studio.id} accent={studio.accent} soft={studio.soft} />
-                      </div>
                     </div>
                   </article>
                 </Link>
               );
             })}
+            </div>
+          </div>
           </div>
         </PageContainer>
       </section>
 
-      <section id="tools" className="border-y border-[var(--border)] bg-[var(--surface)] py-14 sm:py-32">
+      <section id="tools" className="scroll-mt-[var(--header-height)] home-tools-section py-16 sm:py-20 lg:py-24">
         <PageContainer>
-          <div className="flex flex-col gap-5 sm:gap-8 lg:flex-row lg:items-end lg:justify-between">
-            <SectionHeading
-              eyebrow="Quick tools"
-              title="Quick idea? Make it happen."
-              description="Use a focused tool without starting a full Studio project."
-              align="left"
-            />
-            <ButtonLink href="/tools" variant="secondary">
-              View all tools <ArrowRight size={15} />
-            </ButtonLink>
-          </div>
-
-          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-            {PLATFORM_TOOLS.map((tool, toolIndex) => {
-              const Icon = toolIcons[tool.id] || Sparkles;
-              const copy = toolCopy[tool.id] || { title: tool.label, description: tool.description };
-
-              return (
-                <Link
-                  key={tool.id}
-                  href={tool.href}
-                  data-home-reveal
-                  className="quick-tool-card group block"
-                  style={{ transitionDelay: `${toolIndex * 60}ms` }}
-                >
-                  <article className="flex h-full min-h-[235px] flex-col overflow-hidden rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow-card)] transition duration-300 hover:-translate-y-1 hover:border-[var(--accent-border)] hover:shadow-[var(--shadow-card-hover)] sm:min-h-[285px] sm:rounded-[1.7rem] sm:p-5">
-                    <div className="relative h-20 overflow-hidden rounded-[1rem] sm:h-24 sm:rounded-[1.15rem]" style={{ background: `linear-gradient(135deg, ${tool.soft}, var(--surface))` }}>
-                      <div className="absolute -right-4 -top-7 h-24 w-24 rounded-full opacity-20 blur-2xl" style={{ background: tool.accent }} />
-                      <span className="absolute bottom-4 left-4 grid h-12 w-12 place-items-center rounded-2xl bg-[var(--surface-strong)] shadow-sm" style={{ color: tool.accent }}>
-                        <Icon size={21} />
-                      </span>
-                    </div>
-                    <p className="mt-4 text-[0.6rem] font-black uppercase tracking-[0.16em] text-[var(--text-muted)] sm:mt-6 sm:text-[0.62rem]">{tool.label}</p>
-                    <h3 className="mt-2 text-xl font-black tracking-[-0.04em]">{copy.title}</h3>
-                    <p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-secondary)]">{copy.description}</p>
-                    <div className="mt-auto flex items-center justify-between gap-3 pt-5 sm:pt-7">
-                      <CreditPill credits={tool.creditLabel.replace("From ", "").replace(" credits", "")} label={tool.group === "utility" ? "" : "credits"} />
-                      <ArrowRight size={16} style={{ color: tool.accent }} className="transition-transform group-hover:translate-x-1" />
-                    </div>
-                  </article>
-                </Link>
-              );
-            })}
-          </div>
-        </PageContainer>
-      </section>
-
-      <section id="how-it-works" className="pb-8 pt-14 sm:pb-16 sm:pt-32">
-        <PageContainer>
+          <div className="mx-auto w-full max-w-[1320px]">
           <SectionHeading
-            eyebrow="How it works"
-            title="From idea to finished work."
-            description="Start simple, explore quickly and bring in an expert only when you need one."
+            eyebrow="AI tools"
+            title="Quick tools. Big results."
+            description="Create, enhance and convert without starting a full Studio project."
+            align="left"
           />
 
-          <div className="mt-8 grid gap-4 sm:mt-14 sm:gap-5 lg:grid-cols-3">
-            {simpleSteps.map(({ icon: Icon, number, title, text }, stepIndex) => (
-              <div
-                key={title}
-                data-home-reveal
-                style={{ transitionDelay: `${stepIndex * 90}ms` }}
-              >
-                <GlassCard className="how-step min-h-[215px] p-5 sm:min-h-[270px] sm:p-8">
-                  <div className="flex items-center justify-between">
-                    <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-                      <Icon size={20} />
-                    </span>
-                    <span className="text-[0.68rem] font-black tracking-[0.18em] text-[var(--text-muted)]">{number}</span>
-                  </div>
-                  <h3 className="mt-6 text-[1.35rem] font-black leading-[1] tracking-[-0.045em] sm:mt-9 sm:text-2xl">{title}</h3>
-                  <p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-4">{text}</p>
-                </GlassCard>
-              </div>
-            ))}
-          </div>
+          <div className="-mx-4 mt-8 snap-x snap-mandatory overflow-x-auto px-4 pb-4 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:mx-0 lg:mt-10 lg:overflow-visible lg:px-0 [&::-webkit-scrollbar]:hidden">
+            <div className="grid w-max grid-flow-col auto-cols-[82vw] gap-4 sm:auto-cols-[46vw] lg:w-full lg:grid-flow-row lg:grid-cols-3 lg:auto-cols-auto xl:grid-cols-4">
+              {PLATFORM_TOOLS.map((tool) => {
+                const visual = toolVisuals[tool.id];
 
-          <div data-home-reveal className="mt-4 flex flex-col gap-4 rounded-[1.45rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-5 sm:mt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:rounded-[1.7rem] sm:p-7">
-            <div>
-              <p className="text-lg font-black tracking-[-0.03em]">Not sure which Studio or tool to use?</p>
-              <p className="mt-1 text-sm font-semibold text-[var(--text-secondary)]">Tell Heyy what you want to make.</p>
+                return (
+                  <Link
+                    key={tool.id}
+                    href={tool.href}
+                      className="quick-tool-card group block snap-start"
+                  >
+                    <article className="flex h-full flex-col overflow-hidden rounded-[1.3rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-[var(--shadow-card)] transition-[border-color,box-shadow] duration-200 ease-out hover:border-[var(--accent-border)] hover:shadow-[var(--shadow-card-hover)] sm:rounded-[1.45rem]">
+                      <div className="relative aspect-[3/2] shrink-0 overflow-hidden bg-[var(--surface)]">
+                        {visual && (
+                          <Image
+                            src={visual}
+                            alt={`${tool.label} preview`}
+                            fill
+                            sizes="(max-width: 639px) 82vw, (max-width: 1023px) 46vw, (max-width: 1279px) 33vw, 25vw"
+                            className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025]"
+                          />
+                        )}
+                      </div>
+
+                      <div className="flex min-h-[92px] flex-1 items-center justify-between gap-3 px-4 py-3.5 sm:min-h-[100px] sm:px-5 sm:py-4">
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-black tracking-[-0.03em] text-[var(--text-primary)] sm:text-base">
+                            {tool.label}
+                          </h3>
+                          <p className="mt-1 line-clamp-1 text-[0.68rem] font-bold text-[var(--text-muted)] sm:text-xs">
+                            {tool.creditLabel}
+                          </p>
+                        </div>
+                        <span
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors duration-200"
+                          style={{ background: tool.soft, color: tool.accent }}
+                          aria-hidden="true"
+                        >
+                          <ArrowRight size={15} />
+                        </span>
+                      </div>
+                    </article>
+                  </Link>
+                );
+              })}
             </div>
-            <div className="shrink-0">
-              <OpenAssistantButton />
-            </div>
+          </div>
           </div>
         </PageContainer>
       </section>
 
-      <section id="pricing" className="pb-14 pt-8 sm:pb-32 sm:pt-14">
+      <section id="how-it-works" className="scroll-mt-[var(--header-height)] home-steps-section py-14 sm:py-20 lg:py-24">
         <PageContainer>
+          <div className="mx-auto w-full max-w-[1320px]">
+          <div className="home-steps-panel rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[0_20px_60px_rgba(40,24,68,0.08)] sm:rounded-[1.8rem] sm:p-7 lg:p-9">
+            <SectionHeading
+              eyebrow="How it works"
+              title="From idea to finished work, in a few simple steps."
+              description="Brief your idea, explore with AI, refine it, then bring in an expert when needed."
+              align="left"
+              size="compact"
+            />
+
+            <div className="mt-5 grid grid-cols-1 sm:mt-8 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+              {simpleSteps.map(({ icon: Icon, number, title, text }) => (
+                <article
+                  key={title}
+                  className="home-step-item grid grid-cols-[2rem_minmax(0,1fr)_2.25rem] items-center gap-x-3 border-b border-[var(--border)] py-3.5 first:pt-0 last:border-b-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_2.4rem] sm:items-start sm:rounded-[1.15rem] sm:border sm:bg-[var(--surface)] sm:p-4 sm:first:p-4 sm:last:border sm:last:p-4 lg:min-h-[154px]"
+                >
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--accent-soft)] text-[0.7rem] font-black text-[var(--accent-strong)] sm:hidden">
+                    {number}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="hidden text-[0.62rem] font-black uppercase tracking-[0.15em] text-[var(--accent-strong)] sm:block">
+                      Step {number}
+                    </span>
+                    <h3 className="text-[0.96rem] font-black tracking-[-0.03em] text-[var(--text-primary)] sm:mt-4 sm:text-base lg:text-[1.02rem]">{title}</h3>
+                    <p className="mt-1 text-[0.69rem] font-semibold leading-[1.15rem] text-[var(--text-secondary)] sm:mt-1.5 sm:text-[0.72rem] sm:leading-5">{text}</p>
+                  </div>
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)] sm:h-10 sm:w-10">
+                    <Icon size={17} strokeWidth={2} />
+                  </span>
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-col gap-3 rounded-[1.05rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-3.5 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+              <div>
+                <p className="text-sm font-black tracking-[-0.03em] sm:text-base">Not sure which Studio or tool to use?</p>
+                <p className="mt-0.5 text-[0.68rem] font-semibold text-[var(--text-secondary)] sm:text-xs">Tell Heyy what you want to make.</p>
+              </div>
+              <div className="shrink-0">
+                <OpenAssistantButton />
+              </div>
+            </div>
+          </div>
+          </div>
+        </PageContainer>
+      </section>
+
+      <section id="pricing" className="scroll-mt-[var(--header-height)] home-pricing-section py-14 sm:py-20 lg:py-24">
+        <PageContainer>
+          <div className="mx-auto w-full max-w-[1240px]">
           <SectionHeading
             eyebrow="Plans & credits"
             title="Start free. Upgrade when you need more."
-            description="AI credits are included. Expert work is quoted separately."
+            description="Plans include AI credits. Top up anytime; Expert work is quoted separately."
+            size="compact"
           />
 
           {!accountLoading && user && (
-            <div className="mx-auto mt-7 flex max-w-6xl flex-col gap-3 rounded-[1.45rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:rounded-[1.7rem] sm:p-6">
+            <div className="mx-auto mt-6 flex max-w-[1240px] flex-col gap-3 rounded-[1.2rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] p-3.5 sm:mt-9 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:rounded-[1.55rem] sm:p-5">
               <div>
                 <p className="text-[0.62rem] font-black uppercase tracking-[0.15em] text-[var(--accent-strong)]">Your account</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <p className="text-xl font-black text-[var(--text-primary)]">
+                  <p className="text-base font-black text-[var(--text-primary)] sm:text-lg">
                     Current plan: {PLANS.find((item) => item.id === currentPlanId)?.name || currentPlan}
                   </p>
-                  <span className="rounded-full border border-[var(--accent-border)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-black text-[var(--accent-strong)]">
-                    {credits.available.toLocaleString("en-US")} credits available
+                  <span className="rounded-full border border-[var(--accent-border)] bg-[var(--surface-strong)] px-2.5 py-1 text-[0.68rem] font-black text-[var(--accent-strong)] sm:px-3 sm:py-1.5 sm:text-xs">
+                    {credits.available.toLocaleString("en-US")} credits
                   </span>
                 </div>
-                <p className="mt-2 text-xs font-semibold text-[var(--text-secondary)]">
-                  Your current plan is highlighted below.
+                <p className="mt-1.5 hidden text-xs font-semibold text-[var(--text-secondary)] sm:block">
+                  Your current plan is marked below.
                 </p>
               </div>
               <ButtonLink href="/billing" variant="secondary" className="shrink-0">
@@ -396,19 +354,32 @@ export default function HomePage() {
             </div>
           )}
 
-          <div className="mx-auto mt-7 max-w-6xl sm:mt-10">
-            <PlanCards />
+          <div className="mx-auto mt-5 max-w-[1240px] sm:mt-8">
+            <PlanCards compactMobile />
           </div>
 
-          <div className="mx-auto mt-7 max-w-6xl rounded-[1.45rem] border border-[var(--border)] bg-[var(--surface)] p-4 sm:mt-10 sm:rounded-[1.7rem] sm:p-7">
-            <CreditTopUps />
+          <div className="mx-auto mt-5 max-w-[1240px] overflow-hidden rounded-[1.2rem] border border-[var(--accent-border)] bg-[var(--accent-soft)] sm:mt-7 sm:rounded-[1.45rem]">
+            <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <div className="flex items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-sm">
+                  <PlusCircle size={17} />
+                </span>
+                <div>
+                  <p className="text-sm font-black tracking-[-0.03em] text-[var(--text-primary)] sm:text-base">Buy credits</p>
+                  <p className="mt-0.5 text-[0.68rem] font-semibold text-[var(--text-secondary)] sm:text-xs">Top up anytime. Purchased credits never expire.</p>
+                </div>
+              </div>
+              <ButtonLink href="/credits" variant="secondary" size="sm" className="shrink-0 sm:min-w-[154px]">
+                View credit packs <ArrowRight size={14} />
+              </ButtonLink>
+            </div>
+            <div className="flex flex-col gap-2 border-t border-[var(--accent-border)] px-4 py-3 text-[0.66rem] font-semibold leading-5 text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:text-[0.7rem]">
+              <span>Prices are in US dollars. Expert production is quoted separately before you pay.</span>
+              <ButtonLink href="/credit-guide" variant="ghost" size="sm" className="shrink-0 self-start sm:self-auto">
+                See credit costs <ArrowRight size={13} />
+              </ButtonLink>
+            </div>
           </div>
-
-          <div className="mx-auto mt-5 flex max-w-6xl flex-col items-center gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 text-center text-xs font-semibold leading-5 text-[var(--text-secondary)] sm:mt-7 sm:flex-row sm:justify-between sm:gap-3 sm:px-5 sm:py-4 sm:text-left sm:leading-6">
-            <span>Prices are in US dollars. Expert production is quoted separately before you pay.</span>
-            <ButtonLink href="/credit-guide" variant="secondary" size="sm" className="shrink-0">
-              See credit costs
-            </ButtonLink>
           </div>
         </PageContainer>
       </section>
@@ -416,49 +387,130 @@ export default function HomePage() {
       <SiteFooter />
 
       <style jsx global>{`
-        [data-home-reveal] {
-          opacity: 0;
-          transform: translate3d(0, 28px, 0) scale(0.985);
-          transition:
-            opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
-            transform 850ms cubic-bezier(0.22, 1, 0.36, 1);
+
+        #create .overflow-x-auto,
+        #tools .overflow-x-auto {
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior-x: contain;
         }
 
-        [data-home-reveal].is-visible {
-          opacity: 1;
-          transform: translate3d(0, 0, 0) scale(1);
-        }
-
-        .home-motion-parallax {
-          transform: translate3d(0, var(--home-parallax-y, 0px), 0);
-          will-change: transform;
-        }
 
         .hero-image-overlay {
-          background: linear-gradient(
-            90deg,
-            rgba(255, 255, 255, 0.97) 0%,
-            rgba(255, 255, 255, 0.88) 28%,
-            rgba(255, 255, 255, 0.48) 45%,
-            rgba(255, 255, 255, 0.08) 61%,
-            rgba(255, 255, 255, 0) 72%
-          );
+          background:
+            linear-gradient(
+              180deg,
+              rgba(8, 6, 20, 0.10) 0%,
+              rgba(8, 6, 20, 0.20) 34%,
+              rgba(8, 6, 20, 0.56) 66%,
+              rgba(8, 6, 20, 0.88) 100%
+            );
         }
 
-        [data-theme="dark"] .hero-image-overlay {
-          background: linear-gradient(
-            90deg,
-            rgba(18, 16, 24, 0.96) 0%,
-            rgba(18, 16, 24, 0.84) 30%,
-            rgba(18, 16, 24, 0.42) 47%,
-            rgba(18, 16, 24, 0.05) 64%,
-            rgba(18, 16, 24, 0) 76%
-          );
+        .home-hero > video {
+          filter: brightness(0.84) saturate(0.96);
         }
 
-        [data-theme="dark"] .home-hero > video {
-  filter: brightness(0.72) saturate(0.9);
-}
+        .home-studios-section {
+          background:
+            radial-gradient(circle at 8% 2%, color-mix(in srgb, var(--accent-soft) 44%, transparent), transparent 32%),
+            linear-gradient(180deg, var(--surface-strong) 0%, color-mix(in srgb, var(--surface) 96%, var(--accent-soft)) 100%);
+        }
+
+        .studio-card-shell {
+          isolation: isolate;
+        }
+
+        .studio-card-image {
+          border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+
+        .studio-card-footer {
+          background:
+            radial-gradient(circle at 88% 6%, color-mix(in srgb, var(--studio-accent) 42%, transparent) 0%, transparent 32%),
+            radial-gradient(circle at 4% 104%, color-mix(in srgb, var(--studio-accent) 26%, transparent) 0%, transparent 40%),
+            linear-gradient(145deg, color-mix(in srgb, var(--studio-accent) 34%, #18141e) 0%, #15111a 56%, #0d0b11 100%);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.08),
+            inset 0 0 0 1px color-mix(in srgb, var(--studio-accent) 13%, transparent);
+        }
+
+        .studio-card-footer::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: linear-gradient(115deg, rgba(255,255,255,.055), transparent 34%);
+        }
+
+        .studio-card-footer::after {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 2px;
+          background: linear-gradient(180deg, color-mix(in srgb, var(--studio-accent) 72%, white), color-mix(in srgb, var(--studio-accent) 38%, transparent));
+          opacity: .9;
+        }
+
+        .studio-card-arrow {
+          box-shadow: 0 10px 28px color-mix(in srgb, var(--studio-accent) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.14);
+        }
+
+        .home-tools-section {
+          background:
+            radial-gradient(circle at 90% 6%, color-mix(in srgb, #5b8cff 8%, transparent), transparent 30%),
+            linear-gradient(180deg, color-mix(in srgb, var(--surface) 98%, #eef4ff) 0%, color-mix(in srgb, var(--surface-strong) 98%, var(--accent-soft)) 100%);
+        }
+
+        .home-steps-section {
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, var(--accent-soft)) 0%, var(--surface-strong) 100%);
+        }
+
+        .home-steps-panel {
+          background:
+            radial-gradient(circle at 96% 0%, color-mix(in srgb, var(--accent-soft) 64%, transparent), transparent 32%),
+            linear-gradient(145deg, color-mix(in srgb, var(--surface-strong) 98%, var(--accent-soft)), var(--surface-strong));
+        }
+
+        .home-pricing-section {
+          background:
+            radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent-soft) 36%, transparent), transparent 34%),
+            linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--accent-soft) 16%, var(--surface-strong)) 100%);
+        }
+
+        @media (min-width: 1024px) {
+          .hero-image-overlay {
+            background: linear-gradient(
+              90deg,
+              rgba(255, 255, 255, 0.97) 0%,
+              rgba(255, 255, 255, 0.88) 28%,
+              rgba(255, 255, 255, 0.48) 45%,
+              rgba(255, 255, 255, 0.08) 61%,
+              rgba(255, 255, 255, 0) 72%
+            );
+          }
+
+          .home-hero > video {
+            filter: none;
+          }
+
+          [data-theme="dark"] .hero-image-overlay {
+            background: linear-gradient(
+              90deg,
+              rgba(18, 16, 24, 0.96) 0%,
+              rgba(18, 16, 24, 0.84) 30%,
+              rgba(18, 16, 24, 0.42) 47%,
+              rgba(18, 16, 24, 0.05) 64%,
+              rgba(18, 16, 24, 0) 76%
+            );
+          }
+
+          [data-theme="dark"] .home-hero > video {
+            filter: brightness(0.72) saturate(0.9);
+          }
+        }
 
         .hero-static-wrap {
           display: grid;
@@ -1132,25 +1184,6 @@ export default function HomePage() {
           transform: scaleX(1.08);
         }
 
-        .quick-tool-card article > div:first-child,
-        .quick-tool-card article > div:first-child span,
-        .how-step {
-          transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 420ms ease;
-        }
-
-        .quick-tool-card:hover article > div:first-child {
-          transform: scale(1.04) rotate(-1.5deg);
-        }
-
-        .quick-tool-card:hover article > div:first-child span {
-          transform: translate(5px, -5px) rotate(7deg);
-        }
-
-        .how-step:hover {
-          transform: translateY(-7px) rotate(-0.5deg);
-          box-shadow: var(--shadow-card-hover);
-        }
-
         @keyframes hero-orbit-spin {
           from { transform: translate(-50%, -50%) rotate(0deg); }
           to { transform: translate(-50%, -50%) rotate(360deg); }
@@ -1281,13 +1314,6 @@ export default function HomePage() {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          [data-home-reveal] {
-            opacity: 1;
-            transform: none;
-            transition: none;
-          }
-
-          .home-motion-parallax,
           .hero-playground-stage,
           .hero-orbit,
           .hero-ai-hub-shell,
@@ -1320,20 +1346,25 @@ function SectionHeading({
   title,
   description,
   align = "center",
+  size = "default",
 }: {
   eyebrow: string;
   title: string;
   description?: string;
   align?: "center" | "left";
+  size?: "default" | "compact";
 }) {
+  const titleClass =
+    size === "compact"
+      ? "mt-4 text-[1.9rem] font-black leading-[1] tracking-[-0.045em] sm:mt-5 sm:text-[2.8rem] sm:leading-[0.98] lg:text-[3.2rem]"
+      : "mt-4 text-[1.95rem] font-black leading-[0.98] tracking-[-0.05em] sm:mt-5 sm:text-6xl sm:leading-[0.95] sm:tracking-[-0.06em] lg:text-[4.15rem]";
+
   return (
-    <div data-home-reveal className={align === "center" ? "mx-auto max-w-5xl text-center" : "max-w-3xl"}>
+    <div className={align === "center" ? "mx-auto max-w-5xl text-center" : "max-w-3xl"}>
       <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="mt-4 text-[2.15rem] font-black leading-[0.98] tracking-[-0.055em] sm:mt-5 sm:text-6xl sm:leading-[0.95] sm:tracking-[-0.06em] lg:text-[4.15rem]">
-        {title}
-      </h2>
+      <h2 className={titleClass}>{title}</h2>
       {description && (
-        <p className={`mt-4 text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-6 sm:text-base sm:leading-7 ${align === "center" ? "mx-auto max-w-3xl" : ""}`}>
+        <p className={`mt-3.5 text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-4 sm:text-base sm:leading-7 ${align === "center" ? "mx-auto max-w-3xl" : ""}`}>
           {description}
         </p>
       )}
@@ -1341,191 +1372,3 @@ function SectionHeading({
   );
 }
 
-function HeroPlayground() {
-  return (
-    <div
-      data-home-reveal
-      className="relative mt-7 w-full overflow-hidden rounded-[1.5rem] border border-[var(--border)] shadow-[var(--shadow-card)] sm:mt-10 sm:rounded-[1.8rem] lg:hidden"
-      aria-hidden="true"
-    >
-<video
-  autoPlay
-  loop
-  muted
-  playsInline
-  preload="metadata"
-  poster="/hero-video-poster.jpg"
-  className="aspect-[1.45/1] h-auto w-full object-cover object-center sm:aspect-[1.25/1]"
->
-  <source src="/hero-video-web.mp4" type="video/mp4" />
-</video>
-    </div>
-  );
-}
-
-function StudioPreview({ studioId, accent, soft }: { studioId: string; accent: string; soft: string }) {
-  if (studioId === "brand_studio") {
-    return (
-      <div className="studio-preview studio-preview-brand relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[#201429] p-3 text-white shadow-xl sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-4">
-        <div className="studio-preview-grid absolute inset-0 opacity-20" />
-        <div className="studio-piece studio-piece-main relative rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur-sm">
-          <p className="text-[0.5rem] font-black uppercase tracking-[0.18em] text-white/45">Identity system</p>
-          <div className="mt-4 flex items-center justify-between">
-            <div className="brand-symbol relative h-20 w-20">
-              <span className="absolute left-0 top-0 h-14 w-14 rounded-full bg-[#ef3fb4]" />
-              <span className="absolute bottom-0 right-0 h-14 w-14 rounded-[1.2rem] bg-[#7c3cff] mix-blend-screen" />
-              <span className="absolute left-[1.65rem] top-[1.65rem] h-7 w-7 rounded-full bg-[#ffcf64]" />
-            </div>
-            <span className="text-5xl font-black tracking-[-0.12em]">Aa</span>
-          </div>
-        </div>
-        <div className="studio-piece studio-piece-bottom absolute bottom-4 left-4 right-4 grid grid-cols-[1fr_0.72fr] gap-3">
-          <div className="grid grid-cols-4 gap-2 rounded-xl border border-white/10 bg-black/15 p-3">
-            {[accent, "#ef3fb4", "#ffcf64", "#f7efff"].map((color) => (
-              <span key={color} className="h-9 rounded-lg border border-white/10" style={{ background: color }} />
-            ))}
-          </div>
-          <div className="rounded-xl bg-[#f7efff] p-3 text-[#201429]">
-            <div className="h-2 w-10 rounded-full bg-[#201429]/20" />
-            <div className="mt-2 h-2 w-full rounded-full bg-[#201429]/10" />
-            <div className="mt-2 h-2 w-2/3 rounded-full bg-[#201429]/10" />
-          </div>
-        </div>
-        <span className="studio-spark absolute right-5 top-5 text-lg text-[#ffcf64]">✦</span>
-      </div>
-    );
-  }
-
-  if (studioId === "marketing_studio") {
-    return (
-      <div className="studio-preview studio-preview-marketing relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[var(--surface-strong)] p-3 shadow-xl sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-4">
-        <div className="studio-piece studio-piece-poster relative h-36 overflow-hidden rounded-xl text-white sm:h-44 sm:rounded-2xl" style={{ background: `linear-gradient(145deg, ${accent}, #251329 72%)` }}>
-          <div className="absolute -right-8 -top-10 h-36 w-36 rounded-full bg-[#ffb04a] opacity-90" />
-          <div className="absolute right-7 top-7 h-20 w-20 rounded-full border-[10px] border-white/85" />
-          <div className="absolute bottom-5 left-5 h-4 w-28 rounded-full bg-white" />
-          <div className="absolute bottom-12 left-5 h-12 w-12 rotate-12 rounded-xl bg-[#65e4ff]" />
-          <div className="absolute bottom-12 left-20 h-12 w-12 -rotate-6 rounded-full bg-[#ef3fb4]" />
-          <span className="absolute left-5 top-4 text-[0.5rem] font-black uppercase tracking-[0.18em] text-white/65">Campaign direction</span>
-        </div>
-        <div className="studio-piece studio-piece-bottom mt-2 grid grid-cols-[1fr_0.72fr] gap-2 sm:mt-3 sm:gap-3">
-          <div className="rounded-xl p-3" style={{ background: soft }}>
-            <div className="flex gap-2">
-              <span className="h-7 w-7 rounded-full" style={{ background: accent }} />
-              <span className="h-7 flex-1 rounded-lg bg-white/65 dark:bg-white/10" />
-            </div>
-            <div className="mt-2 h-2 w-2/3 rounded-full bg-black/10 dark:bg-white/10" />
-          </div>
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--border)] p-2">
-            <span className="rounded-lg bg-[#65e4ff]" />
-            <span className="rounded-lg bg-[#ffb04a]" />
-          </div>
-        </div>
-        <span className="studio-spark absolute right-7 top-6 text-xl text-white">✦</span>
-      </div>
-    );
-  }
-
-  if (studioId === "architecture_studio") {
-    return (
-      <div className="studio-preview studio-preview-architecture relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[#eaf4ff] p-4 shadow-xl dark:bg-[#111a25] sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-5">
-        <div className="studio-preview-grid absolute inset-0 opacity-55" />
-        <div className="studio-piece studio-sun absolute right-6 top-8 h-20 w-20 rounded-full bg-[linear-gradient(145deg,#fff5b8,#ffb04a)] shadow-[0_0_45px_rgba(255,176,74,.35)]" />
-        <div className="relative flex items-center justify-between">
-          <p className="text-[0.55rem] font-black uppercase tracking-[0.16em]" style={{ color: accent }}>Spatial concept</p>
-          <Building2 size={18} style={{ color: accent }} />
-        </div>
-        <div className="absolute bottom-5 left-5 right-5 flex items-end gap-2">
-          <div className="studio-building h-24 flex-1 rounded-t-2xl border-2 border-b-0 bg-white/65 p-2 dark:bg-black/25" style={{ borderColor: accent }}>
-            <div className="grid grid-cols-2 gap-1.5">{[0, 1, 2, 3].map((item) => <span key={item} className="h-5 rounded bg-blue-300/35" />)}</div>
-          </div>
-          <div className="studio-building h-40 flex-[1.35] rounded-t-2xl border-2 border-b-0 bg-white/80 p-2 dark:bg-black/30" style={{ borderColor: accent }}>
-            <div className="grid grid-cols-2 gap-1.5">{[0, 1, 2, 3, 4, 5].map((item) => <span key={item} className="h-5 rounded bg-blue-400/30" />)}</div>
-          </div>
-          <div className="studio-building h-20 flex-1 rounded-t-2xl border-2 border-b-0 bg-white/55 p-2 dark:bg-black/20" style={{ borderColor: accent }}>
-            <div className="grid grid-cols-2 gap-1.5">{[0, 1].map((item) => <span key={item} className="h-5 rounded bg-blue-300/35" />)}</div>
-          </div>
-        </div>
-        <div className="studio-ground absolute bottom-4 left-3 right-3 h-1 rounded-full" style={{ background: accent }} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="studio-preview studio-preview-interior relative min-h-[215px] overflow-hidden rounded-[1.25rem] border border-white/50 bg-[#f8eee5] p-3 shadow-xl dark:bg-[#2b211e] sm:min-h-[270px] sm:rounded-[1.5rem] sm:p-4">
-      <div className="absolute inset-x-0 bottom-0 h-[42%] bg-[#e8cbb2]/60 dark:bg-[#684c3f]/35" />
-      <div className="studio-piece studio-art absolute left-6 top-6 h-20 w-28 rounded-xl border-[7px] border-white bg-[linear-gradient(145deg,#ffcf9d,#ee8d48)] shadow-md dark:border-[#4a3932]">
-        <span className="absolute bottom-2 left-3 h-8 w-8 rounded-full bg-white/55" />
-        <span className="absolute right-3 top-2 h-11 w-4 rounded-full bg-[#8c4c2c]/45" />
-      </div>
-      <div className="studio-piece studio-lamp absolute right-8 top-7">
-        <div className="mx-auto h-20 w-1.5 rounded-full bg-[#724630]" />
-        <div className="-mt-1 h-14 w-20 rounded-t-full bg-[#f2a15d] shadow-[0_8px_28px_rgba(242,161,93,.35)]" />
-      </div>
-      <div className="studio-piece studio-sofa absolute bottom-8 left-7 right-20 h-24 rounded-[2rem_2rem_1rem_1rem] bg-[#fffaf4] shadow-xl dark:bg-[#5a4339]">
-        <div className="absolute -left-2 top-7 h-14 w-7 rounded-xl bg-[#fffaf4] dark:bg-[#5a4339]" />
-        <div className="absolute -right-2 top-7 h-14 w-7 rounded-xl bg-[#fffaf4] dark:bg-[#5a4339]" />
-        <div className="absolute left-[42%] top-4 h-12 w-12 rotate-6 rounded-xl bg-[#e9904d]" />
-      </div>
-      <div className="studio-piece studio-table absolute bottom-5 right-7 h-14 w-16 rounded-[50%] bg-[#8c573c] shadow-lg">
-        <span className="absolute left-1/2 top-9 h-12 w-1.5 -translate-x-1/2 bg-[#68402d]" />
-      </div>
-      <div className="studio-rug absolute bottom-3 left-16 h-10 w-44 rounded-[50%] bg-[#d99c73]/50" />
-    </div>
-  );
-}
-
-function useHomepageMotion() {
-  useEffect(() => {
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const revealElements = Array.from(document.querySelectorAll<HTMLElement>("[data-home-reveal]"));
-
-    if (reducedMotion) {
-      revealElements.forEach((element) => element.classList.add("is-visible"));
-      return;
-    }
-
-    const revealObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.add("is-visible");
-          revealObserver.unobserve(entry.target);
-        });
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" },
-    );
-
-    revealElements.forEach((element) => revealObserver.observe(element));
-
-    const parallaxElements = Array.from(document.querySelectorAll<HTMLElement>("[data-home-parallax]"));
-    let animationFrame = 0;
-
-    const updateParallax = () => {
-      const viewportCenter = window.innerHeight / 2;
-      parallaxElements.forEach((element) => {
-        const bounds = element.getBoundingClientRect();
-        const elementCenter = bounds.top + bounds.height / 2;
-        const speed = Number(element.dataset.homeParallax || 0);
-        const movement = Math.max(-38, Math.min(38, (elementCenter - viewportCenter) * speed));
-        element.style.setProperty("--home-parallax-y", `${movement}px`);
-      });
-      animationFrame = 0;
-    };
-
-    const requestParallaxUpdate = () => {
-      if (animationFrame) return;
-      animationFrame = window.requestAnimationFrame(updateParallax);
-    };
-
-    updateParallax();
-    window.addEventListener("scroll", requestParallaxUpdate, { passive: true });
-    window.addEventListener("resize", requestParallaxUpdate);
-
-    return () => {
-      revealObserver.disconnect();
-      window.removeEventListener("scroll", requestParallaxUpdate);
-      window.removeEventListener("resize", requestParallaxUpdate);
-      if (animationFrame) window.cancelAnimationFrame(animationFrame);
-    };
-  }, []);
-}
