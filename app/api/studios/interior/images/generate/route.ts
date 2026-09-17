@@ -22,6 +22,8 @@ type InteriorImageType =
   | "lighting_plan"
   | "main_space"
   | "alternate_angle"
+  | "secondary_space"
+  | "signature_space"
   | "focal_point"
   | "material_detail"
   | "day_view"
@@ -32,6 +34,8 @@ const PLAN_VIEWS = new Set<InteriorImageType>(["space_plan", "furniture_plan", "
 const VISUAL_VIEWS = new Set<InteriorImageType>([
   "main_space",
   "alternate_angle",
+  "secondary_space",
+  "signature_space",
   "focal_point",
   "material_detail",
   "day_view",

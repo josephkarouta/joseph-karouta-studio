@@ -28,7 +28,7 @@ export function getAiPlanConfig(_plan: AiPlan): AiPlanConfig {
   // Every subscription receives the same generation quality. Plans differ by
   // the credit balance enforced by the commercial engine, not by hidden model tiers.
   const textModel = env("OPENAI_TEXT_MODEL", "gpt-4.1-mini");
-  const imageModel = env("OPENAI_IMAGE_MODEL", "gpt-image-2");
+  const imageModel = env("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst");
   const previewImageQuality = env("OPENAI_PREVIEW_IMAGE_QUALITY", "medium") as
     | "low"
     | "medium"
@@ -64,15 +64,23 @@ export function getArchitectureAiPlanConfig(plan: AiPlan): AiPlanConfig {
 
 
 export function getArchitecturePlanAiPlanConfig(plan: AiPlan): AiPlanConfig {
-  // Plan Foundation is the highest-reasoning step in normal Architecture mode.
-  // Keep the rest of Architecture on the lower-cost text model, but let this
-  // one multimodal stage use a stronger model that can reason directly from
-  // the selected Direction image plus the full project/program data.
+  // Plan Foundation is conceptual, not construction documentation. Use Terra as
+  // the balanced default and keep model/JSON budget independently configurable.
   const base = getArchitectureAiPlanConfig(plan);
+  const configuredMaxOutputTokens = Number.parseInt(
+    env("ARCHITECTURE_PLAN_MAX_OUTPUT_TOKENS", "20000"),
+    10,
+  );
+
   return {
     ...base,
-    textModel: env("ARCHITECTURE_PLAN_MODEL", "gpt-5.6-sol"),
-    maxOutputTokens: Math.max(base.maxOutputTokens, 24000),
+    textModel: env("ARCHITECTURE_PLAN_MODEL", "gpt-5.6-terra"),
+    maxOutputTokens: Math.max(
+      base.maxOutputTokens,
+      Number.isFinite(configuredMaxOutputTokens)
+        ? configuredMaxOutputTokens
+        : 20000,
+    ),
   };
 }
 

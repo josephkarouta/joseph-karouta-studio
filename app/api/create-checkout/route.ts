@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import {
+  configuredSubscriptionPriceId,
   findBestSubscription,
   getStripe,
   hasManagedSubscription,
@@ -10,26 +11,22 @@ import {
   validateStripeSubscriptionCatalog,
 } from "@/lib/billing/stripe";
 import { checkoutCollectionOptions } from "@/lib/billing/profile";
+import { normalizeBillingInterval, type BillingInterval } from "@/lib/platform/plans";
 
 type SubscriptionPlan = "starter" | "pro";
-
-function getPlanPriceId(plan: SubscriptionPlan) {
-  return plan === "starter"
-    ? process.env.STRIPE_STARTER_PRICE_ID_USD
-    : process.env.STRIPE_PRO_PRICE_ID_USD;
-}
 
 export async function POST(request: Request) {
   try {
     const { user, admin } = await requireApiUser(request);
     const body = await request.json();
     const normalizedPlan = String(body.planName || "").toLowerCase() as SubscriptionPlan;
+    const billingInterval = normalizeBillingInterval(body.billingInterval) as BillingInterval;
 
     if (!(normalizedPlan === "starter" || normalizedPlan === "pro")) {
       return NextResponse.json({ error: "Invalid subscription plan." }, { status: 400 });
     }
 
-    const priceId = getPlanPriceId(normalizedPlan);
+    const priceId = configuredSubscriptionPriceId(normalizedPlan, billingInterval);
     if (!priceId) {
       return NextResponse.json(
         { error: `The ${normalizedPlan} subscription is temporarily unavailable.` },
@@ -74,8 +71,18 @@ export async function POST(request: Request) {
       customer: customer.id,
       ...checkoutCollectionOptions(true),
       client_reference_id: user.id,
-      metadata: { user_id: user.id, plan: normalizedPlan },
-      subscription_data: { metadata: { user_id: user.id, plan: normalizedPlan } },
+      metadata: {
+        user_id: user.id,
+        plan: normalizedPlan,
+        billing_interval: billingInterval,
+      },
+      subscription_data: {
+        metadata: {
+          user_id: user.id,
+          plan: normalizedPlan,
+          billing_interval: billingInterval,
+        },
+      },
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       success_url: `${siteUrl}/billing?subscribed=true&session_id={CHECKOUT_SESSION_ID}`,

@@ -4,11 +4,16 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import {
+  billingIntervalFromPriceId,
+  billingIntervalFromSubscription,
   findBestSubscription,
   getStripe,
   getSubscriptionRow,
+  planFromConfiguredPriceId,
   planFromSubscription,
   resolveStripeCustomer,
+  subscriptionCreditPeriod,
+  subscriptionCreditPeriodFromRecord,
   subscriptionPayload,
   syncSubscription,
 } from "@/lib/billing/stripe";
@@ -87,7 +92,11 @@ function pendingPlanFromSchedule(
   notBeforeSeconds = 0,
 ) {
   if (!schedule || !["active", "not_started"].includes(schedule.status)) {
-    return { plan: null as null | "starter" | "pro", effectiveAt: null as string | null };
+    return {
+      plan: null as null | "starter" | "pro",
+      billingInterval: null as null | "month" | "year",
+      effectiveAt: null as string | null,
+    };
   }
 
   const current = String(currentPriceId || "");
@@ -104,21 +113,27 @@ function pendingPlanFromSchedule(
 
     const nextPrice = priceId(schedulePhaseItems(phase)[0]?.price);
     if (!nextPrice || nextPrice === current) continue;
-    if (nextPrice === process.env.STRIPE_STARTER_PRICE_ID_USD) {
+    if (planFromConfiguredPriceId(nextPrice) === "starter") {
       return {
         plan: "starter" as const,
+        billingInterval: billingIntervalFromPriceId(nextPrice),
         effectiveAt: isoFromUnixSeconds(phaseStart),
       };
     }
-    if (nextPrice === process.env.STRIPE_PRO_PRICE_ID_USD) {
+    if (planFromConfiguredPriceId(nextPrice) === "pro") {
       return {
         plan: "pro" as const,
+        billingInterval: billingIntervalFromPriceId(nextPrice),
         effectiveAt: isoFromUnixSeconds(phaseStart),
       };
     }
   }
 
-  return { plan: null as null | "starter" | "pro", effectiveAt: null as string | null };
+  return {
+    plan: null as null | "starter" | "pro",
+    billingInterval: null as null | "month" | "year",
+    effectiveAt: null as string | null,
+  };
 }
 
 function isTerminalSubscriptionStatus(value: unknown) {
@@ -216,6 +231,16 @@ export async function GET(request: Request) {
       normalizedPriceId(payload.stripe_price_id),
       Number.isFinite(pendingPlanNotBeforeSeconds) ? pendingPlanNotBeforeSeconds : 0,
     );
+    const billingInterval = subscription
+      ? billingIntervalFromSubscription(subscription)
+      : billingIntervalFromPriceId(payload.stripe_price_id);
+    const creditPeriod = subscription
+      ? subscriptionCreditPeriod(subscription)
+      : subscriptionCreditPeriodFromRecord({
+          current_period_start: payload.current_period_start,
+          current_period_end: payload.current_period_end,
+          stripe_price_id: payload.stripe_price_id,
+        });
 
     return NextResponse.json({
       success: true,
@@ -240,8 +265,14 @@ export async function GET(request: Request) {
         canceledAt: payload.canceled_at,
         currency: payload.currency,
         amount: payload.amount,
+        billingInterval,
+        creditPeriodStart: creditPeriod?.start || null,
+        creditPeriodEnd: creditPeriod?.end || null,
+        nextCreditRefreshAt:
+          !terminalStatus && creditPeriod?.end ? creditPeriod.end : null,
         canManage: Boolean(payload.stripe_customer_id),
         pendingPlan: pendingPlan.plan,
+        pendingBillingInterval: pendingPlan.billingInterval,
         pendingPlanEffectiveAt: pendingPlan.effectiveAt,
         canChangePlan: Boolean(
           payload.stripe_subscription_id &&

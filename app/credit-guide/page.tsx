@@ -23,7 +23,7 @@ export default function CreditGuidePage() {
             Know the credit cost before you create.
           </h1>
           <p className="mt-6 max-w-3xl text-base font-semibold leading-8 text-[var(--text-secondary)] sm:text-lg">
-            Credits work across Heyy Studio. Subscription credits reset at renewal and are used first. Purchased credits never expire.
+            Credits work across Heyy Studio. Subscription credits refresh every month and are used first. Purchased credits never expire.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <ButtonLink href="/pricing">See plans & credit packs</ButtonLink>
@@ -39,7 +39,7 @@ export default function CreditGuidePage() {
               <CircleDollarSign size={20} className="text-[var(--accent-strong)]" />
               <h2 className="mt-3 text-lg font-black">Subscription credits</h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-                Included with Starter and Pro. They are spent first, reset at each paid renewal and do not roll over.
+                Included with Starter and Pro. They are spent first, refresh every month and do not roll over, whether your subscription is billed monthly or yearly.
               </p>
             </GlassCard>
             <GlassCard className="p-5">

@@ -24,7 +24,7 @@ import {
   GlassCard,
   StatusPill,
 } from "@/components/ui/heyy";
-import { getPlan } from "@/lib/platform/plans";
+import { getPlan, type BillingInterval } from "@/lib/platform/plans";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type BillingDetails = {
@@ -43,8 +43,13 @@ type BillingDetails = {
   scheduledCancelAt: string | null;
   currency: string | null;
   amount: number | null;
+  billingInterval: BillingInterval;
+  creditPeriodStart: string | null;
+  creditPeriodEnd: string | null;
+  nextCreditRefreshAt: string | null;
   canManage: boolean;
   pendingPlan: "starter" | "pro" | null;
+  pendingBillingInterval: BillingInterval | null;
   pendingPlanEffectiveAt: string | null;
   canChangePlan: boolean;
 };
@@ -70,17 +75,19 @@ function formatPlanPrice(
   amount: number | null | undefined,
   currency: string | null | undefined,
   fallbackUsd: number,
+  billingInterval: BillingInterval,
 ) {
   const value = typeof amount === "number" ? amount / 100 : fallbackUsd;
   const normalizedCurrency = String(currency || "usd").toUpperCase();
+  const suffix = billingInterval === "year" ? "/year" : "/month";
   try {
     return `${new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: normalizedCurrency,
       maximumFractionDigits: value % 1 === 0 ? 0 : 2,
-    }).format(value)}/month`;
+    }).format(value)}${suffix}`;
   } catch {
-    return `$${value}/month`;
+    return `$${value}${suffix}`;
   }
 }
 
@@ -111,6 +118,7 @@ export default function BillingPage() {
   const subscriptionIsTerminal = Boolean(
     hasPaidSubscription && isTerminalSubscriptionStatus(billing?.status),
   );
+  const billingInterval = billing?.billingInterval || "month";
 
   const billingLine = useMemo(() => {
     if (!billing?.subscriptionId) {
@@ -166,7 +174,10 @@ export default function BillingPage() {
     }
   }, [refreshAccount, user?.id]);
 
-  async function schedulePlanChange(targetPlan: "starter" | "pro") {
+  async function schedulePlanChange(
+    targetPlan: "starter" | "pro",
+    targetBillingInterval: BillingInterval = billingInterval,
+  ) {
     setChangingPlan(true);
     setError("");
     try {
@@ -177,7 +188,10 @@ export default function BillingPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan: targetPlan }),
+        body: JSON.stringify({
+          plan: targetPlan,
+          billingInterval: targetBillingInterval,
+        }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Plan change could not be scheduled.");
@@ -335,12 +349,21 @@ export default function BillingPage() {
               value={hasPaidSubscription ? formatDate(billing?.subscriptionStartedAt || null) : "Not applicable"}
             />
             <BillingDetail
-              label={subscriptionIsTerminal ? "Previous period started" : "Current period starts"}
+              label={subscriptionIsTerminal ? "Previous billing period started" : "Billing period starts"}
               value={hasPaidSubscription ? formatDate(billing?.currentPeriodStart || null) : "Not applicable"}
             />
             <BillingDetail
-              label={subscriptionIsTerminal ? "Previous period scheduled end" : "Current period ends"}
+              label={subscriptionIsTerminal ? "Previous billing period scheduled end" : "Billing period ends"}
               value={hasPaidSubscription ? formatDate(billing?.currentPeriodEnd || null) : "Not applicable"}
+            />
+            <BillingDetail
+              label="Billing cycle"
+              value={hasPaidSubscription ? (billingInterval === "year" ? "Yearly" : "Monthly") : "Not applicable"}
+            />
+            <BillingDetail
+              label="Next credit refresh"
+              value={hasPaidSubscription ? formatDate(billing?.nextCreditRefreshAt || null) : "Not applicable"}
+              tone={hasPaidSubscription ? "success" : "neutral"}
             />
             <BillingDetail
               label={billing?.autoRenewal ? "Next renewal" : "Access expiry"}
@@ -359,7 +382,12 @@ export default function BillingPage() {
             />
             <BillingDetail
               label={subscriptionIsTerminal ? "Previous plan price" : "Plan price"}
-              value={formatPlanPrice(billing?.amount, billing?.currency, definition.monthlyPriceUsd)}
+              value={formatPlanPrice(
+                billing?.amount,
+                billing?.currency,
+                billingInterval === "year" ? definition.annualPriceUsd : definition.monthlyPriceUsd,
+                billingInterval,
+              )}
             />
             <BillingDetail
               label="Subscription status"
@@ -404,7 +432,7 @@ export default function BillingPage() {
                   )}
                   {billing?.pendingPlan && (
                     <p className="mt-1 text-xs font-semibold text-[var(--accent-strong)]">
-                      Changes to {getPlan(billing.pendingPlan).name} on {formatDate(billing.pendingPlanEffectiveAt)}. Your current credits and price stay unchanged until then.
+                      Changes to {getPlan(billing.pendingPlan).name} · {billing.pendingBillingInterval === "year" ? "Yearly" : "Monthly"} on {formatDate(billing.pendingPlanEffectiveAt)}. Your current credits and price stay unchanged until then.
                     </p>
                   )}
                 </div>
@@ -426,6 +454,22 @@ export default function BillingPage() {
                     Change to Starter at renewal
                   </Button>
                 ) : null}
+                {!billing?.pendingPlan && billing?.canChangePlan && definition.id !== "free" && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      schedulePlanChange(
+                        definition.id as "starter" | "pro",
+                        billingInterval === "year" ? "month" : "year",
+                      )
+                    }
+                    disabled={changingPlan}
+                  >
+                    {changingPlan && <LoaderCircle size={16} className="animate-spin" />}
+                    Switch to {billingInterval === "year" ? "monthly" : "yearly"} at renewal
+                  </Button>
+                )}
                 {!billing?.canManage && (
                   <ButtonLink href="/pricing">
                     View subscription plans <ExternalLink size={15} />
@@ -448,7 +492,7 @@ export default function BillingPage() {
             <ReceiptText size={22} className="text-[var(--accent-strong)]" />
             <h2 className="mt-5 text-xl font-black">Subscription & payments</h2>
             <p className="mt-3 text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-              Update your payment method or cancel your subscription securely. Your Heyy Studio invoices are kept separately in Payment history.
+              Update your payment method, switch monthly/yearly billing where available, or cancel your subscription securely. Your Heyy Studio invoices are kept separately in Payment history.
             </p>
             {billing?.canManage ? (
               <div className="mt-6 grid gap-2">
@@ -473,6 +517,7 @@ export default function BillingPage() {
             <ul className="mt-5 space-y-4">
               {[
                 "Subscription payments and expert project quotes remain separate.",
+                "Subscription credits refresh every month and unused subscription credits do not roll over, including on yearly plans.",
                 "Credits are reserved before generation, committed after success and released after failure.",
                 "Viewing saved work never consumes credits.",
               ].map((item) => (

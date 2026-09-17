@@ -1,34 +1,76 @@
 "use client";
 
-import { Check, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Check, Percent, Sparkles } from "lucide-react";
 import PricingAction from "@/components/account/PricingActions";
 import { useAuth } from "@/components/auth-provider";
 import { CreditPill, GlassCard } from "@/components/ui/heyy";
-import { normalizePlan, PLANS } from "@/lib/platform/plans";
+import {
+  annualSavingsUsd,
+  normalizePlan,
+  PLANS,
+  type BillingInterval,
+} from "@/lib/platform/plans";
 
 export default function PlanCards({ compactMobile = false }: { compactMobile?: boolean }) {
   const { plan, user } = useAuth();
   const currentPlan = normalizePlan(plan);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
 
   return (
-    <div
-      className={
-        compactMobile
-          ? "-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 [scrollbar-width:none] sm:-mx-6 sm:px-6 md:mx-0 md:grid md:grid-cols-3 md:items-stretch md:gap-4 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden"
-          : "grid gap-3.5 md:grid-cols-3 md:items-stretch md:gap-4"
-      }
-    >
-      {PLANS.map((item) => {
+    <div>
+      <div className="mb-4 flex items-center justify-center sm:mb-5">
+        <div className="inline-grid grid-cols-2 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-strong)_88%,transparent)] p-1 shadow-[0_10px_28px_rgba(54,35,82,0.09)] backdrop-blur-xl">
+          {(["month", "year"] as BillingInterval[]).map((interval) => {
+            const active = billingInterval === interval;
+            return (
+              <button
+                key={interval}
+                type="button"
+                onClick={() => setBillingInterval(interval)}
+                aria-pressed={active}
+                className={`min-w-[102px] rounded-full px-5 py-2.5 text-xs font-black transition-[background-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--focus-ring)] sm:min-w-[112px] ${
+                  active
+                    ? "bg-[var(--text-primary)] text-[var(--surface)] shadow-[0_8px_18px_rgba(20,16,28,0.18)]"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
+                }`}
+              >
+                {interval === "month" ? (
+                  "Monthly"
+                ) : (
+                  <span className="inline-flex items-center justify-center gap-1.5">
+                    <Percent size={13} strokeWidth={2.5} aria-hidden="true" />
+                    Yearly
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+      </div>
+
+      <div
+        className={
+          compactMobile
+            ? "-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-3 [scrollbar-width:none] sm:-mx-6 sm:px-6 md:mx-0 md:grid md:grid-cols-3 md:items-stretch md:gap-4 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden"
+            : "grid gap-3.5 md:grid-cols-3 md:items-stretch md:gap-4"
+        }
+      >
+        {PLANS.map((item) => {
         const featured = Boolean(item.highlighted);
         const isCurrent = Boolean(user) && currentPlan === item.id;
         const visibleFeatures = item.features.filter(
           (feature) => !/subscription credits each month/i.test(feature),
         );
+        const annual = billingInterval === "year" && item.id !== "free";
+        const displayedPrice = annual ? item.annualPriceUsd : item.monthlyPriceUsd;
+        const savings = annual ? annualSavingsUsd(item.id) : 0;
 
         return (
           <GlassCard
             key={item.id}
-            className={`relative flex flex-col overflow-hidden p-4 sm:p-5 md:min-h-[385px] ${compactMobile ? "w-[84vw] shrink-0 snap-center sm:w-[70vw] md:w-auto md:shrink" : ""} ${
+            className={`relative flex flex-col overflow-hidden p-4 sm:p-5 md:min-h-[385px] ${compactMobile ? "w-[calc(100vw-3rem)] shrink-0 snap-center sm:w-[70vw] md:w-auto md:shrink" : ""} ${
               featured
                 ? "border-2 border-[var(--accent)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--accent-soft)_92%,white),var(--surface-strong)_58%)] shadow-[0_24px_70px_color-mix(in_srgb,var(--accent)_22%,transparent)] ring-4 ring-[color-mix(in_srgb,var(--accent)_8%,transparent)]"
                 : isCurrent
@@ -54,9 +96,21 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
             </div>
 
             <p className="mt-1.5 text-[2.25rem] font-black leading-none tracking-[-0.06em] text-[var(--text-primary)] sm:text-[2.45rem] md:text-[2.6rem]">
-              ${item.monthlyPriceUsd}
-              <span className="ml-1.5 text-[0.68rem] font-bold tracking-normal text-[var(--text-muted)]">/month</span>
+              ${displayedPrice}
+              <span className="ml-1.5 text-[0.68rem] font-bold tracking-normal text-[var(--text-muted)]">
+                {item.id === "free" ? "" : annual ? "/year" : "/month"}
+              </span>
             </p>
+            {annual && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2.5 py-1 text-[0.62rem] font-black text-[var(--accent-strong)]">
+                  Save ${savings}
+                </span>
+                <span className="flex items-center gap-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2.5 py-1 text-[0.62rem] font-black text-[var(--accent-strong)]">
+                  <Sparkles size={10} /> 2 months free
+                </span>
+              </div>
+            )}
             <p className="mt-2.5 text-[0.74rem] font-semibold leading-5 text-[var(--text-secondary)] sm:min-h-10 sm:text-[0.78rem]">
               {item.description}
             </p>
@@ -80,11 +134,17 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
             </div>
 
             <div className="mt-auto pt-4 sm:pt-5">
-              <PricingAction planId={item.id} current={isCurrent} featured={featured} />
+              <PricingAction
+                planId={item.id}
+                billingInterval={billingInterval}
+                current={isCurrent}
+                featured={featured}
+              />
             </div>
           </GlassCard>
         );
-      })}
+        })}
+      </div>
     </div>
   );
 }

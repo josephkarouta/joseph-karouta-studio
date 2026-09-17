@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import OpenAI, { toFile } from "openai";
+import sharp from "sharp";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
+import { generateRoutedStudioImage, type RoutedImageReference } from "@/lib/ai/studio-image-provider";
+import { providerTelemetrySummary, withProviderTelemetryContext } from "@/lib/ai/provider-telemetry";
+import { getInteriorOutputCoverage, interiorRepresentativeZoneInstruction } from "@/lib/interior/output-coverage";
 
 type StudioId = "interior" | "marketing";
-type InteriorImageType = "space_plan" | "furniture_plan" | "lighting_plan" | "main_space" | "alternate_angle" | "focal_point" | "material_detail" | "day_view" | "evening_view";
+type InteriorImageType = "space_plan" | "furniture_plan" | "lighting_plan" | "main_space" | "alternate_angle" | "secondary_space" | "signature_space" | "focal_point" | "material_detail" | "day_view" | "evening_view";
 type MarketingVisualType = "key_visual" | "social_feed" | "story_cover" | "carousel_cover" | "landing_hero" | "email_header" | "display_ad" | "outdoor_poster";
 type GenerationStage = "technical" | "preview" | "final";
 
@@ -30,9 +34,11 @@ const INTERIOR_PLAN_LABELS: Record<string, string> = {
 };
 const INTERIOR_VISUAL_LABELS: Record<string, string> = {
   main_space: "Main Space Perspective",
-  alternate_angle: "Alternative Angle",
-  focal_point: "Feature Wall & Joinery View",
-  material_detail: "Materials & Lighting Detail",
+  alternate_angle: "Alternative Perspective",
+  secondary_space: "Secondary Key Space",
+  signature_space: "Signature / Amenity Space",
+  focal_point: "Feature & Joinery Studies",
+  material_detail: "Materials & Lighting Studies",
   day_view: "Daylight Atmosphere",
   evening_view: "Evening Atmosphere",
 };
@@ -76,19 +82,28 @@ export async function processStudioImageJob(jobId: string) {
 
   try {
     if (!(studio === "interior" || studio === "marketing") || !userId || !projectId) throw new Error("Studio image job data is incomplete.");
-    if (!process.env.OPENAI_API_KEY) throw new Error("AI image generation is not configured.");
+    if (studio === "marketing" && !process.env.OPENAI_API_KEY) throw new Error("AI image generation is not configured.");
 
     const { data: project, error: projectError } = await admin.from("studio_projects").select("id,user_id,studio,project_name,project_type,input,output").eq("id", projectId).eq("user_id", userId).eq("studio", studio === "interior" ? "interior_studio" : "marketing_studio").single();
     if (projectError || !project) throw new Error(projectError?.message || "Studio project not found.");
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const openai = studio === "marketing" ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
     const reservationId = claimed.credit_reservation_id ? String(claimed.credit_reservation_id) : null;
-    const generated = studio === "interior"
-      ? await generateInteriorImage(admin, openai, userId, project, input, reservationId)
-      : await generateMarketingImage(admin, openai, userId, project, input, reservationId);
+    const generated = await withProviderTelemetryContext({
+      jobId,
+      userId,
+      projectId,
+      studio: studio === "interior" ? "interior_studio" : "marketing_studio",
+      stage: `${String(input.viewType || "image")}:${String(input.stage || "preview")}`,
+      tool: "studio_image",
+    }, () => studio === "interior"
+      ? generateInteriorImage(admin, userId, project, input, reservationId)
+      : generateMarketingImage(admin, openai!, userId, project, input, reservationId));
 
     assetId = String(generated.asset.id);
     assetUrl = String(generated.asset.file_url || "") || null;
+
+    const providerCost = await providerTelemetrySummary(jobId);
 
     await completeGenerationJob(admin, jobId, {
       asset_id: assetId,
@@ -96,12 +111,14 @@ export async function processStudioImageJob(jobId: string) {
       credits_used: Number(input.credits || 0),
       stage: input.stage || null,
       view_type: input.viewType || null,
+      provider_cost: providerCost,
     }, {
       studio: project.studio,
       project_id: projectId,
       tool: "studio_image",
       asset_id: assetId,
-      provider: "openai",
+      provider: generated.provider,
+      model: generated.model,
     });
     creditsCommitted = true;
   } catch (error) {
@@ -119,7 +136,7 @@ export async function processStudioImageJob(jobId: string) {
   }
 }
 
-async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, userId: string, project: any, input: StudioImageJobInput, reservationId: string | null) {
+async function generateInteriorImage(admin: SupabaseClient, userId: string, project: any, input: StudioImageJobInput, reservationId: string | null) {
   const imageType = String(input.viewType || "") as InteriorImageType;
   const stage = (input.stage || "preview") as GenerationStage;
   const isPlan = Boolean(INTERIOR_PLAN_LABELS[imageType]);
@@ -128,11 +145,17 @@ async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, user
 
   const prompt = buildInteriorImagePrompt(String(project.project_name || "Interior project"), imageType, stage, project.input || {}, project.output || {}, input);
   const references = await loadInteriorReferences(admin, userId, String(project.id), imageType, stage, project.input || {}, input);
-  const common = { model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2", prompt, size: "1536x1024" as const, quality: stage === "final" ? "high" as const : "medium" as const, output_format: "png" as const };
-  const image = references.length ? await openai.images.edit({ ...common, image: references.length === 1 ? references[0] : references }) : await openai.images.generate(common);
-  const base64 = image.data?.[0]?.b64_json;
-  if (!base64) throw new Error("The image provider returned no image.");
+  const routedReferences = await routedReferencesFromFiles(references);
+  const generated = await generateRoutedStudioImage({
+    scope: "interior",
+    prompt,
+    references: routedReferences,
+    size: "1536x1024",
+    quality: stage === "final" ? "high" : "medium",
+    fallbackOpenAIModel: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-sunburst",
+  });
 
+  const outputBytes = await sharp(generated.bytes).rotate().png({ compressionLevel: 9 }).toBuffer();
   const outputKind = isPlan ? "plan" : "visual";
   const roomName = String(input.roomName || "").trim();
   const floorLabel = String(input.floorLabel || "").trim();
@@ -145,7 +168,7 @@ async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, user
     studio: "interior_studio",
     assetType: `interior_${outputKind}_${imageType}_${stage}`,
     title: `${project.project_name || "Interior project"} — ${roomTitle}${label}`,
-    buffer: Buffer.from(base64, "base64"),
+    buffer: outputBytes,
     payload: { prompt, imageType, stage, projectName: project.project_name, roomKey: roomKey || null, roomName: roomName || null, floorLabel: floorLabel || null, sourcePlanAssetId: sourcePlanAssetId || null },
     metadata: {
       view_type: imageType,
@@ -161,11 +184,18 @@ async function generateInteriorImage(admin: SupabaseClient, openai: OpenAI, user
       room_notes: String(input.roomNotes || "").trim() || null,
       source_plan_asset_id: sourcePlanAssetId || null,
       plan_guided: Boolean(roomKey && sourcePlanAssetId),
+      provider: generated.provider,
+      model: generated.model,
+      image_usage: generated.usage,
+      image_reference_count: generated.referenceCount,
+      image_generation_method: generated.generationMethod,
     },
+    provider: generated.provider,
+    model: generated.model,
   });
 
   await admin.from("studio_projects").update({ progress: stage === "final" ? 94 : isPlan ? 86 : 92, current_step: stage === "final" ? `${outputKind}_final_ready` : `${outputKind}_${stage}_ready` }).eq("id", project.id).eq("user_id", userId);
-  return { asset };
+  return { asset, provider: generated.provider, model: generated.model };
 }
 
 async function generateMarketingImage(admin: SupabaseClient, openai: OpenAI, userId: string, project: any, input: StudioImageJobInput, reservationId: string | null) {
@@ -176,7 +206,7 @@ async function generateMarketingImage(admin: SupabaseClient, openai: OpenAI, use
   const tweak = String(input.tweak || "").trim().slice(0, 1000);
   const prompt = buildMarketingVisualPrompt(String(project.project_name || "Marketing campaign"), viewType, stage, project.input || {}, project.output || {}, tweak);
   const references = await loadMarketingReferences(admin, userId, String(project.id), viewType, stage, Boolean(tweak), project.input || {});
-  const common = { model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2", prompt, size: definition.size, quality: stage === "final" ? "high" as const : "medium" as const, output_format: "png" as const };
+  const common = { model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-sunburst", prompt, size: definition.size, quality: stage === "final" ? "high" as const : "medium" as const, output_format: "png" as const };
   const generated = references.length ? await openai.images.edit({ ...common, image: references.length === 1 ? references[0] : references }) : await openai.images.generate(common);
   const base64 = generated.data?.[0]?.b64_json;
   if (!base64) throw new Error("The image provider returned no campaign image.");
@@ -190,55 +220,61 @@ async function generateMarketingImage(admin: SupabaseClient, openai: OpenAI, use
     buffer: Buffer.from(base64, "base64"),
     payload: { prompt, viewType, stage, tweak: tweak || null, projectName: project.project_name },
     metadata: { view_type: viewType, output_kind: "visual", stage, approved: false, source: "marketing_studio", format: definition.format, credit_reservation_id: reservationId, connected_brand_id: brandProjectIdFromInput(project.input || {}) || null },
+    provider: "openai",
+    model: common.model,
   });
 
   await admin.from("studio_projects").update({ progress: stage === "final" ? 95 : 90, current_step: `visual_${viewType}_${stage}_ready` }).eq("id", project.id).eq("user_id", userId).eq("studio", "marketing_studio");
-  return { asset };
+  return { asset, provider: "openai" as const, model: common.model };
 }
 
 function buildInteriorImagePrompt(projectName: string, imageType: InteriorImageType, stage: GenerationStage, input: Record<string, unknown>, output: Record<string, unknown>, jobInput: StudioImageJobInput = {}) {
+  const coverage = getInteriorOutputCoverage(input);
+  const representativeZoneInstruction = interiorRepresentativeZoneInstruction(input);
   const planInstruction: Record<string, string> = {
-    space_plan: "Create a complete top-down interior furniture and space plan showing the full boundary, walls, openings, doors with swings, windows, circulation paths, built-in joinery, furniture, rugs, room labels and key dimensions. Show the complete drawing inside the canvas with generous margins.",
-    furniture_plan: "Create a coordinated top-down furniture placement plan. Preserve every wall, opening, door, window and circulation route from the approved Furniture & Space Plan. Add furniture footprints, item labels, quantities, rug extents and critical clearances.",
-    lighting_plan: "Create a professional reflected ceiling and lighting plan. Preserve the approved room geometry and furniture layout. Show ceiling zones, recessed lights, pendants, wall lights, decorative fixtures, indirect lighting, switching groups and a concise symbol legend.",
+    space_plan: `Create ONE detailed top-down Furniture & Space Plan BOARD for the interior project. Show walls/openings, doors, windows, circulation, built-in joinery, furniture, rugs and clear room/zone labels. Keep every included plan fully visible with generous margins and polished interior-design presentation quality. ${representativeZoneInstruction}`,
+    furniture_plan: `Create ONE coordinated Furniture Placement Plan BOARD for the same interior project. Use the approved Furniture & Space Plan as the main spatial reference. Cover the SAME representative zone set established by the approved Space Plan; do not swap to unrelated floors or rooms. Keep the same walls, openings and circulation while showing furniture footprints, rugs, built-ins and useful clearances. ${representativeZoneInstruction}`,
+    lighting_plan: `Create ONE coordinated reflected ceiling / Lighting & Ceiling Plan BOARD for the same interior project. Use the approved Furniture & Space Plan as the main spatial reference. Cover the SAME representative zone set established by the approved Space Plan; do not swap to unrelated floors or rooms. Keep the room geometry and furniture relationship while showing ceiling zones, recessed lights, pendants, wall lights, decorative fixtures and a restrained legend. ${representativeZoneInstruction}`,
   };
   const visualInstruction: Record<string, string> = {
-    main_space: "Create the primary room concept perspective. Keep the selected room's plan topology, architectural openings and adjacencies recognisable while applying the approved interior direction.",
-    alternate_angle: "Create a second perspective of the SAME mapped room from another useful camera position. Preserve the approved Main Concept's furniture, materials, lighting language and architectural relationships.",
-    focal_point: "Create a deliberately tighter feature-focused view of the SAME mapped room. Focus on one joinery, feature-wall, material or crafted interior moment while preserving continuity with the approved Main Concept.",
-    material_detail: "Create a true close-up editorial detail of the same approved room, concentrating on one or two material or lighting junctions instead of another room-wide perspective.",
-    day_view: "Create a daylight interpretation of the same approved room while preserving its plan relationships, furniture and materials.",
-    evening_view: "Create an evening interpretation of the same approved room with layered artificial lighting while preserving its plan relationships, furniture and materials.",
+    main_space: "Create ONE premium main interior perspective for the approved project. Choose the most informative hero camera for the project scope and use the approved plan/source drawing and saved interior direction as references for the same space and design.",
+    alternate_angle: "Create ONE CLEARLY DIFFERENT alternate perspective, never a near-duplicate of the Main Space Perspective. Infer the most useful second viewpoint from the project scope: for a single room, move to the opposite corner/side or reverse axis; for an outdoor area, terrace or garden, view it from the opposite edge, approach or interior connection; for a large open-plan, hospitality or commercial space, shift to a different zone or circulation axis; for a multi-room/whole-home scope without a mapped room, choose another meaningful connected space or spatial relationship. If a specific mapped room is supplied, remain in that room or its directly connected open-plan zone. Use the approved plan/source drawing and generated Main Space image so layout, furniture, materials and design identity remain recognisably the same while the camera changes substantially.",
+    secondary_space: "Create ONE premium perspective of a SECOND KEY SPACE or zone from the same approved interior project. Choose a materially different, important space from the actual brief and approved plan—such as a second public room, typical repeated/private zone, bar, meeting zone, suite, circulation hub or connected outdoor area. Do not invent a room that is not supported by the brief. Preserve the same interior language, materials and project identity.",
+    signature_space: "Create ONE premium perspective of the project's SIGNATURE / AMENITY / SPECIAL SPACE from the same approved interior project. Choose the most distinctive supported zone from the actual brief—such as a lobby, residents' amenity, wellness area, private dining room, penthouse/suite, executive lounge, feature stair/atrium or other special programme. Do not default to residential living-room logic and do not invent a space that is not in the project context.",
+    focal_point: "Create ONE premium editorial COLLAGE of 3–5 coordinated close-up studies from the SAME approved design, using the approved plan/source drawing and Main Space image as references. Show different feature-wall, custom joinery, hardware, built-in furniture and crafted architectural moments. Keep every panel consistent with the same materials and design language; do not make another room-wide perspective.",
+    material_detail: "Create ONE premium editorial COLLAGE of 4–6 coordinated close-up material and lighting studies from the SAME approved design, using the existing Main Space visual as reference. Include material junctions, textures, floor/wall transitions, joinery craftsmanship, decorative fixtures, indirect or grazing light and other relevant lighting details. Do not make another full-room composition.",
+    day_view: "Recreate the approved Main Space Perspective in DAYLIGHT from the SAME camera position, lens/framing and composition. Use the approved plan/source drawing and Main Space image as references. Preserve the same architecture, furniture positions, styling and materials; change only the natural-light character, exterior brightness and lighting balance so it can be compared directly with the Main Space Perspective.",
+    evening_view: "Recreate the approved Main Space Perspective in EVENING/NIGHT conditions from the SAME camera position, lens/framing and composition. Use the approved plan/source drawing and Main Space image as references. Preserve the same architecture, furniture positions, styling and materials; change only the time of day, exterior darkness and approved layered artificial lighting so it can be compared directly with the Main Space Perspective.",
   };
+
   const isPlan = Boolean(planInstruction[imageType]);
-  const roomKey = String(jobInput.roomKey || "").trim();
   const roomName = String(jobInput.roomName || "").trim();
   const floorLabel = String(jobInput.floorLabel || "").trim();
   const roomNotes = String(jobInput.roomNotes || "").trim();
-  const planGuidedRoom = Boolean(!isPlan && roomKey && roomName && jobInput.sourcePlanAssetId);
-  const stageInstruction = stage === "technical"
-    ? "LEGACY TECHNICAL STAGE: prioritise accurate geometry, readable symbols, dimensions, openings, furniture footprints and coordination."
-    : stage === "final"
-      ? "PROFESSIONAL FINAL STAGE: improve image quality and realism without changing approved room identity or plan relationships."
-      : isPlan
-        ? "PREVIEW STAGE: create the primary AI plan output with clear geometry and presentation."
-        : planGuidedRoom
-          ? "PLAN-GUIDED CONCEPT STAGE: create a high-quality interior concept for the selected mapped room. The plan is a spatial reference, not permission to invent a different room."
-          : "PREVIEW STAGE: create a refined concept-quality render. Preserve geometry, furniture placement, materials and lighting direction as closely as the supplied references allow.";
+  const planGuidedRoom = Boolean(!isPlan && jobInput.roomKey && roomName && jobInput.sourcePlanAssetId);
   const label = isPlan ? INTERIOR_PLAN_LABELS[imageType] : INTERIOR_VISUAL_LABELS[imageType];
-  const detailReferenceRule = !isPlan && (imageType === "focal_point" || imageType === "material_detail")
-    ? "- For this detail-focused output, keep the approved room identity but move the virtual camera much closer to the requested feature."
-    : "";
+  const detailCollage = !isPlan && (imageType === "focal_point" || imageType === "material_detail");
+
   const brief = sanitizePromptValue(input);
-  const concept = sanitizePromptValue({ conceptSummary: output.conceptSummary, designDirection: output.designDirection, layoutPlan: output.layoutPlan, materialPalette: output.materialPalette, furniturePlan: output.furniturePlan, lightingPlan: output.lightingPlan, colorPalette: output.colorPalette, stylingNotes: output.stylingNotes, procurementPriorities: output.procurementPriorities, visualPrompt: output.visualPrompt, professionalPackage: output.professionalPackage });
-  const mappedRoom = planGuidedRoom
-    ? `\nSELECTED PLAN / ROOM\nFloor or plan: ${floorLabel || "Uploaded plan"}\nRoom or zone: ${roomName}\n${roomNotes ? `Locator note: ${roomNotes}\n` : ""}The FIRST supplied reference image is the specific uploaded plan mapped to this room. Use it as the primary spatial reference.\n`
+  const concept = sanitizePromptValue({
+    conceptSummary: output.conceptSummary,
+    designDirection: output.designDirection,
+    layoutPlan: output.layoutPlan,
+    materialPalette: output.materialPalette,
+    furniturePlan: output.furniturePlan,
+    lightingPlan: output.lightingPlan,
+    colorPalette: output.colorPalette,
+    stylingNotes: output.stylingNotes,
+    procurementPriorities: output.procurementPriorities,
+    visualPrompt: output.visualPrompt,
+  });
+
+  const selectedRoom = planGuidedRoom
+    ? `\nSELECTED ROOM\n${floorLabel ? `Floor / plan: ${floorLabel}\n` : ""}Room / zone: ${roomName}\n${roomNotes ? `Locator note: ${roomNotes}\n` : ""}The first supplied reference is the uploaded plan mapped to this room. Use it to identify the room and its main openings / adjacencies.\n`
     : "";
-  const planGuidedRules = planGuidedRoom
-    ? `- Render ONLY the selected room or its directly connected open-plan zone; do not reinterpret unrelated floors or rooms.\n- Use the room name and locator note to locate the correct zone on the selected plan.\n- Keep visible room boundaries, door/window positions, major openings, circulation and adjacency relationships recognisable from the plan.\n- Do not move the room to another side of the plan, invent a different open-plan relationship, or merge unrelated spaces.\n- The plan may not define wall elevations, exact heights, joinery or every furniture detail. Interpret those visually from the approved interior direction without changing the room's core topology.\n- For alternate/detail views, the approved Main Concept is a continuity reference for materials, furniture and room identity; the selected plan remains the spatial reference.\n- This is plan-guided concept imagery, not an exact BIM/3D reconstruction.`
-    : "";
-  const prompt = `Create a premium ${isPlan ? "interior plan" : "interior visual"} for Heyy Studio.\n\nPROJECT\n${projectName}\n\nOUTPUT\n${label}\n${stageInstruction}\n${isPlan ? planInstruction[imageType] : visualInstruction[imageType]}\n${mappedRoom}\nSAVED PROJECT BRIEF\n${promptJson(brief, 10000)}\n\nAPPROVED INTERIOR CONCEPT\n${promptJson(concept, 10000)}\n\nNON-NEGOTIABLE CONSISTENCY RULES\n- Treat supplied reference images as the source of truth for approved spatial and design decisions.\n${planGuidedRules}\n- If this Interior project is connected to Architecture Studio, supplied architecture plans remain important geometry references.\n- Use the saved materials, colour palette, furniture and lighting as one connected design system.\n- Do not invent a completely different architectural space between related views.\n- No fake logos, watermarks, moodboard collages or split-screen presentations.\n${detailReferenceRule}\n- Plans must show the entire drawing with generous margins and never crop labels, dimensions or legends.\n- Visuals must be one complete full-frame image with professional architectural photography and no fake text.`;
-  return prompt.length <= 30000 ? prompt : `${prompt.slice(0, 29600)}\n\n[Context shortened automatically to stay within the image model prompt limit.]`;
+
+  const prompt = `Create a premium ${isPlan ? "interior plan" : "interior visual"} for Heyy Studio.\n\nPROJECT\n${projectName}\n\nOUTPUT\n${label}\n${isPlan ? planInstruction[imageType] : visualInstruction[imageType]}\n${selectedRoom}\nPROJECT BRIEF\n${promptJson(brief, 9000)}\n\nAPPROVED INTERIOR DIRECTION\n${promptJson(concept, 9000)}\n\nREFERENCE USE\n- Use the supplied references directly for the same project instead of inventing a separate design.\n- If an uploaded or connected Architecture plan is supplied, use it as the spatial reference.\n- For later visuals, use the approved/generated Main Space and other supplied interior images for continuity.\n- Keep the saved materials, colours, furniture and lighting language connected across outputs.\n${detailCollage ? "- For this requested detail-study output, create the coordinated multi-panel collage described above. Every panel must belong to the SAME approved design. Do not add fake labels, captions, logos or unrelated moodboard imagery." : "- Create one clean complete output only; no fake logos, watermarks or unrelated moodboard alternatives."}\n- Plans must remain fully visible on the canvas. ${detailCollage ? "Detail-study visuals should fill the canvas with a clean premium collage composition and no fake text." : "Visuals must be one full-frame professional interior image."}\n\nThis is concept design imagery, not construction documentation.`;
+  return prompt.length <= 30000 ? prompt : `${prompt.slice(0, 29600)}\n\n[Context shortened automatically.]`;
 }
 
 function buildMarketingVisualPrompt(projectName: string, viewType: MarketingVisualType, stage: "preview" | "final", input: Record<string, unknown>, output: Record<string, unknown>, tweak: string) {
@@ -288,6 +324,9 @@ async function loadInteriorReferences(admin: SupabaseClient, userId: string, pro
     if (stage === "preview" || stage === "final") await addInteriorAssetRef(admin, refs, projectId, imageType, ["preview", "technical"], false);
     if ((isPlan && imageType !== "space_plan") || !isPlan) await addInteriorAssetRef(admin, refs, projectId, "space_plan", ["final", "preview", "technical"], true);
     if (!isPlan && imageType !== "main_space") await addInteriorAssetRef(admin, refs, projectId, "main_space", ["final", "preview"], false);
+    if (!isPlan && ["signature_space", "focal_point", "material_detail"].includes(imageType)) {
+      await addInteriorAssetRef(admin, refs, projectId, "secondary_space", ["final", "preview"], false);
+    }
   }
   return refs.slice(0, 8);
 }
@@ -383,7 +422,7 @@ async function addArchitectureSourceDrawings(admin: SupabaseClient, userId: stri
 }
 
 function architectureSourcePriority(imageType: InteriorImageType) {
-  if (["space_plan", "furniture_plan", "lighting_plan", "main_space", "alternate_angle", "focal_point"].includes(imageType)) return ["ground_floor", "upper_floor", "section", "front_elevation", "rear_elevation", "site_plan"];
+  if (["space_plan", "furniture_plan", "lighting_plan", "main_space", "alternate_angle", "secondary_space", "signature_space", "focal_point"].includes(imageType)) return ["ground_floor", "upper_floor", "section", "front_elevation", "rear_elevation", "site_plan"];
   return ["section", "ground_floor", "upper_floor", "front_elevation", "rear_elevation", "site_plan"];
 }
 
@@ -426,7 +465,22 @@ async function pushUrlRef(refs: any[], url: string, name: string) {
   } catch { /* optional ref */ }
 }
 
-async function storeGeneratedAsset(admin: SupabaseClient, args: { userId: string; projectId: string; studio: string; assetType: string; title: string; buffer: Buffer; payload: Record<string, unknown>; metadata: Record<string, unknown> }) {
+async function routedReferencesFromFiles(files: any[]): Promise<RoutedImageReference[]> {
+  const output: RoutedImageReference[] = [];
+  for (const [index, file] of files.entries()) {
+    if (!file || typeof file.arrayBuffer !== "function") continue;
+    const mimeType = String(file.type || "image/png").toLowerCase();
+    if (!(mimeType === "image/png" || mimeType === "image/jpeg" || mimeType === "image/webp")) continue;
+    output.push({
+      bytes: Buffer.from(await file.arrayBuffer()),
+      mimeType,
+      filename: String(file.name || `reference-${index + 1}.${mimeType === "image/jpeg" ? "jpg" : mimeType === "image/webp" ? "webp" : "png"}`),
+    });
+  }
+  return output;
+}
+
+async function storeGeneratedAsset(admin: SupabaseClient, args: { userId: string; projectId: string; studio: string; assetType: string; title: string; buffer: Buffer; payload: Record<string, unknown>; metadata: Record<string, unknown>; provider?: string; model?: string }) {
   const path = `${args.userId}/${args.projectId}/${args.assetType}/${safeSegment(args.title)}-${Date.now()}-${randomUUID()}.png`;
   const { error: uploadError } = await admin.storage.from("project-assets").upload(path, args.buffer, { contentType: "image/png", cacheControl: "31536000", upsert: false });
   if (uploadError) throw new Error(`Asset upload failed: ${uploadError.message}`);
@@ -435,7 +489,7 @@ async function storeGeneratedAsset(admin: SupabaseClient, args: { userId: string
   const { data: asset, error: assetError } = await admin.from("project_assets").insert({
     user_id: args.userId, project_id: args.projectId, studio: args.studio, asset_type: args.assetType, title: args.title, payload: args.payload,
     file_url: fileUrl, thumbnail_url: fileUrl,
-    metadata: { provider: "openai", model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2", ...args.metadata, storage_path: path, content_type: "image/png" },
+    metadata: { provider: args.provider || "openai", model: args.model || process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-sunburst", ...args.metadata, storage_path: path, content_type: "image/png" },
   }).select().single();
   if (assetError) { await admin.storage.from("project-assets").remove([path]); throw new Error(`Asset record failed: ${assetError.message}`); }
   return asset;

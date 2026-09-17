@@ -97,6 +97,18 @@ export const COMMUNICATION_TEMPLATE_CATALOG: CommunicationTemplateDefinition[] =
     defaultCtaLabel: "Open Expert Portal",
   },
   {
+    key: "subscription.confirmed",
+    name: "Subscription confirmation",
+    category: "Billing",
+    description: "Sent once when a new paid Starter or Pro subscription becomes active. Monthly and yearly plans both receive this confirmation; normal renewals receive the payment receipt only.",
+    defaultSubject: "Your Heyy Studio {{plan_name}} plan is active",
+    defaultPreheader: "{{monthly_credits}} subscription credits refresh every month.",
+    defaultEyebrow: "Subscription active",
+    defaultTitle: "Welcome to Heyy Studio {{plan_name}}",
+    defaultBody: "Your {{plan_name}} subscription is active on {{billing_cycle}} billing. You receive {{monthly_credits}} fresh subscription credits each month. Unused subscription credits reset at each monthly refresh, while purchased credits stay separate and never expire.",
+    defaultCtaLabel: "Manage your subscription",
+  },
+  {
     key: "payment.receipt",
     name: "Payment confirmation + invoice",
     category: "Billing",

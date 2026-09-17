@@ -5,12 +5,14 @@ import {
   generateArchitecturePlanSet,
   generateArchitectureVisualPrompts,
   generateAndStorePlanFoundationSheetImage,
+  architecturePlanFoundationSheetGroups,
   type ArchitectureDna,
   type CanonicalPlanSpec,
   type LiveVisualPrompt,
 } from "@/lib/ai/architecture";
 import { getArchitectureAiPlanConfig, getArchitecturePlanAiPlanConfig, type AiPlan } from "@/lib/ai/config";
 import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
+import { providerTelemetrySummary, withProviderTelemetryContext } from "@/lib/ai/provider-telemetry";
 
 export type ArchitectureStage = "concept" | "plans" | "visuals" | "design-pack" | "all";
 
@@ -97,7 +99,15 @@ export async function processArchitectureStageJob(jobId: string) {
   try {
     if (!projectId || !userId) throw new Error("Architecture generation job is missing project context.");
 
-    const state = await runArchitectureStage({ admin, userId, projectId, stage, planName });
+    const state = await withProviderTelemetryContext({
+      jobId,
+      userId,
+      projectId,
+      studio: "architecture_studio",
+      stage,
+      tool: "architecture_stage",
+    }, () => runArchitectureStage({ admin, userId, projectId, stage, planName }));
+    const providerCost = await providerTelemetrySummary(jobId);
 
     const durableOutput = {
       stage,
@@ -105,6 +115,7 @@ export async function processArchitectureStageJob(jobId: string) {
       credits_used: Number(input.credits || 0),
       project_status: state.project?.status || null,
       project_completion: state.project?.completion || null,
+      provider_cost: providerCost,
     };
     const { error: outputError } = await admin
       .from("generation_jobs")
@@ -507,45 +518,57 @@ async function runArchitectureStage(args: {
       if (error) throw new Error(error.message);
     }
 
-    // Generate one professional multi-floor Plan Foundation sheet using the proven pre-rebuild image workflow.
-    // The selected Direction guides the plan content, but the old professional plan-sheet generator is preserved.
-    const generatedAsset = await generateAndStorePlanFoundationSheetImage({
-      supabase: admin,
-      userId: project.user_id,
-      projectId: project.id,
-      filenamePrefix: "plan-foundation-sheet",
-      projectName: project.project_name,
-      canonicalPlan: canonical_plan,
-      architectureDna: foundationDna,
-      plan: planAiPlan,
-      directionImageReference: selectedDirectionImageReference,
-    });
+    // Present one coordinated canonical plan reasoning result across as many readable
+    // Plan Foundation sheets as the building needs. No extra planning/reasoning call is made.
+    const foundationGroups = architecturePlanFoundationSheetGroups(
+      Array.isArray(canonical_plan.levels) ? canonical_plan.levels.length : 0,
+    );
+    for (let sheetIndex = 0; sheetIndex < foundationGroups.length; sheetIndex += 1) {
+      const visualType = sheetIndex === 0 ? "plan_foundation_sheet" : `plan_foundation_sheet_${sheetIndex + 1}`;
+      const generatedAsset = await generateAndStorePlanFoundationSheetImage({
+        supabase: admin,
+        userId: project.user_id,
+        projectId: project.id,
+        filenamePrefix: `plan-foundation-sheet-${sheetIndex + 1}`,
+        projectName: project.project_name,
+        canonicalPlan: canonical_plan,
+        architectureDna: foundationDna,
+        plan: planAiPlan,
+        directionImageReference: selectedDirectionImageReference,
+        levelIndexes: foundationGroups[sheetIndex],
+        sheetNumber: sheetIndex + 1,
+        sheetCount: foundationGroups.length,
+      });
 
-    const foundationRow = planRows.find((item) => item.visual_type === "plan_foundation_sheet");
-    const foundationMetadata = metadataRecord(foundationRow?.metadata);
-    const { error: renderSaveError } = await admin
-      .from("architecture_visuals")
-      .update({
-        image_url: generatedAsset.imageUrl,
-        storage_path: generatedAsset.storagePath,
-        is_approved: false,
-        metadata: {
-          ...foundationMetadata,
-          canonical_plan,
-          architecture_dna: foundationDna,
-          active_plan_view: "technical",
-          plan_foundation_sheet_authority: true,
-          plan_foundation_version: 2,
-          direction_first_sequence: directionFirst,
-          selected_direction_id: selectedDirection?.id || null,
-          technical_assets: planFoundationAssetRecord(generatedAsset, aiPlan.imageModel),
-        },
-      })
-      .eq("project_id", project.id)
-      .eq("user_id", project.user_id)
-      .eq("direction_id", associationDirectionId)
-      .eq("visual_type", "plan_foundation_sheet");
-    if (renderSaveError) throw new Error(renderSaveError.message);
+      const foundationRow = planRows.find((item) => item.visual_type === visualType);
+      const foundationMetadata = metadataRecord(foundationRow?.metadata);
+      const { error: renderSaveError } = await admin
+        .from("architecture_visuals")
+        .update({
+          image_url: generatedAsset.imageUrl,
+          storage_path: generatedAsset.storagePath,
+          is_approved: false,
+          metadata: {
+            ...foundationMetadata,
+            canonical_plan,
+            architecture_dna: foundationDna,
+            active_plan_view: "technical",
+            plan_foundation_sheet_authority: true,
+            plan_foundation_version: 3,
+            plan_foundation_sheet_index: sheetIndex + 1,
+            plan_foundation_sheet_count: foundationGroups.length,
+            plan_foundation_level_indexes: foundationGroups[sheetIndex],
+            direction_first_sequence: directionFirst,
+            selected_direction_id: selectedDirection?.id || null,
+            technical_assets: planFoundationAssetRecord(generatedAsset, aiPlan.imageModel),
+          },
+        })
+        .eq("project_id", project.id)
+        .eq("user_id", project.user_id)
+        .eq("direction_id", associationDirectionId)
+        .eq("visual_type", visualType);
+      if (renderSaveError) throw new Error(renderSaveError.message);
+    }
 
     nextCompletion = Math.max(nextCompletion, 74);
     nextStatus = "Plan Foundation Ready";
@@ -612,10 +635,10 @@ async function runArchitectureStage(args: {
     const architectureDna = dnaResult.architectureDna;
     const sourceBrief = metadataRecord(project.source_brief);
     const requestedViews = project.workflow_mode === "build_from_scratch"
-      ? ["Exterior Concept Board", "Living & Landscape Concept Board"]
+      ? []
       : Array.isArray(sourceBrief.camera_views) && (sourceBrief.camera_views as string[]).length
-        ? (sourceBrief.camera_views as string[]).slice(0, 2)
-        : ["Exterior Concept Board", "Living & Landscape Concept Board"];
+        ? (sourceBrief.camera_views as string[]).slice(0, 4)
+        : [];
     const canonicalPlan = canonicalPlanFromRecord(currentPlan?.generation_json) || canonicalPlanFromRecord(currentPlanResult.data?.generation_json);
     if (!canonicalPlan && project.workflow_mode === "build_from_scratch") {
       throw new Error("Prepare and approve the Plan Foundation before preparing Concept Visuals.");

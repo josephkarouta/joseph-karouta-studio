@@ -22,6 +22,8 @@ type RegenerateRequest = {
 
 type GeneratedAsset = {
   imageUrl: string;
+  provider?: string;
+  model?: string;
   storagePath: string;
   masterImageUrl: string;
   masterStoragePath: string;
@@ -82,6 +84,8 @@ function assetRecord(generated: GeneratedAsset) {
     thumbnail_storage_path: generated.thumbnailStoragePath,
     quality: generated.quality || null,
     tier: generated.tier || null,
+    provider: generated.provider || null,
+    model: generated.model || null,
     generated_at: new Date().toISOString(),
   };
 }
@@ -411,6 +415,31 @@ async function loadSelectedDirection(
 
 export type ArchitectureImageJobInput = RegenerateRequest & { planName?: AiPlan };
 
+function conceptVisualTargetRole(visualType: string, title: string) {
+  if (visualType === "full_building_view") {
+    return `Create ONE premium FULL BUILDING view titled ${title}. The entire building must be visible in one frame from base/arrival or podium to roof/crown. Use the selected Design Direction and all approved Plan Foundation sheets as references for the same project.`;
+  }
+  if (visualType === "primary_frontage_view") {
+    return `Create ONE premium PRIMARY / FRONT view titled ${title}. Use the selected Design Direction and approved Plan Foundation as references for the same project.`;
+  }
+  if (visualType === "secondary_frontage_view") {
+    return `Create ONE premium REAR / SECONDARY view titled ${title}. Use the selected Design Direction, approved Plan Foundation and previous generated view as references for the same project.`;
+  }
+  if (visualType === "spatial_experience_view") {
+    return `Create ONE premium SPATIAL EXPERIENCE image titled ${title}. Use the selected Design Direction, approved Plan Foundation and previous generated views as references for the same project.`;
+  }
+  if (visualType === "upper_massing_view") {
+    return `Create ONE premium UPPER LEVEL / CROWN view titled ${title}. Preserve the same building and facade system while clearly showing the upper massing, crown or roof architecture.`;
+  }
+  if (visualType === "additional_spatial_view") {
+    return `Create ONE premium ADDITIONAL SPATIAL EXPERIENCE titled ${title}. Choose the requested second meaningful project zone from the approved programme and preserve the same building, materials and plan relationships.`;
+  }
+  if (visualType === "detail_material_collage") {
+    return `Create ONE premium ARCHITECTURAL DETAIL / MATERIAL COLLAGE titled ${title}. Use the selected Design Direction and generated project views as references.`;
+  }
+  return `Create the ${title} view using the selected Design Direction and approved Plan Foundation as references for the same project.`;
+}
+
 export async function executeArchitectureImageGeneration(args: {
   admin: SupabaseClient;
   userId: string;
@@ -523,13 +552,17 @@ export async function executeArchitectureImageGeneration(args: {
           throw new Error("Prepare and approve the Plan Foundation before generating a Direction visual.");
         }
         const rows = (planRows || []) as Array<Record<string, unknown>>;
-        const foundationReference = approvedGeneratedPlanReference(
-          rows.find((row) => String(row.visual_type || "") === "plan_foundation_sheet"),
-          "APPROVED PLAN FOUNDATION SHEET — ABSOLUTE geometry authority for this exact building. Every floor is shown together on this one coordinated sheet. The Direction must develop facade, roof, materials and landscape around this building without changing its floor relationships, stair/core, entry, pool, garage or site organization.",
-        );
-        planFoundationReferences = foundationReference ? [foundationReference] : [];
-        if (!foundationReference) {
-          throw new Error("Approve the coordinated Plan Foundation sheet before generating a Direction visual.");
+        const foundationRows = rows
+          .filter((row) => /^plan_foundation_sheet(?:_\d+)?$/.test(String(row.visual_type || "")))
+          .sort((a, b) => Number(metadataRecord(a.metadata).plan_foundation_sheet_index || 1) - Number(metadataRecord(b.metadata).plan_foundation_sheet_index || 1));
+        planFoundationReferences = foundationRows
+          .map((row, index) => approvedGeneratedPlanReference(
+            row,
+            `APPROVED PLAN FOUNDATION SHEET ${index + 1} OF ${foundationRows.length} — part of the same geometry authority set for this exact building. Preserve all shown floor relationships, cores, entry/access and site organization.`,
+          ))
+          .filter((reference): reference is ArchitectureImageReference => Boolean(reference));
+        if (!foundationRows.length || planFoundationReferences.length !== foundationRows.length) {
+          throw new Error("Approve every coordinated Plan Foundation sheet before generating a Direction visual.");
         }
       }
 
@@ -543,7 +576,7 @@ export async function executeArchitectureImageGeneration(args: {
           ? existingDesignDirectionBoardPrompt(direction as Record<string, unknown>)
           : savedPrompt,
         plan,
-        architectureDna: sourceGeometryLocked ? null : fallbackArchitectureDna(direction as Record<string, unknown>),
+        architectureDna: sourceGeometryLocked || directionFirstScratch ? null : fallbackArchitectureDna(direction as Record<string, unknown>),
         sourceGeometryReferences: sourceGeometryLocked
           ? sourceDrawingReferences
           : directionFirstScratch ? [] : planFoundationReferences,
@@ -552,13 +585,15 @@ export async function executeArchitectureImageGeneration(args: {
         targetRole: sourceGeometryLocked
           ? "Create a STYLE / MATERIAL DIRECTION BOARD only. The uploaded source drawings define the actual building and this direction image must not establish replacement geometry."
           : directionFirstScratch
-            ? "Create a DESIGN DIRECTION / MASSING CONCEPT for this project before exact floor plans are developed. Establish one repeatable architectural identity: overall massing intent, exact requested storey count, roof language, facade rhythm, material placement, entry character, landscape and atmosphere. Do not present this image as measured or locked floor-plan geometry. The selected Direction will guide the later Canonical Plan Foundation."
+            ? "Create ONE premium DESIGN DIRECTION BOARD before floor plans are developed. Show one clear FRONT / PRIMARY ARRIVAL view, one clear REAR / SECONDARY view, and coordinated material / facade / roof / opening / landscape close-up studies. Keep it visually clean and useful as the reference image for the later Plan Foundation and Concept Visuals."
             : "Create this Architecture Direction as an architectural expression of the APPROVED PLAN FOUNDATION. Keep the approved plan geometry fixed; develop only facade composition, roof expression compatible with that footprint, materials, openings, landscape character and atmosphere.",
         tier: quality,
       }));
       imageUrl = generated.imageUrl;
       storagePath = generated.storagePath;
       imageMetadata = {
+        image_provider: generated.provider || "openai",
+        image_model: generated.model || plan.imageModel,
         image_usage: generated.usage,
         image_reference_count: generated.referenceCount,
         image_generation_method: generated.generationMethod,
@@ -579,7 +614,9 @@ export async function executeArchitectureImageGeneration(args: {
       .update({
         image_url: imageUrl,
         image_storage_path: storagePath,
-        image_model: mode === "demo" ? "demo-image-v1" : plan.imageModel,
+        image_model: mode === "demo"
+          ? "demo-image-v1"
+          : String(imageMetadata.image_model || plan.imageModel),
         generation_status: "complete",
         generation_error: null,
         generated_at: new Date().toISOString(),
@@ -614,7 +651,7 @@ export async function executeArchitectureImageGeneration(args: {
   const masterDirectionJson = metadataRecord(masterDirection?.generation_json);
   const masterReference = masterDirection
     ? imageReference({
-        label: "Selected Architecture Direction. Apply its facade, roof, materials, openings, landscape character and atmosphere WITHOUT changing the approved plan geometry.",
+        label: "Selected Design Direction. Use this as the main visual reference for architectural character, front/rear appearance, materials, roof, openings and landscape.",
         storagePath: preferredMasterPath(masterDirectionJson, masterDirection.image_storage_path),
         url: masterDirection.image_url,
       })
@@ -692,6 +729,8 @@ export async function executeArchitectureImageGeneration(args: {
       imageUrl = generated.imageUrl;
       storagePath = generated.storagePath;
       imageMetadata = {
+        image_provider: generated.provider || "openai",
+        image_model: generated.model || plan.imageModel,
         image_usage: generated.usage,
         image_reference_count: generated.referenceCount,
         image_generation_method: generated.generationMethod,
@@ -714,7 +753,9 @@ export async function executeArchitectureImageGeneration(args: {
           ...imageMetadata,
           mode,
           image_storage_path: storagePath,
-          image_model: mode === "demo" ? "demo-image-v1" : plan.imageModel,
+          image_model: mode === "demo"
+            ? "demo-image-v1"
+            : String(imageMetadata.image_model || plan.imageModel),
           architecture_dna: architectureDna,
           visual_continuity_version: 2,
           master_direction_id: project.selected_direction_id,
@@ -953,14 +994,23 @@ export async function executeArchitectureImageGeneration(args: {
       throw new Error("Prepare and approve the connected floor plans before generating architectural visuals.");
     }
     const projectPlanRows = (relatedVisuals || []) as Array<Record<string, unknown>>;
-    const approvedFoundationSheet = sourceGeometryLocked
-      ? null
-      : approvedGeneratedPlanReference(
-          projectPlanRows.find((item) => String(item.visual_type || "") === "plan_foundation_sheet"),
-          "APPROVED PLAN FOUNDATION SHEET — ABSOLUTE geometry authority. Reconstruct the same building shown by all coordinated floors on this sheet. Preserve entry, garage, pool/site organization, vertical circulation and overall floor relationships.",
-        );
-    if (!sourceGeometryLocked && !approvedFoundationSheet) {
-      throw new Error("Approve the coordinated Plan Foundation sheet before generating visuals.");
+    const foundationSheetRows = sourceGeometryLocked
+      ? []
+      : projectPlanRows
+          .filter((item) => /^plan_foundation_sheet(?:_\d+)?$/.test(String(item.visual_type || "")))
+          .sort((a, b) => {
+            const aIndex = Number(metadataRecord(a.metadata).plan_foundation_sheet_index || (String(a.visual_type || "") === "plan_foundation_sheet" ? 1 : 99));
+            const bIndex = Number(metadataRecord(b.metadata).plan_foundation_sheet_index || (String(b.visual_type || "") === "plan_foundation_sheet" ? 1 : 99));
+            return aIndex - bIndex;
+          });
+    const approvedFoundationSheets = foundationSheetRows
+      .map((row, index) => approvedGeneratedPlanReference(
+        row,
+        `Approved Plan Foundation sheet ${index + 1} of ${foundationSheetRows.length}. Use it as part of the same coordinated floor-plan reference set.`,
+      ))
+      .filter((reference): reference is ArchitectureImageReference => Boolean(reference));
+    if (!sourceGeometryLocked && (!foundationSheetRows.length || approvedFoundationSheets.length !== foundationSheetRows.length)) {
+      throw new Error("Approve every coordinated Plan Foundation sheet before generating visuals.");
     }
 
     const visualAssetKey = `${quality}_assets`;
@@ -978,13 +1028,19 @@ export async function executeArchitectureImageGeneration(args: {
       : [];
     const approvedPlanReferences = sourceGeometryLocked
       ? []
-      : approvedFoundationSheet ? [approvedFoundationSheet] : [];
+      : approvedFoundationSheets;
     const tourPreviousType = group === "tour" && typeof visualMetadata.tour_previous_visual_type === "string"
       ? visualMetadata.tour_previous_visual_type
       : null;
     const relatedType =
       tourPreviousType ||
-      (visualType === "night_view" ? "day_view" :
+      (visualType === "primary_frontage_view" ? "full_building_view" :
+      visualType === "secondary_frontage_view" ? "primary_frontage_view" :
+      visualType === "spatial_experience_view" ? "secondary_frontage_view" :
+      visualType === "additional_spatial_view" ? "spatial_experience_view" :
+      visualType === "upper_massing_view" ? "full_building_view" :
+      visualType === "detail_material_collage" ? (rows.some((row) => row.visual_type === "upper_massing_view") ? "upper_massing_view" : rows.some((row) => row.visual_type === "additional_spatial_view") ? "additional_spatial_view" : "spatial_experience_view") :
+      visualType === "night_view" ? "day_view" :
       visualType === "rear_exterior" ? "front_exterior" :
       visualType === "street_view" ? "front_exterior" :
       visualType === "aerial_view" ? "front_exterior" :
@@ -1031,16 +1087,14 @@ export async function executeArchitectureImageGeneration(args: {
             group === "tour"
               ? "TOUR OUTPUT RULES: create one immersive room panorama with a level horizon, camera at eye height and strong continuity at the left and right edges. Preserve all approved door, window and circulation positions. This is one node in a connected room-to-room tour, not an unrelated interior redesign."
               : "",
-            canonicalPlan
-              ? `Canonical site and plan relationship: ${JSON.stringify(canonicalPlan)}`
-              : "",
+
           ].filter(Boolean).join("\n\n"),
       plan,
-      architectureDna: sourceGeometryLocked ? null : architectureDna,
+      architectureDna: null,
       sourceGeometryReferences: sourceGeometryLocked
         ? relevantSourceReferences
-        : uniqueReferences(approvedPlanReferences),
-      preserveSourceGeometry: sourceGeometryLocked || approvedPlanReferences.length > 0,
+        : [],
+      preserveSourceGeometry: sourceGeometryLocked,
       referenceImages: sourceGeometryLocked
         ? uniqueReferences([
             masterReference,
@@ -1049,8 +1103,9 @@ export async function executeArchitectureImageGeneration(args: {
           ])
         : uniqueReferences([
             masterReference,
-            currentTargetReference,
+            ...approvedFoundationSheets,
             relatedReference,
+            currentTargetReference,
           ]),
       targetRole: sourceGeometryLocked
         ? group === "visuals"
@@ -1058,13 +1113,16 @@ export async function executeArchitectureImageGeneration(args: {
           : `Generate only the ${String(visual.title || visual.visual_type)} view of the EXISTING uploaded design. SOURCE GEOMETRY references define the building. The selected Direction may affect materials, facade character, landscape and lighting only.`
         : group === "tour"
           ? `Generate only the ${String(visual.title || visual.visual_type)} immersive tour node of the APPROVED PLAN FOUNDATION. Approved plans define geometry; the selected Direction defines architectural expression.`
-          : `Create the ${String(visual.title || visual.visual_type)} as a premium multi-study ARCHITECTURE CONCEPT BOARD. The APPROVED PLAN FOUNDATION is the GEOMETRY AUTHORITY and the selected Design Direction is the VISUAL-LANGUAGE AUTHORITY. Reconstruct one consistent building from those two sources rather than inventing another house. Preserve the exact number of levels, canonical footprint/massing relationship, shared vertical-core location, main entry, garage/driveway, pool and major indoor-outdoor relationships shown by the plan. Combine one main atmospheric perspective with smaller coordinated material/detail, sketch/diagram, landscape/lighting and spatial studies. Keep generated text minimal and do not present the output as a measured elevation or construction visualization.`,
+          : conceptVisualTargetRole(visualType, String(visual.title || visual.visual_type)),
       tier: quality,
     }));
     imageUrl = generated.imageUrl;
     storagePath = generated.storagePath;
+    imageModel = generated.model || plan.imageModel;
     imageMetadata = {
       architecture_dna: architectureDna,
+      image_provider: generated.provider || "openai",
+      image_model: imageModel,
       canonical_plan: canonicalPlan,
       image_usage: generated.usage,
       image_reference_count: generated.referenceCount,

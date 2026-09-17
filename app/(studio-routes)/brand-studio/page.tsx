@@ -1014,6 +1014,8 @@ export default function BrandStudioPage() {
           eyebrow="Strategy, identity & brand applications"
           title="Brand Studio"
           description="Build a complete brand system or one focused deliverable inside a clear, connected workspace."
+          imageSrc="/studio-heroes/brand-studio-hero.webp"
+          imagePosition="center 58%"
           controls={(
             <>
               <StudioModeToggle value={workMode} onChange={setWorkMode} tone="brand" compact />

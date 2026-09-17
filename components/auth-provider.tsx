@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState("FREE");
   const [credits, setCredits] = useState<CreditSummary>(defaultCredits);
   const [loading, setLoading] = useState(true);
+  const signingOutRef = useRef(false);
 
   const resetAccount = useCallback(() => {
     setPlan("FREE");
@@ -170,6 +172,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadAccount, user]);
 
   const signOut = useCallback(async () => {
+    signingOutRef.current = true;
+    setLoading(true);
+
     if (user) {
       try {
         window.localStorage.removeItem(`${ACCOUNT_CACHE_PREFIX}${user.id}`);
@@ -177,9 +182,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Ignore storage cleanup failures.
       }
     }
-    await supabase.auth.signOut();
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      signingOutRef.current = false;
+      setLoading(false);
+      throw error;
+    }
+
     setUser(null);
     resetAccount();
+    window.location.replace("/");
   }, [resetAccount, user]);
 
   const signInWithGoogle = useCallback(async (redirectTo?: string) => {
@@ -275,6 +289,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event: AuthChangeEvent, session: Session | null) => {
         const currentUser = session?.user || null;
         setUser(currentUser);
+
+        if (!currentUser && signingOutRef.current) {
+          // Keep protected pages in their loading state until the intentional
+          // sign-out redirects to Home. This prevents them racing to /login.
+          resetAccount();
+          return;
+        }
+
         setLoading(false);
 
         if (!currentUser) {

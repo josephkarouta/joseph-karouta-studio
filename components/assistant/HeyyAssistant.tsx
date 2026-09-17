@@ -423,7 +423,7 @@ function localRoute(
   if (/price|plan|credit|billing|subscription|top.?up/.test(text)) {
     return {
       answer:
-        "Heyy credits cover paid AI generation. Subscription credits reset each billing period and are used before purchased credits; purchased credits do not expire. Expert production is quoted separately.",
+        "Heyy credits cover paid AI generation. Subscription credits refresh every month and are used before purchased credits, including on yearly plans; purchased credits do not expire. Expert production is quoted separately.",
       actions: [
         { label: "View plans & credits", href: "/pricing", kind: "primary" },
         ...(signedIn

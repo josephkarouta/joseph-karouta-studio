@@ -4,6 +4,7 @@ import {
   type ArchitectureImageJobInput,
 } from "./architecture-image-executor";
 import { completeGenerationJob, failGenerationJob } from "@/lib/credits/lifecycle";
+import { providerTelemetrySummary, withProviderTelemetryContext } from "@/lib/ai/provider-telemetry";
 
 export async function processArchitectureImageJob(jobId: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -49,15 +50,24 @@ export async function processArchitectureImageJob(jobId: string) {
   let creditsCommitted = false;
 
   try {
-    const result = await executeArchitectureImageGeneration({
+    const result = await withProviderTelemetryContext({
+      jobId,
+      userId,
+      projectId: claimed.project_id || input.projectId || null,
+      studio: "architecture_studio",
+      stage: `${input.targetType || "image"}:${input.quality || "preview"}`,
+      tool: "architecture_image",
+    }, () => executeArchitectureImageGeneration({
       admin,
       userId,
       input,
-    });
+    }));
+    const providerCost = await providerTelemetrySummary(jobId);
 
     const durableOutput = {
       result,
       credits_used: Number(input.credits || 0),
+      provider_cost: providerCost,
     };
     const outputSaved = await updateJobWithRetry(admin, jobId, { output: durableOutput });
     if (!outputSaved) throw new Error("Architecture generation result could not be recorded.");

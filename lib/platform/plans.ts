@@ -1,9 +1,11 @@
 export type PlanId = "free" | "starter" | "pro";
+export type BillingInterval = "month" | "year";
 
 export type PlanDefinition = {
   id: PlanId;
   name: string;
   monthlyPriceUsd: number;
+  annualPriceUsd: number;
   monthlyCredits: number;
   description: string;
   features: string[];
@@ -24,6 +26,7 @@ export const PLANS: PlanDefinition[] = [
     id: "free",
     name: "Free",
     monthlyPriceUsd: 0,
+    annualPriceUsd: 0,
     monthlyCredits: 0,
     description: "Create a free account and buy credits whenever you need them.",
     features: [
@@ -38,15 +41,15 @@ export const PLANS: PlanDefinition[] = [
     id: "starter",
     name: "Starter",
     monthlyPriceUsd: 35,
+    annualPriceUsd: 350,
     monthlyCredits: 1500,
     description: "For founders and small teams creating every month.",
     features: [
       "Everything in Free",
       "1,500 subscription credits each month",
-      "Buy non-expiring top-ups at any time",
+      "Purchased top-ups never expire",
       "Unlimited saved projects & assets (fair use)",
       "Version history and premium exports",
-      "Priority standard generation queue",
     ],
     highlighted: true,
   },
@@ -54,14 +57,15 @@ export const PLANS: PlanDefinition[] = [
     id: "pro",
     name: "Pro",
     monthlyPriceUsd: 99,
+    annualPriceUsd: 990,
     monthlyCredits: 5000,
     description: "For active creative teams and higher-volume production.",
     features: [
       "Everything in Starter",
       "5,000 subscription credits each month",
-      "Buy non-expiring top-ups at any time",
+      "Purchased top-ups never expire",
       "Unlimited saved projects & assets (fair use)",
-      "High-quality image and video modes",
+      "Version history and premium exports",
       "Priority support and production intake",
     ],
   },
@@ -77,6 +81,28 @@ export function normalizePlan(value: unknown): PlanId {
 export function getPlan(value: unknown) {
   const id = normalizePlan(value);
   return PLANS.find((plan) => plan.id === id) || PLANS[0];
+}
+
+export function normalizeBillingInterval(value: unknown): BillingInterval {
+  return String(value || "month").toLowerCase() === "year" ? "year" : "month";
+}
+
+export function planPriceUsd(planValue: unknown, intervalValue: unknown) {
+  const plan = getPlan(planValue);
+  const interval = normalizeBillingInterval(intervalValue);
+  return interval === "year" ? plan.annualPriceUsd : plan.monthlyPriceUsd;
+}
+
+export function annualSavingsUsd(planValue: unknown) {
+  const plan = getPlan(planValue);
+  return Math.max(0, plan.monthlyPriceUsd * 12 - plan.annualPriceUsd);
+}
+
+export function annualDiscountPercent(planValue: unknown) {
+  const plan = getPlan(planValue);
+  const fullYear = plan.monthlyPriceUsd * 12;
+  if (fullYear <= 0) return 0;
+  return Math.round((1 - plan.annualPriceUsd / fullYear) * 1000) / 10;
 }
 
 export type CreditPackId = "small" | "medium" | "large";

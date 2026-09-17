@@ -76,6 +76,13 @@ export const CUSTOMER_CREDIT_GUIDE: CreditGuideItem[] = [
     detail: "Prepare the guided interior concept brief and editable design structure.",
   },
   {
+    id: "interior-plan",
+    category: "Interior Studio",
+    label: "Interior plan generation",
+    credits: CREDIT_COSTS.interiorPlan,
+    detail: "Generate one Interior plan board, including Furniture & Space, Furniture Placement or Lighting & Ceiling plans.",
+  },
+  {
     id: "interior-visual",
     category: "Interior Studio",
     label: "Single visual generation",

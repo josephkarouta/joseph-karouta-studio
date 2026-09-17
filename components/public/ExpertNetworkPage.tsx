@@ -4,10 +4,18 @@ import SiteFooter from "@/components/site-footer";
 import { GlassCard, PageContainer } from "@/components/ui/heyy";
 import ExpertsNetworkContent from "@/components/public/ExpertsNetworkContent";
 
-export default function ExpertNetworkPage({ initialRoleSlug, initialSource }: { initialRoleSlug?: string; initialSource?: string }) {
+export default function ExpertNetworkPage({
+  initialRoleSlug,
+  initialSource,
+  prelaunch = false,
+}: {
+  initialRoleSlug?: string;
+  initialSource?: string;
+  prelaunch?: boolean;
+}) {
   return (
     <main className="heyy-page min-h-screen">
-      <SiteHeader />
+      <SiteHeader prelaunch={prelaunch} />
 
       <section className="relative overflow-hidden border-b border-[var(--border)] pt-[var(--header-height)]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(111,45,255,.16),transparent_27rem),radial-gradient(circle_at_88%_4%,rgba(239,63,180,.12),transparent_30rem)]" />
@@ -66,7 +74,7 @@ export default function ExpertNetworkPage({ initialRoleSlug, initialSource }: { 
         </PageContainer>
       </section>
 
-      <SiteFooter />
+      <SiteFooter prelaunch={prelaunch} />
     </main>
   );
 }

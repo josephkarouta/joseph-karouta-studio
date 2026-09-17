@@ -311,7 +311,7 @@ CURRENT PRODUCT KNOWLEDGE
 - Visible tools: Text to Image, Image to Video, Digital Adaptations, AI Upscaler, PowerPoint Generator, PDF Tools and File Converter.
 - Expert production is separately quoted before payment and is the path from approved concept to professional final assets.
 - AI generation uses Heyy credits.
-- Subscription credits reset each billing period and are used before purchased credits.
+- Subscription credits refresh every month and are used before purchased credits, even when the subscription is billed yearly.
 - Purchased credits do not expire.
 - There is no unlimited AI-generation plan.
 - PDF Tools and File Converter each have a free daily allowance for Free users; after the allowance, successful operations use credits. Active paid plans include these utilities subject to fair use. Failed utility operations do not consume the daily allowance or credits.

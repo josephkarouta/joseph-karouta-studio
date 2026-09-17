@@ -2,7 +2,13 @@ import "server-only";
 
 import Stripe from "stripe";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { getPlan, normalizePlan, type PlanId } from "@/lib/platform/plans";
+import {
+  getPlan,
+  normalizeBillingInterval,
+  normalizePlan,
+  type BillingInterval,
+  type PlanId,
+} from "@/lib/platform/plans";
 
 export type SubscriptionRow = Record<string, unknown>;
 
@@ -45,6 +51,62 @@ export function getStripe() {
   return new Stripe(secret);
 }
 
+export function configuredSubscriptionPriceId(
+  plan: "starter" | "pro",
+  interval: BillingInterval,
+) {
+  if (plan === "starter") {
+    return String(
+      interval === "year"
+        ? process.env.STRIPE_STARTER_ANNUAL_PRICE_ID_USD || ""
+        : process.env.STRIPE_STARTER_PRICE_ID_USD || "",
+    ).trim();
+  }
+
+  return String(
+    interval === "year"
+      ? process.env.STRIPE_PRO_ANNUAL_PRICE_ID_USD || ""
+      : process.env.STRIPE_PRO_PRICE_ID_USD || "",
+  ).trim();
+}
+
+export function billingIntervalFromPriceId(value: unknown): BillingInterval {
+  const priceId = String(value || "").trim();
+  if (
+    priceId &&
+    [
+      process.env.STRIPE_STARTER_ANNUAL_PRICE_ID_USD,
+      process.env.STRIPE_PRO_ANNUAL_PRICE_ID_USD,
+    ].includes(priceId)
+  ) {
+    return "year";
+  }
+  return "month";
+}
+
+export function planFromConfiguredPriceId(value: unknown): PlanId {
+  const priceId = String(value || "").trim();
+  if (
+    priceId &&
+    [
+      process.env.STRIPE_PRO_PRICE_ID_USD,
+      process.env.STRIPE_PRO_ANNUAL_PRICE_ID_USD,
+    ].includes(priceId)
+  ) {
+    return "pro";
+  }
+  if (
+    priceId &&
+    [
+      process.env.STRIPE_STARTER_PRICE_ID_USD,
+      process.env.STRIPE_STARTER_ANNUAL_PRICE_ID_USD,
+    ].includes(priceId)
+  ) {
+    return "starter";
+  }
+  return "free";
+}
+
 export function planFromSubscription(subscription: Stripe.Subscription): PlanId {
   // The Stripe price is authoritative after a Customer Portal plan change.
   // Subscription metadata is written when Checkout first creates the
@@ -52,59 +114,71 @@ export function planFromSubscription(subscription: Stripe.Subscription): PlanId 
   // the customer later switches prices. Keep metadata only as a compatibility
   // fallback for older subscriptions that still use an archived price.
   const priceId = subscription.items?.data?.[0]?.price?.id;
-  if (priceId && priceId === process.env.STRIPE_PRO_PRICE_ID_USD) return "pro";
-  if (priceId && priceId === process.env.STRIPE_STARTER_PRICE_ID_USD) return "starter";
+  const configuredPlan = planFromConfiguredPriceId(priceId);
+  if (configuredPlan !== "free") return configuredPlan;
 
   const metadataPlan = subscription.metadata?.plan;
   if (metadataPlan) return normalizePlan(metadataPlan);
   return "free";
 }
 
+export function billingIntervalFromSubscription(
+  subscription: Stripe.Subscription,
+): BillingInterval {
+  const price = subscription.items?.data?.[0]?.price;
+  const stripeInterval = price?.recurring?.interval;
+  if (stripeInterval === "year") return "year";
+  if (stripeInterval === "month") return "month";
+  return billingIntervalFromPriceId(price?.id);
+}
+
 type ValidatedSubscriptionCatalog = {
   starterProductId: string;
   proProductId: string;
-  starterPriceId: string;
-  proPriceId: string;
+  starterMonthlyPriceId: string;
+  starterAnnualPriceId: string;
+  proMonthlyPriceId: string;
+  proAnnualPriceId: string;
 };
 
 let validatedSubscriptionCatalogPromise: Promise<ValidatedSubscriptionCatalog> | null = null;
-
-function configuredSubscriptionPriceId(plan: "starter" | "pro") {
-  return plan === "starter"
-    ? String(process.env.STRIPE_STARTER_PRICE_ID_USD || "").trim()
-    : String(process.env.STRIPE_PRO_PRICE_ID_USD || "").trim();
-}
 
 function priceProductId(price: Stripe.Price) {
   if (typeof price.product === "string") return price.product;
   return price.product?.id || "";
 }
 
-function assertPlanPrice(price: Stripe.Price, plan: "starter" | "pro") {
+function assertPlanPrice(
+  price: Stripe.Price,
+  plan: "starter" | "pro",
+  interval: BillingInterval,
+) {
   const expected = getPlan(plan);
-  const expectedAmount = Math.round(expected.monthlyPriceUsd * 100);
+  const expectedAmount = Math.round(
+    (interval === "year" ? expected.annualPriceUsd : expected.monthlyPriceUsd) * 100,
+  );
   const amount = price.unit_amount;
-  const interval = price.recurring?.interval;
+  const stripeInterval = price.recurring?.interval;
   const intervalCount = price.recurring?.interval_count || 1;
 
   if (
     !price.active ||
     price.currency.toLowerCase() !== "usd" ||
     amount !== expectedAmount ||
-    interval !== "month" ||
+    stripeInterval !== interval ||
     intervalCount !== 1
   ) {
     throw new Error(
-      `Stripe ${expected.name} price ${price.id} must be an active USD monthly price for $${expected.monthlyPriceUsd}.`,
+      `Stripe ${expected.name} price ${price.id} must be an active USD ${interval === "year" ? "yearly" : "monthly"} price for $${interval === "year" ? expected.annualPriceUsd : expected.monthlyPriceUsd}.`,
     );
   }
 }
 
 /**
- * Validate the two configured subscription prices once per server process.
- * Starter and Pro are separate subscription products/prices so Stripe's
- * Customer Portal can present them as distinct monthly tiers. This validation
- * prevents stale sandbox/live price IDs from silently charging old values.
+ * Validate the four configured subscription prices once per server process.
+ * Starter and Pro remain separate Stripe products, with monthly + yearly
+ * prices under each product. This mirrors Stripe's recommended flat-rate
+ * catalogue structure while keeping Heyy Studio's two plan tiers distinct.
  */
 export async function validateStripeSubscriptionCatalog(
   stripe: Stripe,
@@ -112,36 +186,59 @@ export async function validateStripeSubscriptionCatalog(
   if (validatedSubscriptionCatalogPromise) return validatedSubscriptionCatalogPromise;
 
   validatedSubscriptionCatalogPromise = (async () => {
-    const starterPriceId = configuredSubscriptionPriceId("starter");
-    const proPriceId = configuredSubscriptionPriceId("pro");
-    if (!starterPriceId || !proPriceId) {
-      throw new Error("Stripe Starter and Pro price IDs are not both configured.");
+    const starterMonthlyPriceId = configuredSubscriptionPriceId("starter", "month");
+    const starterAnnualPriceId = configuredSubscriptionPriceId("starter", "year");
+    const proMonthlyPriceId = configuredSubscriptionPriceId("pro", "month");
+    const proAnnualPriceId = configuredSubscriptionPriceId("pro", "year");
+    if (
+      !starterMonthlyPriceId ||
+      !starterAnnualPriceId ||
+      !proMonthlyPriceId ||
+      !proAnnualPriceId
+    ) {
+      throw new Error(
+        "Stripe monthly and yearly price IDs for Starter and Pro must all be configured.",
+      );
     }
 
-    const [starterPrice, proPrice] = await Promise.all([
-      stripe.prices.retrieve(starterPriceId),
-      stripe.prices.retrieve(proPriceId),
+    const [starterMonthlyPrice, starterAnnualPrice, proMonthlyPrice, proAnnualPrice] = await Promise.all([
+      stripe.prices.retrieve(starterMonthlyPriceId),
+      stripe.prices.retrieve(starterAnnualPriceId),
+      stripe.prices.retrieve(proMonthlyPriceId),
+      stripe.prices.retrieve(proAnnualPriceId),
     ]);
 
-    assertPlanPrice(starterPrice, "starter");
-    assertPlanPrice(proPrice, "pro");
+    assertPlanPrice(starterMonthlyPrice, "starter", "month");
+    assertPlanPrice(starterAnnualPrice, "starter", "year");
+    assertPlanPrice(proMonthlyPrice, "pro", "month");
+    assertPlanPrice(proAnnualPrice, "pro", "year");
 
-    const starterProductId = priceProductId(starterPrice);
-    const proProductId = priceProductId(proPrice);
+    const starterProductId = priceProductId(starterMonthlyPrice);
+    const starterAnnualProductId = priceProductId(starterAnnualPrice);
+    const proProductId = priceProductId(proMonthlyPrice);
+    const proAnnualProductId = priceProductId(proAnnualPrice);
     if (!starterProductId || !proProductId) {
       throw new Error("Stripe Starter and Pro prices must each belong to a product.");
     }
+    if (starterProductId !== starterAnnualProductId) {
+      throw new Error("Stripe Starter monthly and yearly prices must belong to the same Starter product.");
+    }
+    if (proProductId !== proAnnualProductId) {
+      throw new Error("Stripe Pro monthly and yearly prices must belong to the same Pro product.");
+    }
     if (starterProductId === proProductId) {
       throw new Error(
-        "Stripe Starter and Pro must use separate products so the Customer Portal can offer both monthly tiers.",
+        "Stripe Starter and Pro must use separate products so the Customer Portal can offer both plan tiers.",
       );
     }
 
     return {
       starterProductId,
       proProductId,
-      starterPriceId,
-      proPriceId,
+      starterMonthlyPriceId,
+      starterAnnualPriceId,
+      proMonthlyPriceId,
+      proAnnualPriceId,
     };
   })().catch((error) => {
     validatedSubscriptionCatalogPromise = null;
@@ -149,6 +246,93 @@ export async function validateStripeSubscriptionCatalog(
   });
 
   return validatedSubscriptionCatalogPromise;
+}
+
+function addMonthsClamped(value: Date, months: number) {
+  const year = value.getUTCFullYear();
+  const month = value.getUTCMonth();
+  const day = value.getUTCDate();
+  const hours = value.getUTCHours();
+  const minutes = value.getUTCMinutes();
+  const seconds = value.getUTCSeconds();
+  const milliseconds = value.getUTCMilliseconds();
+
+  const firstOfTarget = new Date(Date.UTC(year, month + months, 1, hours, minutes, seconds, milliseconds));
+  const targetYear = firstOfTarget.getUTCFullYear();
+  const targetMonth = firstOfTarget.getUTCMonth();
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+
+  firstOfTarget.setUTCDate(Math.min(day, lastDay));
+  return firstOfTarget;
+}
+
+export function subscriptionCreditPeriodFromRecord(
+  subscription: Record<string, unknown> | null | undefined,
+  now = new Date(),
+) {
+  const periodStartRaw = text(subscription?.current_period_start);
+  const periodEndRaw = text(subscription?.current_period_end);
+  if (!periodStartRaw || !periodEndRaw) return null;
+
+  const billingStart = new Date(periodStartRaw);
+  const billingEnd = new Date(periodEndRaw);
+  if (
+    !Number.isFinite(billingStart.getTime()) ||
+    !Number.isFinite(billingEnd.getTime()) ||
+    billingEnd <= billingStart
+  ) {
+    return null;
+  }
+
+  const interval = normalizeBillingInterval(
+    subscription?.billing_interval ||
+      billingIntervalFromPriceId(subscription?.stripe_price_id),
+  );
+
+  if (interval === "month") {
+    return {
+      start: billingStart.toISOString(),
+      end: billingEnd.toISOString(),
+      interval,
+    };
+  }
+
+  const boundedNow = now < billingStart ? billingStart : now >= billingEnd ? new Date(billingEnd.getTime() - 1) : now;
+  let monthOffset =
+    (boundedNow.getUTCFullYear() - billingStart.getUTCFullYear()) * 12 +
+    boundedNow.getUTCMonth() -
+    billingStart.getUTCMonth();
+  monthOffset = Math.max(0, monthOffset);
+
+  let creditStart = addMonthsClamped(billingStart, monthOffset);
+  if (creditStart > boundedNow && monthOffset > 0) {
+    monthOffset -= 1;
+    creditStart = addMonthsClamped(billingStart, monthOffset);
+  }
+
+  let creditEnd = addMonthsClamped(billingStart, monthOffset + 1);
+  if (creditEnd > billingEnd) creditEnd = billingEnd;
+
+  return {
+    start: creditStart.toISOString(),
+    end: creditEnd.toISOString(),
+    interval,
+  };
+}
+
+export function subscriptionCreditPeriod(
+  subscription: Stripe.Subscription,
+  now = new Date(),
+) {
+  return subscriptionCreditPeriodFromRecord(
+    {
+      current_period_start: isoFromSeconds(periodValue(subscription, "current_period_start")),
+      current_period_end: isoFromSeconds(periodValue(subscription, "current_period_end")),
+      stripe_price_id: subscription.items?.data?.[0]?.price?.id || null,
+      billing_interval: billingIntervalFromSubscription(subscription),
+    },
+    now,
+  );
 }
 
 export function subscriptionPayload(subscription: Stripe.Subscription, overridePlan?: unknown) {

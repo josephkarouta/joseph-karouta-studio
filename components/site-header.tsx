@@ -5,17 +5,29 @@ import { usePathname } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
+  Armchair,
   BadgeHelp,
+  BadgePercent,
   BriefcaseBusiness,
+  Building2,
   ChevronDown,
   CircleDollarSign,
+  Clapperboard,
   CreditCard,
+  FileText,
+  Image as ImageIcon,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
+  Maximize2,
+  Megaphone,
   Menu,
+  Palette,
+  Presentation,
+  Repeat2,
   Settings,
   Sparkles,
-  UserRound,
+  Workflow,
   X,
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
@@ -23,7 +35,9 @@ import { useTheme } from "@/components/theme-provider";
 import ThemeToggle from "@/components/theme-toggle";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import HeyyLogo from "@/components/brand/HeyyLogo";
-import { ButtonLink } from "@/components/ui/heyy";
+import AuthModal from "@/app/AuthModal";
+import { Button } from "@/components/ui/heyy";
+import { PLATFORM_TOOLS, VISIBLE_STUDIOS } from "@/lib/platform/platform-registry";
 
 const navItems = [
   ["Studios", "/#create"],
@@ -32,13 +46,31 @@ const navItems = [
   ["Pricing", "/#pricing"],
 ] as const;
 
-export default function SiteHeader() {
+const studioMenuIcons = {
+  brand_studio: Palette,
+  marketing_studio: Megaphone,
+  architecture_studio: Building2,
+  interior_studio: Armchair,
+} as const;
+
+const toolMenuIcons = {
+  text_to_image: ImageIcon,
+  image_to_video: Clapperboard,
+  digital_adaptations: LayoutGrid,
+  ai_upscaler: Maximize2,
+  powerpoint_generator: Presentation,
+  pdf_tools: FileText,
+  file_converter: Repeat2,
+} as const;
+
+export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean }) {
   const pathname = usePathname();
   const { user, loading, plan, credits, signOut } = useAuth();
   const { resolvedTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup" | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
 
   const displayName =
@@ -58,6 +90,7 @@ export default function SiteHeader() {
     setMenuOpen(false);
     setNotificationsOpen(false);
     setMobileOpen(false);
+    setAuthMode(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -80,7 +113,6 @@ export default function SiteHeader() {
 
   async function handleSignOut() {
     await signOut();
-    window.location.href = "/";
   }
 
   return (
@@ -89,7 +121,7 @@ export default function SiteHeader() {
         <Link href="/" onClick={handleLogoClick} className="shrink-0" aria-label="Heyy Studio home">
           <HeyyLogo
             variant={resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
-            height={36}
+            height={40}
           />
         </Link>
 
@@ -97,7 +129,7 @@ export default function SiteHeader() {
           {navItems.map(([label, href]) => (
             <Link
               key={label}
-              href={href}
+              href={prelaunch ? "/" : href}
               className="rounded-full px-4 py-2.5 transition hover:bg-[var(--surface-strong)] hover:text-[var(--text-primary)]"
             >
               {label}
@@ -105,17 +137,23 @@ export default function SiteHeader() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex self-stretch items-center gap-2">
           <Link
-            href="/contact?topic=expert"
-            className="hidden min-h-10 items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-5 text-xs font-black text-white shadow-[0_10px_24px_rgba(109,40,217,.24)] transition-[filter,box-shadow] hover:brightness-[0.96] hover:shadow-[0_12px_28px_rgba(109,40,217,.3)] lg:inline-flex"
+            href={prelaunch ? "/" : "/contact?topic=expert"}
+            aria-label="Contact an Expert"
+            className="group relative hidden h-[58px] w-[124px] shrink-0 self-end items-end justify-center overflow-visible -mb-px lg:flex"
           >
-            <UserRound size={15} /> Contact an Expert
+            <img
+              src="/expert-contact-desktop.png"
+              alt=""
+              aria-hidden="true"
+              className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover:scale-[1.045]"
+            />
           </Link>
 
           <ThemeToggle compact />
 
-          {!loading && user && (
+          {!prelaunch && !loading && user && (
             <NotificationBell
               open={notificationsOpen}
               onOpenChange={(nextOpen) => {
@@ -125,7 +163,22 @@ export default function SiteHeader() {
             />
           )}
 
-          {loading ? (
+          {prelaunch ? (
+            <div className="hidden items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-sm sm:flex">
+              <Link
+                href="/"
+                className="min-h-8 rounded-full px-3.5 py-2 text-xs font-black text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/"
+                className="min-h-8 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 py-2 text-xs font-black text-white shadow-[0_6px_16px_rgba(109,40,217,.22)] transition-[filter,box-shadow] hover:brightness-[0.97] hover:shadow-[0_8px_20px_rgba(109,40,217,.28)]"
+              >
+                Sign up
+              </Link>
+            </div>
+          ) : loading ? (
             <div className="flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] pl-2 pr-3 shadow-sm" aria-label="Loading account">
               <span className="grid h-7 w-7 place-items-center rounded-full bg-[var(--surface-hover)] text-[0.68rem] font-black text-[var(--text-muted)]">•</span>
               <span className="hidden w-24 sm:block">
@@ -199,13 +252,21 @@ export default function SiteHeader() {
               )}
             </div>
           ) : (
-            <div className="hidden items-center gap-2 sm:flex">
-              <ButtonLink href="/login" variant="ghost" size="sm">
+            <div className="hidden items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-sm sm:flex">
+              <button
+                type="button"
+                onClick={() => setAuthMode("signin")}
+                className="min-h-8 rounded-full px-3.5 text-xs font-black text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              >
                 Sign in
-              </ButtonLink>
-              <ButtonLink href="/signup" size="sm">
-                <Sparkles size={14} /> Start creating
-              </ButtonLink>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode("signup")}
+                className="min-h-8 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-xs font-black text-white shadow-[0_6px_16px_rgba(109,40,217,.22)] transition-[filter,box-shadow] hover:brightness-[0.97] hover:shadow-[0_8px_20px_rgba(109,40,217,.28)]"
+              >
+                Sign up
+              </button>
             </div>
           )}
 
@@ -221,55 +282,179 @@ export default function SiteHeader() {
       </div>
 
       {mobileOpen && (
-        <div className="max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4 shadow-xl lg:hidden">
-          <nav className="grid gap-1">
-            {navItems.map(([label, href]) => (
-              <Link
-                key={label}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className="rounded-xl px-4 py-3 text-sm font-extrabold text-[var(--text-secondary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-
-          <Link
-            href="/contact?topic=expert"
-            onClick={() => setMobileOpen(false)}
-            className="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-sm font-black text-white shadow-lg"
-          >
-            <UserRound size={16} /> Contact an Expert
-          </Link>
-
-          {user ? (
-            <div className="mt-3 grid gap-1 border-t border-[var(--border)] pt-3">
-              <div className="mb-2 rounded-2xl border border-[var(--accent-border)] bg-[linear-gradient(135deg,var(--accent-soft),var(--surface-strong))] p-4">
-                <p className="truncate text-sm font-black text-[var(--text-primary)]">{displayName}</p>
-                <p className="mt-1 text-xs font-bold text-[var(--accent-strong)]">{plan} plan · {credits.available} credits left</p>
+        <div className="max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] shadow-xl lg:hidden">
+          <div className="px-4 py-5">
+            <section>
+              <div className="mb-2 flex items-center justify-between px-1">
+                <p className="text-[0.62rem] font-black uppercase tracking-[0.18em] text-[var(--accent-strong)]">Studios</p>
+                <Link
+                  href={prelaunch ? "/" : "/#create"}
+                  onClick={() => setMobileOpen(false)}
+                  className="text-[0.68rem] font-extrabold text-[var(--text-muted)]"
+                >
+                  Explore all
+                </Link>
               </div>
-              <MenuLink href="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
-              {isExpert && <MenuLink href="/expert" icon={<BriefcaseBusiness size={16} />} label="Expert Portal" />}
-              <MenuLink href="/account" icon={<Settings size={16} />} label="Account" />
-              <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
-              <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credits" />
-              <MenuLink href="/help" icon={<BadgeHelp size={16} />} label="Help center" />
-              <button type="button" onClick={handleSignOut} className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/10">
-                <LogOut size={16} /> Sign out
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                {VISIBLE_STUDIOS.map((studio) => {
+                  const Icon = studioMenuIcons[studio.id as keyof typeof studioMenuIcons] || Sparkles;
+                  return (
+                    <Link
+                      key={studio.id}
+                      href={prelaunch ? "/" : studio.href || "/dashboard"}
+                      onClick={() => setMobileOpen(false)}
+                      className="flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"
+                    >
+                      <span
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
+                        style={{ background: studio.soft, color: studio.accent }}
+                        aria-hidden="true"
+                      >
+                        <Icon size={16} strokeWidth={2.1} />
+                      </span>
+                      <span className="min-w-0 truncate">{studio.shortLabel || studio.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="mt-5">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <p className="text-[0.62rem] font-black uppercase tracking-[0.18em] text-[var(--accent-strong)]">Tools</p>
+                <Link
+                  href={prelaunch ? "/" : "/#tools"}
+                  onClick={() => setMobileOpen(false)}
+                  className="text-[0.68rem] font-extrabold text-[var(--text-muted)]"
+                >
+                  Explore all
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {PLATFORM_TOOLS.map((tool) => {
+                  const Icon = toolMenuIcons[tool.id as keyof typeof toolMenuIcons] || Sparkles;
+                  return (
+                    <Link
+                      key={tool.id}
+                      href={prelaunch ? "/" : tool.href}
+                      onClick={() => setMobileOpen(false)}
+                      className="flex min-h-11 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[0.76rem] font-extrabold leading-4 text-[var(--text-primary)] transition hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"
+                    >
+                      <span
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
+                        style={{ background: tool.soft, color: tool.accent }}
+                        aria-hidden="true"
+                      >
+                        <Icon size={15} strokeWidth={2.1} />
+                      </span>
+                      <span>{tool.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 border-y border-[var(--border)] pt-4">
+              <nav className="grid gap-2">
+                <Link
+                  href={prelaunch ? "/" : "/#how-it-works"}
+                  onClick={() => setMobileOpen(false)}
+                  className="flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]" aria-hidden="true">
+                    <Workflow size={16} strokeWidth={2.1} />
+                  </span>
+                  <span>How it works</span>
+                </Link>
+                <Link
+                  href={prelaunch ? "/" : "/#pricing"}
+                  onClick={() => setMobileOpen(false)}
+                  className="flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]" aria-hidden="true">
+                    <BadgePercent size={16} strokeWidth={2.1} />
+                  </span>
+                  <span>Pricing</span>
+                </Link>
+              </nav>
+
+              <Link
+                href={prelaunch ? "/" : "/contact?topic=expert"}
+                onClick={() => setMobileOpen(false)}
+                aria-label="Contact an Expert"
+                className="group relative flex min-h-[104px] items-end justify-center overflow-visible rounded-xl -mb-px"
+              >
+                <img
+                  src="/expert-contact-mobile.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="max-h-[118px] w-full object-contain object-bottom transition-transform duration-300 ease-out group-hover:scale-[1.035]"
+                />
+              </Link>
             </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3">
-              <ButtonLink href="/login" variant="secondary" className="w-full">
-                Sign in
-              </ButtonLink>
-              <ButtonLink href="/signup" className="w-full">
-                Start creating
-              </ButtonLink>
-            </div>
-          )}
+
+            {prelaunch ? (
+              <div className="mt-4 grid grid-cols-2 gap-2 pt-0">
+                <Link
+                  href="/"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex min-h-11 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-sm font-black text-[var(--text-primary)]"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex min-h-11 items-center justify-center rounded-full bg-[var(--text-primary)] px-4 text-sm font-black text-[var(--surface-strong)]"
+                >
+                  Sign up
+                </Link>
+              </div>
+            ) : user ? (
+              <div className="mt-4 grid gap-1 pt-0">
+                <div className="mb-2 rounded-2xl border border-[var(--accent-border)] bg-[linear-gradient(135deg,var(--accent-soft),var(--surface-strong))] p-4">
+                  <p className="truncate text-sm font-black text-[var(--text-primary)]">{displayName}</p>
+                  <p className="mt-1 text-xs font-bold text-[var(--accent-strong)]">{plan} plan · {credits.available} credits left</p>
+                </div>
+                <MenuLink href="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
+                {isExpert && <MenuLink href="/expert" icon={<BriefcaseBusiness size={16} />} label="Expert Portal" />}
+                <MenuLink href="/account" icon={<Settings size={16} />} label="Account" />
+                <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
+                <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credits" />
+                <MenuLink href="/help" icon={<BadgeHelp size={16} />} label="Help center" />
+                <button type="button" onClick={handleSignOut} className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/10">
+                  <LogOut size={16} /> Sign out
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 grid grid-cols-2 gap-2 pt-0">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => { setMobileOpen(false); setAuthMode("signin"); }}
+                >
+                  Sign in
+                </Button>
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => { setMobileOpen(false); setAuthMode("signup"); }}
+                >
+                  Sign up
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
+      )}
+
+      {!prelaunch && !user && authMode && (
+        <AuthModal
+          initialMode={authMode}
+          nextPath={pathname || "/"}
+          onClose={() => setAuthMode(null)}
+        />
       )}
     </header>
   );

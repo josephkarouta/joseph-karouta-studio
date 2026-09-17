@@ -16,10 +16,10 @@ export default function PricingPage() {
         <PageContainer className="relative py-16 sm:py-24">
           <Eyebrow>Plans & credits</Eyebrow>
           <h1 className="mt-5 max-w-5xl text-5xl font-black leading-[.94] tracking-[-.065em] sm:text-7xl">
-            Subscribe monthly or simply buy credits.
+            Subscribe monthly or yearly, or simply buy credits.
           </h1>
           <p className="mt-6 max-w-3xl text-base font-semibold leading-8 text-[var(--text-secondary)] sm:text-lg">
-            Use a free account for occasional projects, or subscribe for a fresh monthly credit allowance. Expert production is quoted separately.
+            Use a free account for occasional projects, or subscribe for a fresh monthly credit allowance. Yearly plans are paid upfront and include two months free; credits still refresh every month. Expert production is quoted separately.
           </p>
         </PageContainer>
       </section>
@@ -47,13 +47,13 @@ export default function PricingPage() {
                 Two credit balances, one clear rule.
               </h2>
               <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-                Subscription credits are used first and reset at each renewal. Purchased credits never expire and remain in your account through renewals or cancellation.
+                Subscription credits are used first and refresh every month with no rollover, whether you pay monthly or yearly. Purchased credits never expire and remain in your account through subscription renewals or cancellation.
               </p>
             </div>
           </GlassCard>
 
           <p className="mt-6 text-center text-xs font-bold text-[var(--text-muted)]">
-            Prices are in US dollars. Unused subscription credits do not roll over.
+            Prices are in US dollars. Yearly subscriptions are charged once per year. Unused subscription credits do not roll over.
           </p>
         </PageContainer>
       </section>

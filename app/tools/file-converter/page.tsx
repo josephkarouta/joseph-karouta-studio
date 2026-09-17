@@ -13,6 +13,8 @@ export default function FileConverterPage() {
       iconName="convert"
       accent="#0891b2"
       soft="rgba(8,145,178,.12)"
+      imageSrc="/tool-heroes/file-converter-hero.webp"
+      imagePosition="center 54%"
       creditLabel="5/day free · Plans unlimited"
     >
       <FileConverterWorkbench />

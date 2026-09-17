@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import HeyyLogo from "@/components/brand/HeyyLogo";
+import OAuthButtons from "@/components/account/OAuthButtons";
 import ThemeToggle from "@/components/theme-toggle";
 import { useTheme } from "@/components/theme-provider";
 import { Button, ButtonLink, GlassCard } from "@/components/ui/heyy";
@@ -230,27 +231,6 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
     }
   }
 
-  async function google() {
-    setLoading(true);
-    setMessage("");
-
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
-    callbackUrl.searchParams.set("next", next);
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: callbackUrl.toString(),
-        queryParams: { prompt: "select_account" },
-      },
-    });
-
-    if (error) {
-      setMessage(error.message);
-      setLoading(false);
-    }
-  }
-
   const authMessage = message ? (
     <p
       className={`rounded-2xl px-4 py-3 text-xs font-bold leading-5 ${
@@ -291,7 +271,7 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
           </h1>
           <div className="mt-8 grid max-w-xl gap-3">
             {[
-              "Four specialist Studios and five focused AI tools",
+              "Four specialist Studios and seven focused AI tools",
               "Credits shown before every paid generation",
               "Expert quotes, production, revisions and delivery in one workspace",
             ].map((item) => (
@@ -448,13 +428,17 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
 
                 <div className="flex items-center gap-4">
                   <span className="h-px flex-1 bg-[var(--border)]" />
-                  <span className="text-xs font-bold text-[var(--text-muted)]">or</span>
+                  <span className="text-xs font-bold text-[var(--text-muted)]">or continue with</span>
                   <span className="h-px flex-1 bg-[var(--border)]" />
                 </div>
 
-                <Button onClick={google} disabled={loading} variant="secondary" className="w-full">
-                  Continue with Google
-                </Button>
+                <OAuthButtons
+                  nextPath={next}
+                  disabled={loading}
+                  showEmail={false}
+                  onStart={() => { setLoading(true); setMessage(""); }}
+                  onError={(value) => { setMessage(value); setSuccess(false); setLoading(false); }}
+                />
               </div>
 
               <p className="mt-6 text-center text-sm font-semibold text-[var(--text-secondary)]">

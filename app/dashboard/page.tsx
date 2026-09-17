@@ -285,33 +285,52 @@ export default function DashboardPage() {
   return (
     <main className="heyy-page heyy-page-grid py-8 sm:py-10">
       <PageContainer>
-        <section className="relative overflow-hidden rounded-[2rem] border border-[var(--accent-border)] bg-[linear-gradient(118deg,rgba(111,45,255,.12),rgba(239,63,180,.09),rgba(46,124,246,.11))] p-6 shadow-[var(--shadow-card)] sm:p-9">
-          <div className="absolute -right-14 -top-20 h-56 w-56 rounded-full border-[34px] border-white/20" />
-          <div className="relative grid items-end gap-8 lg:grid-cols-[1fr_auto]">
-            <div>
-              <Eyebrow>Heyy Studio Dashboard</Eyebrow>
-              <h1 className="mt-4 max-w-4xl text-4xl font-black leading-[.94] tracking-[-.06em] sm:text-6xl">
+        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#080512] shadow-[0_28px_80px_rgba(27,10,73,.24)]">
+          <div
+            className="absolute inset-0 bg-cover bg-[position:70%_center] sm:bg-[position:68%_center] lg:bg-center"
+            style={{ backgroundImage: "url('/dashboard/dashboard-hero.webp')" }}
+            aria-hidden="true"
+          />
+          <div
+            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,3,16,.96)_0%,rgba(5,3,16,.84)_34%,rgba(5,3,16,.42)_58%,rgba(5,3,16,.12)_100%)]"
+            aria-hidden="true"
+          />
+          <div
+            className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,4,20,.06),rgba(7,4,20,.18)_65%,rgba(7,4,20,.46))]"
+            aria-hidden="true"
+          />
+
+          <div className="relative grid min-h-[440px] items-end gap-8 p-6 sm:min-h-[420px] sm:p-8 lg:min-h-[360px] lg:grid-cols-[minmax(0,1fr)_340px] lg:items-center lg:p-10">
+            <div className="max-w-3xl">
+              <p className="text-[.65rem] font-black uppercase tracking-[.24em] text-violet-200/90">
+                Heyy Studio Dashboard
+              </p>
+              <h1 className="mt-4 text-4xl font-black leading-[.94] tracking-[-.06em] text-white sm:text-6xl">
                 Welcome back, {displayName}.
               </h1>
-              <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">
-                Continue a project, see what needs attention and move your strongest ideas toward delivery.
+              <p className="mt-4 max-w-xl text-sm font-semibold leading-7 text-white/70 sm:text-[.95rem]">
+                Continue your work, review what needs attention and move your best ideas toward delivery.
               </p>
             </div>
-            <GlassCard className="w-full min-w-[290px] p-5 lg:w-[330px]">
+
+            <div className="w-full rounded-[1.6rem] border border-white/18 bg-white/[.10] p-5 text-white shadow-[0_18px_45px_rgba(4,2,18,.24)] backdrop-blur-xl">
               <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[.6rem] font-black uppercase tracking-[.17em] text-[var(--accent-strong)]">Your account</p>
-                  <p className="mt-2 truncate text-sm font-black">{user?.email}</p>
+                <div className="min-w-0">
+                  <p className="text-[.58rem] font-black uppercase tracking-[.18em] text-violet-200/90">Your account</p>
+                  <p className="mt-2 truncate text-sm font-black text-white">{user?.email}</p>
                 </div>
-                <StatusPill tone="info">{plan}</StatusPill>
+                <span className="shrink-0 rounded-full border border-white/20 bg-white/12 px-3 py-1.5 text-[.6rem] font-black uppercase tracking-[.14em] text-white">
+                  {plan}
+                </span>
               </div>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <Metric label="Projects" value={projectsLoading ? "—" : projects.length} />
-                <Metric label="Production jobs" value={activityLoading ? "—" : activeJobs.length} />
-                <Metric label="Assets" value={activityLoading ? "—" : assets.length} />
-                <Metric label="Credits" value={credits.available} accent />
+
+              <div className="mt-5 grid grid-cols-2 gap-2.5">
+                <HeroMetric label="Projects" value={projectsLoading ? "—" : projects.length} />
+                <HeroMetric label="Production jobs" value={activityLoading ? "—" : activeJobs.length} />
+                <HeroMetric label="Assets" value={activityLoading ? "—" : assets.length} />
+                <HeroMetric label="Credits" value={credits.available} accent />
               </div>
-            </GlassCard>
+            </div>
           </div>
         </section>
 
@@ -486,6 +505,15 @@ function EmptyState({ title, description, href, action, compact = false }: { tit
 
 function Metric({ label, value, accent = false }: { label: string; value: number | string; accent?: boolean }) {
   return <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[.56rem] font-black uppercase tracking-[.13em] text-[var(--text-muted)]">{label}</p><p className={`mt-2 text-2xl font-black ${accent ? "text-[var(--accent-strong)]" : ""}`}>{value}</p></div>;
+}
+
+function HeroMetric({ label, value, accent = false }: { label: string; value: number | string; accent?: boolean }) {
+  return (
+    <div className={`rounded-2xl border p-3 ${accent ? "border-violet-300/35 bg-violet-400/16" : "border-white/12 bg-black/15"}`}>
+      <p className="text-[.54rem] font-black uppercase tracking-[.13em] text-white/55">{label}</p>
+      <p className={`mt-2 text-xl font-black sm:text-2xl ${accent ? "text-violet-100" : "text-white"}`}>{value}</p>
+    </div>
+  );
 }
 
 

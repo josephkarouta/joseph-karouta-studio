@@ -14,6 +14,8 @@ export default function ImageToVideoPage() {
       iconName="video"
       accent="#db2777"
       soft="rgba(219,39,119,.12)"
+      imageSrc="/tool-heroes/image-to-video-hero.webp"
+      imagePosition="center 54%"
       creditLabel={`From ${CREDIT_COSTS.imageToVideoFast720} credits`}
     >
       <ImageToVideoWorkbench />

@@ -13,6 +13,8 @@ export default function PdfToolsPage() {
       iconName="pdf"
       accent="#0f766e"
       soft="rgba(15,118,110,.12)"
+      imageSrc="/tool-heroes/pdf-tools-hero.webp"
+      imagePosition="center 54%"
       creditLabel="5/day free · Plans unlimited"
     >
       <PdfToolsWorkbench />

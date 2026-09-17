@@ -20,7 +20,6 @@ import {
   Layers3,
   Loader2,
   MapPin,
-  Maximize2,
   PackageCheck,
   Palette,
   RefreshCcw,
@@ -59,6 +58,7 @@ import StudioProjectHero from "@/components/studio/common/StudioProjectHero";
 import StudioCreationSummary from "@/components/studio/common/StudioCreationSummary";
 import { generationFetch } from "@/lib/client/generation-request";
 import { downloadInteriorDesignPack } from "@/lib/interior/design-pack-export";
+import { getInteriorOutputCoverage } from "@/lib/interior/output-coverage";
 
 const config = GUIDED_STUDIOS.interior;
 const INTERIOR_AI_CONCEPT_NOTICE = "AI-generated plans and visuals are for concept exploration and early design direction only. They are not construction-ready or professionally verified. For accurate plans, technical drawings or production-ready design, continue with Heyy Studio expert production. Create with AI. Build with Experts.";
@@ -124,7 +124,7 @@ type WorkspaceTab =
   | "production";
 
 type PlanType = "space_plan" | "furniture_plan" | "lighting_plan";
-type VisualType = "main_space" | "alternate_angle" | "focal_point" | "material_detail" | "day_view" | "evening_view";
+type VisualType = "main_space" | "alternate_angle" | "secondary_space" | "signature_space" | "focal_point" | "material_detail" | "day_view" | "evening_view";
 type InteriorImageType = PlanType | VisualType;
 type GenerationStage = "technical" | "preview" | "final";
 type WorkMode = "guided" | "professional";
@@ -196,32 +196,42 @@ const VISUALS: Array<{ id: VisualType; title: string; description: string }> = [
   {
     id: "main_space",
     title: "Main Space Perspective",
-    description: "The complete room direction translated into the primary hero view.",
+    description: "The primary hero view that establishes the approved space, layout and interior direction.",
   },
   {
     id: "alternate_angle",
-    title: "Alternative Angle",
-    description: "The opposite useful angle while preserving the same layout and design system.",
+    title: "Alternative Perspective",
+    description: "A clearly different viewpoint chosen for the project type—not a near-duplicate of the main perspective.",
+  },
+  {
+    id: "secondary_space",
+    title: "Secondary Key Space",
+    description: "An additional major zone selected from the actual project brief and approved plan for broader project coverage.",
+  },
+  {
+    id: "signature_space",
+    title: "Signature / Amenity Space",
+    description: "A distinctive supported project space such as a lobby, amenity, suite, bar, wellness area or other signature zone.",
   },
   {
     id: "focal_point",
-    title: "Feature Wall & Joinery View",
-    description: "A tighter feature-focused composition where the feature wall or custom joinery dominates the frame.",
+    title: "Feature & Joinery Studies",
+    description: "A coordinated collage of close-up feature, joinery and crafted interior moments from the same design.",
   },
   {
     id: "material_detail",
-    title: "Materials & Lighting Detail",
-    description: "A true close-up showing material junctions, textures, joinery craftsmanship and lighting details—not another room-wide view.",
+    title: "Materials & Lighting Studies",
+    description: "A close-up collage of material junctions, textures, fixtures and layered lighting details from the approved design.",
   },
   {
     id: "day_view",
     title: "Daylight Atmosphere",
-    description: "A natural-light version of the approved room and furniture arrangement.",
+    description: "The Main Space Perspective from the same camera and composition, translated to natural daylight.",
   },
   {
     id: "evening_view",
     title: "Evening Atmosphere",
-    description: "The same room at night with the approved layered lighting strategy.",
+    description: "The Main Space Perspective from the same camera and composition, translated to evening lighting.",
   },
 ];
 
@@ -836,6 +846,8 @@ function InteriorExperience() {
             eyebrow={config.eyebrow}
             title={config.title}
             description={config.description}
+            imageSrc="/studio-heroes/interior-studio-hero.webp"
+            imagePosition="center 58%"
             controls={(
               <>
                 {INTERIOR_PROFESSIONAL_MODE_ENABLED ? (
@@ -889,7 +901,7 @@ function InteriorExperience() {
             {activeTab === "furniture" && <ProductDirectionSection domain="furniture" eyebrow="Furniture direction" title="Choose pieces by proportion, placement and function" icon={<Sofa size={21} />} value={result.furniturePlan} location={sourcingMarket} />}
             {activeTab === "lighting" && <ProductDirectionSection domain="lighting" eyebrow="Lighting strategy" title="Build ambient, task and accent lighting as one system" icon={<LampFloor size={21} />} value={result.lightingPlan} location={sourcingMarket} />}
             {activeTab === "plans" && (
-              <PlansSection existingDesign={existingDesign} assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenProduction={() => selectWorkspaceTab("production")} />
+              <PlansSection existingDesign={existingDesign} input={form} assets={assets} generating={generatingImage} approvingAssetId={approvingAssetId} onGenerate={(viewType, stage) => void generateImage(viewType, stage)} onApprove={(asset) => void approveAsset(asset)} onEnlarge={(image) => setLightbox(image)} onOpenProduction={() => selectWorkspaceTab("production")} />
             )}
             {activeTab === "room-mapping" && existingDesign && (
               <RoomMappingSection
@@ -902,6 +914,7 @@ function InteriorExperience() {
             {activeTab === "visuals" && (
               <VisualsSection
                 existingDesign={existingDesign}
+                input={form}
                 assets={assets}
                 generating={generatingImage}
                 generatingRoomKeys={generatingRoomKeys}
@@ -918,7 +931,7 @@ function InteriorExperience() {
             )}
             {activeTab === "professional-pack" && <ProfessionalPackageSection value={result.professionalPackage} />}
             {activeTab === "design-pack" && (
-              <DesignPackSection result={result} assets={assets} workMode={workMode} existingDesign={existingDesign} exporting={exportingDesignPack} onDownload={() => void downloadDesignPack()} />
+              <DesignPackSection result={result} input={form} assets={assets} workMode={workMode} existingDesign={existingDesign} exporting={exportingDesignPack} onDownload={() => void downloadDesignPack()} />
             )}
             {activeTab === "production" && (
               <StudioProductionWorkspace
@@ -1432,6 +1445,7 @@ function ProductRecommendationGrid({
 
 function PlansSection({
   existingDesign,
+  input,
   assets,
   generating,
   approvingAssetId,
@@ -1441,6 +1455,7 @@ function PlansSection({
   onOpenProduction,
 }: {
   existingDesign: boolean;
+  input: FormState;
   assets: ProjectAsset[];
   generating: GenerationTarget;
   approvingAssetId: string | null;
@@ -1451,6 +1466,7 @@ function PlansSection({
 }) {
   const uploadedSourcePlans = getUploadedSourcePlanAssets(assets);
   const spacePlanApproved = existingDesign ? uploadedSourcePlans.length > 0 : isAnyStageApproved(assets, "space_plan");
+  const coverage = getInteriorOutputCoverage(input);
 
   if (existingDesign) {
     return (
@@ -1482,12 +1498,9 @@ function PlansSection({
                 <article key={asset.id} className="overflow-hidden rounded-3xl border border-emerald-400 bg-[var(--surface)] shadow-[0_0_0_1px_rgba(16,185,129,.25)]">
                   <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
                     {imageUrl ? (
-                      <>
+                      <button type="button" onClick={() => onEnlarge({ url: imageUrl, title: sourcePlanDisplayName(asset, index) })} aria-label={`Open ${sourcePlanDisplayName(asset, index)}`} className="h-full w-full cursor-zoom-in">
                         <img src={imageUrl} alt={sourcePlanDisplayName(asset, index)} className="h-full w-full object-contain p-3" />
-                        <button type="button" onClick={() => onEnlarge({ url: imageUrl, title: sourcePlanDisplayName(asset, index) })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl border border-white/45 bg-black/55 px-3 py-2 text-[.65rem] font-black text-white backdrop-blur-md transition hover:bg-black/75">
-                          <Maximize2 size={13} /> Enlarge
-                        </button>
-                      </>
+                      </button>
                     ) : (
                       <FileText size={32} className="text-[var(--accent-strong)]" />
                     )}
@@ -1525,13 +1538,17 @@ function PlansSection({
           <Eyebrow>Interior plans</Eyebrow>
           <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate, approve, then keep developing</h2>
           <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            Generate the Furniture & Space Plan, approve it as the project source, then continue to the connected furniture plan, lighting plan and visuals. If you need dimensioned drawings, CAD or editable technical files, send the approved concept to Production.
+            Generate the Furniture & Space Plan, approve it as the project source, then continue to the connected furniture plan, lighting plan and visuals. Larger projects keep the same three plan families but each board automatically covers the representative zones/levels the project needs instead of trying to generate every floor separately.
           </p>
         </div>
         <CreditPill credits={CREDIT_COSTS.interiorPlan} label="per plan" />
       </div>
 
-      <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+        <strong className="text-[var(--text-primary)]">{coverage.label}:</strong> each plan family will cover {coverage.representativeZoneCount === 1 ? "the primary designed space" : `up to ${coverage.representativeZoneCount} representative zones/levels`} from the same approved project.
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
         {INTERIOR_AI_CONCEPT_NOTICE}
       </div>
 
@@ -1574,6 +1591,7 @@ function PlansSection({
 
 function VisualsSection({
   existingDesign,
+  input,
   assets,
   generating,
   generatingRoomKeys,
@@ -1588,6 +1606,7 @@ function VisualsSection({
   onOpenRoomMapping,
 }: {
   existingDesign: boolean;
+  input: FormState;
   assets: ProjectAsset[];
   generating: GenerationTarget;
   generatingRoomKeys: string[];
@@ -1601,6 +1620,9 @@ function VisualsSection({
   onOpenPlans: () => void;
   onOpenRoomMapping: () => void;
 }) {
+  const coverage = getInteriorOutputCoverage(input);
+  const adaptiveVisuals = VISUALS.filter((visual) => coverage.visualTypes.includes(visual.id));
+
   if (existingDesign) {
     return (
       <ExistingDesignRoomVisualsSection
@@ -1625,13 +1647,16 @@ function VisualsSection({
           <Eyebrow>Interior visuals</Eyebrow>
           <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Create visuals from the approved space plan</h2>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-            As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Each Generate button creates the best-quality visual available.
+            As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Heyy Studio keeps the same visual system and automatically adds broader project coverage only when the scope needs it.
           </p>
         </div>
         <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per visual" />
       </div>
 
-      <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
+        <strong className="text-[var(--text-primary)]">{coverage.label}:</strong> this project has {adaptiveVisuals.length} coordinated visual outputs. Larger scopes add Secondary Key Space and Signature / Amenity Space without changing the approved plan/reference chain.
+      </div>
+      <div className="mt-3 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
         {INTERIOR_AI_CONCEPT_NOTICE}
       </div>
 
@@ -1646,7 +1671,7 @@ function VisualsSection({
       )}
 
       <div className="mt-7 grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-        {VISUALS.map((visual) => {
+        {adaptiveVisuals.map((visual) => {
           const dependency = !spacePlanReady ? "Generate and approve the Furniture & Space Plan first." : undefined;
           return (
             <InteriorWorkflowCard
@@ -1754,12 +1779,9 @@ function PlanRoomMappingCard({
         <div>
           <div className="relative grid aspect-[4/3] place-items-center overflow-hidden rounded-2xl bg-[var(--surface-hover)]">
             {imageUrl ? (
-              <>
+              <button type="button" onClick={() => onEnlarge({ url: imageUrl, title: sourcePlanDisplayName(asset, index) })} aria-label={`Open ${sourcePlanDisplayName(asset, index)}`} className="h-full w-full cursor-zoom-in">
                 <img src={imageUrl} alt={sourcePlanDisplayName(asset, index)} className="h-full w-full object-contain p-3" />
-                <button type="button" onClick={() => onEnlarge({ url: imageUrl, title: sourcePlanDisplayName(asset, index) })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl border border-white/45 bg-black/55 px-3 py-2 text-[.65rem] font-black text-white backdrop-blur-md">
-                  <Maximize2 size={13} /> Enlarge
-                </button>
-              </>
+              </button>
             ) : <FileText size={30} className="text-[var(--accent-strong)]" />}
           </div>
           <p className="mt-3 text-xs font-bold text-[var(--text-secondary)]">{sourcePlanDisplayName(asset, index)}</p>
@@ -1925,8 +1947,8 @@ function ExistingDesignRoomVisualsSection({
                     onEnlarge={onEnlarge}
                   />
                   <RoomVisualOutputCard
-                    title="Alternate Angle"
-                    description="A second view anchored to the approved Main Concept."
+                    title="Alternative Perspective"
+                    description="A clearly different camera position within the same mapped room."
                     asset={alternateAsset}
                     generating={alternateGenerating}
                     approvingAssetId={approvingAssetId}
@@ -1937,8 +1959,8 @@ function ExistingDesignRoomVisualsSection({
                     onEnlarge={onEnlarge}
                   />
                   <RoomVisualOutputCard
-                    title="Feature Detail"
-                    description="A tighter joinery, material or feature-focused concept."
+                    title="Feature & Joinery Studies"
+                    description="A coordinated close-up collage of joinery, features and crafted details."
                     asset={detailAsset}
                     generating={detailGenerating}
                     approvingAssetId={approvingAssetId}
@@ -1987,10 +2009,9 @@ function RoomVisualOutputCard({
     <article className={cx("overflow-hidden rounded-2xl border bg-[var(--surface)]", approved ? "border-emerald-400" : "border-[var(--border)]")}>
       <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
         {imageUrl ? (
-          <>
+          <button type="button" onClick={() => onEnlarge({ url: imageUrl, title })} aria-label={`Open ${title}`} className="h-full w-full cursor-zoom-in">
             <img src={imageUrl} alt={title} className="h-full w-full object-cover" />
-            <button type="button" onClick={() => onEnlarge({ url: imageUrl, title })} className="absolute right-3 top-3 rounded-xl border border-white/40 bg-black/55 px-3 py-2 text-[.62rem] font-black text-white"><Maximize2 size={13} className="mr-1 inline" /> Enlarge</button>
-          </>
+          </button>
         ) : (
           <div className="px-5 text-center">
             <ImageIcon size={27} className="mx-auto text-[var(--accent-strong)]" />
@@ -2069,12 +2090,9 @@ function InteriorWorkflowCard({
 
       <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--surface-hover)]">
         {imageUrl ? (
-          <>
+          <button type="button" onClick={() => onEnlarge({ url: imageUrl, title })} aria-label={`Open ${title}`} className="h-full w-full cursor-zoom-in">
             <img src={imageUrl} alt={title} className={cx("h-full w-full", kind === "plan" ? "object-contain p-3" : "object-cover")} />
-            <button type="button" onClick={() => onEnlarge({ url: imageUrl, title })} className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-xl border border-white/45 bg-black/55 px-3 py-2 text-[.65rem] font-black text-white backdrop-blur-md transition hover:bg-black/75">
-              <Maximize2 size={13} /> Enlarge
-            </button>
-          </>
+          </button>
         ) : (
           <div className="px-6 text-center">
             <ImageIcon size={30} className="mx-auto text-[var(--accent-strong)]" />
@@ -2184,7 +2202,7 @@ function ProfessionalPackageSection({ value }: { value: unknown }) {
   );
 }
 
-function DesignPackSection({ result, assets, workMode, existingDesign, exporting, onDownload }: { result: ResultData; assets: ProjectAsset[]; workMode: WorkMode; existingDesign: boolean; exporting: boolean; onDownload: () => void }) {
+function DesignPackSection({ result, input, assets, workMode, existingDesign, exporting, onDownload }: { result: ResultData; input: FormState; assets: ProjectAsset[]; workMode: WorkMode; existingDesign: boolean; exporting: boolean; onDownload: () => void }) {
   const uploadedSourcePlans = getUploadedSourcePlanAssets(assets);
   const approvedPlans = PLAN_VIEWS.filter((plan) => isAnyStageApproved(assets, plan.id)).length;
   const mappedRooms = existingDesign ? getMappedRoomContexts(assets) : [];
@@ -2194,8 +2212,10 @@ function DesignPackSection({ result, assets, workMode, existingDesign, exporting
         return Boolean(asset && isApprovedAsset(asset));
       }).length
     : 0;
-  const approvedVisuals = existingDesign ? approvedRoomConcepts : VISUALS.filter((visual) => isAnyStageApproved(assets, visual.id)).length;
-  const visualTarget = existingDesign ? mappedRooms.length : VISUALS.length;
+  const coverage = getInteriorOutputCoverage(input);
+  const adaptiveVisuals = VISUALS.filter((visual) => coverage.visualTypes.includes(visual.id));
+  const approvedVisuals = existingDesign ? approvedRoomConcepts : adaptiveVisuals.filter((visual) => isAnyStageApproved(assets, visual.id)).length;
+  const visualTarget = existingDesign ? mappedRooms.length : adaptiveVisuals.length;
   return (
     <GlassCard className="p-6 sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-5">

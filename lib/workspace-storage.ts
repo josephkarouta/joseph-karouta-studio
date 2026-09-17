@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSubscriptionRow } from "@/lib/billing/stripe";
+import { getSubscriptionRow, planFromConfiguredPriceId } from "@/lib/billing/stripe";
 import { normalizePlan, type PlanId } from "@/lib/platform/plans";
 
 export type WorkspaceStorageMode = "active" | "grace" | "paused" | "free" | "expired";
@@ -41,8 +41,8 @@ function paidPlanFromRow(row: Record<string, unknown> | null): "starter" | "pro"
   if (direct === "starter" || direct === "pro") return direct;
 
   const priceId = text(row.stripe_price_id);
-  if (priceId && priceId === text(process.env.STRIPE_STARTER_PRICE_ID_USD)) return "starter";
-  if (priceId && priceId === text(process.env.STRIPE_PRO_PRICE_ID_USD)) return "pro";
+  const pricePlan = planFromConfiguredPriceId(priceId);
+  if (pricePlan === "starter" || pricePlan === "pro") return pricePlan;
   return null;
 }
 

@@ -44,7 +44,22 @@ const columns = [
   },
 ] as const;
 
-export default function SiteFooter() {
+const prelaunchPublicLinks = new Set([
+  "/expertsnetwork",
+  "/privacy",
+  "/terms",
+  "/refunds",
+  "/content-policy",
+  "/responsible-ai",
+  "/security",
+]);
+
+function resolvedFooterHref(href: string, prelaunch: boolean) {
+  if (!prelaunch) return href;
+  return prelaunchPublicLinks.has(href) ? href : "/";
+}
+
+export default function SiteFooter({ prelaunch = false }: { prelaunch?: boolean }) {
   return (
     <footer className="relative overflow-hidden border-t border-white/10 bg-[#120819] px-5 py-9 text-white sm:px-8 sm:py-11 lg:px-12 lg:py-12">
       <div className="pointer-events-none absolute -right-20 -top-32 h-80 w-80 rounded-full bg-violet-600/20 blur-3xl" />
@@ -57,9 +72,13 @@ export default function SiteFooter() {
             <p className="mt-4 max-w-xs text-sm leading-6 text-white/58">
               Create with AI. Build with Experts. From first idea to finished work.
             </p>
+            <div className="mt-4 flex items-center gap-2 text-xs font-bold text-white/65">
+              <span aria-hidden="true" className="text-sm">🇦🇺</span>
+              <span>Melbourne, Australia</span>
+            </div>
             <a
               href="mailto:hello@heyystudio.com"
-              className="mt-5 inline-block text-sm font-black text-violet-300 transition hover:text-white"
+              className="mt-4 block w-fit text-sm font-black text-violet-300 transition hover:text-white"
             >
               hello@heyystudio.com
             </a>
@@ -75,7 +94,7 @@ export default function SiteFooter() {
                   {column.links.map(([label, href]) => (
                     <Link
                       key={label}
-                      href={href}
+                      href={resolvedFooterHref(href, prelaunch)}
                       className="text-[0.82rem] font-semibold text-white/58 transition-colors hover:text-violet-300 sm:text-sm"
                     >
                       {label}

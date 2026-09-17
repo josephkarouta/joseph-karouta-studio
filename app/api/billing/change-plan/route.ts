@@ -4,13 +4,21 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { ApiAuthError, requireApiUser } from "@/lib/server/auth";
 import {
+  billingIntervalFromSubscription,
+  configuredSubscriptionPriceId,
   findBestSubscription,
   getStripe,
   planFromSubscription,
   resolveStripeCustomer,
   validateStripeSubscriptionCatalog,
 } from "@/lib/billing/stripe";
-import { getPlan, normalizePlan, type PlanId } from "@/lib/platform/plans";
+import {
+  getPlan,
+  normalizeBillingInterval,
+  normalizePlan,
+  type BillingInterval,
+  type PlanId,
+} from "@/lib/platform/plans";
 
 export const runtime = "nodejs";
 
@@ -38,14 +46,6 @@ function phaseItems(phase: SchedulePhase) {
 function priceId(value: string | Stripe.Price | undefined) {
   if (!value) return "";
   return typeof value === "string" ? value : value.id;
-}
-
-function configuredPriceId(plan: ChangeablePlan) {
-  return String(
-    plan === "starter"
-      ? process.env.STRIPE_STARTER_PRICE_ID_USD || ""
-      : process.env.STRIPE_PRO_PRICE_ID_USD || "",
-  ).trim();
 }
 
 async function retrieveSchedule(stripe: Stripe, subscription: Stripe.Subscription) {
@@ -125,15 +125,27 @@ export async function POST(request: Request) {
     }
 
     const currentPlan = planFromSubscription(subscription);
+    const currentBillingInterval = billingIntervalFromSubscription(subscription);
     if (!(currentPlan === "starter" || currentPlan === "pro")) {
       return NextResponse.json({ error: "The current paid plan could not be identified." }, { status: 409 });
     }
-    if (currentPlan === targetPlan) {
-      return NextResponse.json({ error: `You are already on ${getPlan(targetPlan).name}.` }, { status: 409 });
+    const requestedBillingInterval = normalizeBillingInterval(
+      body?.billingInterval || currentBillingInterval,
+    ) as BillingInterval;
+    if (currentPlan === targetPlan && currentBillingInterval === requestedBillingInterval) {
+      return NextResponse.json(
+        {
+          error: `You are already on ${getPlan(targetPlan).name} with ${currentBillingInterval === "year" ? "yearly" : "monthly"} billing.`,
+        },
+        { status: 409 },
+      );
     }
 
     const currentPriceId = priceId(subscription.items?.data?.[0]?.price);
-    const targetPriceId = configuredPriceId(targetPlan as ChangeablePlan);
+    const targetPriceId = configuredSubscriptionPriceId(
+      targetPlan as ChangeablePlan,
+      requestedBillingInterval,
+    );
     if (!currentPriceId || !targetPriceId) {
       return NextResponse.json({ error: "Plan changes are temporarily unavailable." }, { status: 503 });
     }
@@ -168,16 +180,18 @@ export async function POST(request: Request) {
         ...(schedule.metadata || {}),
         heyy_user_id: user.id,
         heyy_pending_plan: targetPlan,
+        heyy_pending_billing_interval: requestedBillingInterval,
       },
       phases: [
         currentInput,
         {
           items: [{ price: targetPriceId, quantity: 1 }],
-          duration: { interval: "month", interval_count: 1 },
+          duration: { interval: requestedBillingInterval, interval_count: 1 },
           proration_behavior: "none",
           metadata: {
             user_id: user.id,
             plan: targetPlan,
+            billing_interval: requestedBillingInterval,
           },
         },
       ],
@@ -187,7 +201,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       currentPlan,
+      currentBillingInterval,
       pendingPlan: targetPlan,
+      pendingBillingInterval: requestedBillingInterval,
       effectiveAt,
       scheduleId: updated.id,
     });

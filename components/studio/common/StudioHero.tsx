@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { StudioTone } from "@/components/ui/StudioModeToggle";
 import { cx } from "@/components/ui/heyy";
 
@@ -20,6 +20,8 @@ export default function StudioHero({
   controls,
   meta,
   className,
+  imageSrc,
+  imagePosition = "center 58%",
 }: {
   tone: StudioTone;
   eyebrow: string;
@@ -28,8 +30,79 @@ export default function StudioHero({
   controls?: ReactNode;
   meta?: ReactNode;
   className?: string;
+  imageSrc?: string;
+  imagePosition?: string;
 }) {
   const colors = TONES[tone];
+  const immersive = Boolean(imageSrc);
+
+  const lightControlVars = immersive
+    ? ({
+        "--surface": "rgba(255,255,255,.96)",
+        "--surface-strong": "#ffffff",
+        "--text-primary": "#17131f",
+        "--text-secondary": "#625d6b",
+        "--text-muted": "#88828f",
+        "--border": "rgba(23,19,31,.12)",
+        "--border-strong": "rgba(23,19,31,.18)",
+      } as CSSProperties)
+    : undefined;
+
+  if (immersive) {
+    return (
+      <section
+        className={cx(
+          "studio-shared-hero relative isolate min-h-[390px] overflow-hidden rounded-[2rem] border border-white/10 bg-[#080512] shadow-[0_28px_80px_rgba(12,7,30,.24)] sm:min-h-[410px] lg:min-h-[330px]",
+          className,
+        )}
+      >
+        <div
+          className="pointer-events-none absolute inset-0 bg-cover bg-no-repeat"
+          style={{ backgroundImage: `url(${imageSrc})`, backgroundPosition: imagePosition }}
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(90deg,rgba(7,4,20,.96) 0%,rgba(7,4,20,.88) 27%,rgba(7,4,20,.55) 43%,rgba(7,4,20,.12) 66%,rgba(7,4,20,.40) 100%),linear-gradient(180deg,rgba(7,4,20,.10) 0%,rgba(7,4,20,.05) 54%,rgba(7,4,20,.56) 100%)",
+          }}
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
+          style={{ background: "linear-gradient(180deg,transparent,rgba(7,4,20,.38))" }}
+          aria-hidden="true"
+        />
+
+        <div className="relative z-10 flex min-h-[390px] flex-col justify-between gap-8 p-6 sm:min-h-[410px] sm:p-8 lg:min-h-[330px] lg:flex-row lg:items-center lg:gap-10 lg:p-10 xl:p-12">
+          <div className="min-w-0 max-w-[680px] lg:max-w-[48%]">
+            <p className="text-[.62rem] font-black uppercase tracking-[.24em] text-white/72">
+              {eyebrow}
+            </p>
+            <h1 className="mt-4 text-4xl font-black leading-[.92] tracking-[-.06em] text-white sm:text-6xl lg:text-[4rem]">
+              {title}
+            </h1>
+            {description ? (
+              <p className="mt-4 max-w-xl text-sm font-semibold leading-7 text-white/78 sm:text-base">
+                {description}
+              </p>
+            ) : null}
+            {meta ? <div className="mt-5 text-white">{meta}</div> : null}
+          </div>
+
+          {controls ? (
+            <div
+              className="w-full max-w-[430px] self-stretch rounded-[22px] border border-white/60 bg-white/[.93] p-3 shadow-[0_20px_60px_rgba(10,5,28,.32)] backdrop-blur-2xl sm:self-auto lg:ml-auto"
+              style={lightControlVars}
+            >
+              {controls}
+            </div>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section

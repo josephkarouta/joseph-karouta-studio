@@ -6,9 +6,11 @@ import { processProductionAddonPayment } from "@/lib/payments/process-production
 import { applyMonthlyCredits } from "@/lib/credits/server";
 import { getCreditPack, getPlan, normalizePlan } from "@/lib/platform/plans";
 import { recordCheckoutPayment, recordProductionCheckoutReceipt, recordSubscriptionInvoice } from "@/lib/payments/payment-receipts";
+import { sendSubscriptionConfirmation } from "@/lib/communications/subscription-confirmation";
 import {
   getStripe,
   planFromSubscription,
+  subscriptionCreditPeriod,
   syncSubscription,
   userIdForSubscription,
 } from "@/lib/billing/stripe";
@@ -44,11 +46,14 @@ async function applyMonthlyPlanCredits({
   subscription?: Stripe.Subscription | null;
 }) {
   const plan = getPlan(normalizePlan(planValue));
-  const period = subscription
-    ? subscriptionPeriod(subscription)
+  const subscriptionCredit = subscription
+    ? subscriptionCreditPeriod(subscription)
+    : null;
+  const period = subscriptionCredit
+    ? null
     : currentCalendarPeriod();
-  const periodStart = new Date(period.start * 1000).toISOString();
-  const periodEnd = new Date(period.end * 1000).toISOString();
+  const periodStart = subscriptionCredit?.start || new Date(period!.start * 1000).toISOString();
+  const periodEnd = subscriptionCredit?.end || new Date(period!.end * 1000).toISOString();
   const subscriptionId = subscription?.id || null;
 
   await applyMonthlyCredits(supabase, {
@@ -60,9 +65,15 @@ async function applyMonthlyPlanCredits({
     grantKey: subscriptionId
       ? `stripe:${subscriptionId}:${periodStart}`
       : `${plan.id}:calendar:${periodStart}`,
-    source: subscriptionId ? "stripe_webhook" : "subscription_ended",
+    source:
+      subscriptionId && subscriptionCredit?.interval === "year"
+        ? "annual_subscription_webhook"
+        : subscriptionId
+          ? "stripe_webhook"
+          : "subscription_ended",
     metadata: {
       stripe_subscription_id: subscriptionId,
+      billing_interval: subscriptionCredit?.interval || null,
     },
   });
 }
@@ -136,6 +147,23 @@ async function retrieveSubscription(value: string | Stripe.Subscription | null |
   if (!value) return null;
   if (typeof value !== "string") return value;
   return stripe.subscriptions.retrieve(value);
+}
+
+async function invoiceFromPaidEvent(event: Stripe.Event) {
+  if (String(event.type) === "invoice_payment.paid") {
+    const invoicePayment = event.data.object as unknown as {
+      invoice?: string | Stripe.Invoice | null;
+    };
+    const invoiceValue = invoicePayment.invoice;
+
+    if (!invoiceValue) return null;
+    if (typeof invoiceValue === "string") {
+      return stripe.invoices.retrieve(invoiceValue);
+    }
+    return invoiceValue;
+  }
+
+  return event.data.object as Stripe.Invoice;
 }
 
 async function syncStripeSubscription(subscription: Stripe.Subscription, planOverride?: unknown) {
@@ -262,10 +290,15 @@ export async function POST(req: Request) {
     }
 
     if (
-      event.type === "invoice.paid" ||
-      event.type === "invoice.payment_succeeded"
+      ["invoice.paid", "invoice.payment_succeeded", "invoice_payment.paid"].includes(
+        String(event.type),
+      )
     ) {
-      const invoice = event.data.object as Stripe.Invoice;
+      const invoice = await invoiceFromPaidEvent(event);
+      if (!invoice) {
+        throw new Error("Paid invoice event did not include an invoice.");
+      }
+
       const invoiceRecord = invoice as unknown as {
         subscription?: string | Stripe.Subscription | null;
         parent?: { subscription_details?: { subscription?: string | Stripe.Subscription | null } };
@@ -284,6 +317,16 @@ export async function POST(req: Request) {
             await recordSubscriptionInvoice({ invoice, userId, plan });
           } catch (receiptError) {
             console.error("Subscription payment receipt failed:", receiptError);
+          }
+          try {
+            await sendSubscriptionConfirmation({
+              invoice,
+              subscription,
+              userId,
+              plan,
+            });
+          } catch (confirmationError) {
+            console.error("Subscription confirmation email failed:", confirmationError);
           }
         }
       }

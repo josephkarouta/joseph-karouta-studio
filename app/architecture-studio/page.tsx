@@ -80,7 +80,7 @@ const architecturalStyles = [
   "Contemporary",
   "Minimal",
   "Mediterranean",
-  "Modern Arabic",
+  "Modern",
   "Japanese",
   "Organic",
   "Scandinavian",
@@ -640,6 +640,8 @@ export default function ArchitectureStudioPage() {
               description={ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
                 ? "Start a new design or develop a sketch, plan, drawing, photo or model you already have. Guided and Professional modes share one connected project workspace."
                 : "Start a new design or develop a sketch, plan, drawing, photo or model you already have. Heyy Studio guides you through one connected concept-development workspace."}
+              imageSrc="/studio-heroes/architecture-studio-hero.webp"
+              imagePosition="center 58%"
               controls={(
                 <>
                   {ARCHITECTURE_PROFESSIONAL_MODE_ENABLED ? (

@@ -455,7 +455,7 @@ const styles = [
   "Contemporary",
   "Minimal",
   "Mediterranean",
-  "Modern Arabic",
+  "Modern",
   "Japanese",
   "Organic",
   "Scandinavian",
@@ -499,6 +499,19 @@ function canonicalFloorIndex(visualType: string) {
 
 function isCanonicalFloorVisualType(visualType: string) {
   return canonicalFloorIndex(visualType) !== null;
+}
+
+function isPlanFoundationSheetVisualType(visualType: string) {
+  return /^plan_foundation_sheet(?:_\d+)?$/.test(visualType);
+}
+
+function planFoundationSheetIndex(visual: ArchitectureVisual) {
+  const metadata = recordValue(visual.metadata);
+  const savedIndex = Number(metadata.plan_foundation_sheet_index || 0);
+  if (savedIndex > 0) return savedIndex;
+  if (visual.visual_type === "plan_foundation_sheet") return 1;
+  const match = visual.visual_type.match(/^plan_foundation_sheet_(\d+)$/);
+  return match ? Number(match[1]) : 99;
 }
 
 function floorPlanTypesForLevels(levels: unknown[]) {
@@ -4044,14 +4057,14 @@ function DirectionsTab({
               ? "Three ways to turn the sketch into architecture"
               : project.workflow_mode === "plan_to_render"
                 ? "Three style and material directions for the existing design"
-                : "Three architectural directions before the floor plan is developed"}
+                : "Three multi-view architectural directions before the floor plan is developed"}
           </h2>
           <p>
             {project.workflow_mode === "sketch_to_real"
               ? "The saved sketch, preservation rules and requested changes guide three routes: faithful interpretation, refined evolution and bold reimagining."
               : project.workflow_mode === "plan_to_render"
                 ? "Your uploaded drawings remain the fixed building geometry. These directions explore materials, façade character, landscape, light and atmosphere without redesigning the plan or massing."
-                : "Heyy Studio explores three different architectural routes from your brief, site, Space Program and material preferences. Select the route first; its massing and design rules will then guide the Plan Foundation."}
+                : "Heyy Studio explores three architectural routes from your brief, site, Space Program and material preferences. Each selected Direction visual becomes a coordinated multi-view board — primary arrival/frontage, important secondary side, aerial massing and material/detail studies — so the later Plan Foundation has stronger orientation evidence."}
             {" "}These are not permit, engineering or construction documents.
           </p>
         </div>
@@ -4148,7 +4161,7 @@ function DirectionsTab({
             will adapt to this exact building type, its users and its operational needs.
           </p>
           <small>
-            Each route is generated as text first. Select the strategy you prefer, then spend credits only on the selected visual.
+            Each route is generated as text first. Select the strategy you prefer, then spend credits only on its coordinated multi-view Direction board.
           </small>
         </div>
       ) : (
@@ -4659,10 +4672,13 @@ function PlansTab({
   const canonicalPlan = recordValue(recordValue(planSet?.generation_json).canonical_plan);
   const canonicalLevels = Array.isArray(canonicalPlan.levels) ? canonicalPlan.levels : [];
   const requiredFloorPlanTypes = floorPlanTypesForLevels(canonicalLevels);
-  const foundationSheetVisual = planVisuals.find((item) => item.visual_type === "plan_foundation_sheet");
+  const foundationSheetVisuals = planVisuals
+    .filter((item) => isPlanFoundationSheetVisualType(item.visual_type))
+    .sort((a, b) => planFoundationSheetIndex(a) - planFoundationSheetIndex(b));
   const requiredFloorPlansReady = existingDesignSource || Boolean(
-    foundationSheetVisual?.is_approved &&
-    (assetPreviewUrl(recordValue(foundationSheetVisual.metadata).technical_assets) || foundationSheetVisual.image_url),
+    foundationSheetVisuals.length && foundationSheetVisuals.every((sheet) =>
+      sheet.is_approved && (assetPreviewUrl(recordValue(sheet.metadata).technical_assets) || sheet.image_url),
+    ),
   );
 
   function planGenerationLockReason(visual: ArchitectureVisual) {
@@ -4684,9 +4700,7 @@ function PlansTab({
     return requiredFloorPlansReady ? null : "Generate and approve all required floor plans first";
   }
 
-  const orderedPlanVisuals = planVisuals.filter(
-    (visual) => visual.visual_type === "plan_foundation_sheet",
-  );
+  const orderedPlanVisuals = foundationSheetVisuals;
 
   if (!planSet) {
     return (
@@ -4742,10 +4756,12 @@ function PlansTab({
             ? "Visuals and optional redraws use the uploaded source drawings first. Heyy Studio must preserve the existing footprint, layout, stairs, openings and level relationships."
             : requiredFloorPlansReady
               ? "The approved Plan Foundation now locks geometry for Concept Visuals and the Concept Pack while the selected Direction keeps control of architectural expression."
-              : `All required floors are generated together on one professional Plan Foundation sheet. Review the whole building, then approve the sheet once.`}</span>
+              : foundationSheetVisuals.length > 1
+                ? `The same coordinated plan reasoning result is presented across ${foundationSheetVisuals.length} readable Plan Foundation sheets. Review and approve every sheet before Concept Visuals unlock.`
+                : `All required floors are generated together on one professional Plan Foundation sheet. Review the whole building, then approve the sheet once.`}</span>
         </div>
         <div className="credit-legend">
-          <span>One coordinated multi-floor sheet · included with Plan Foundation</span>
+          <span>{foundationSheetVisuals.length > 1 ? `${foundationSheetVisuals.length} coordinated Plan Foundation sheets · one shared plan model` : "One coordinated multi-floor sheet · included with Plan Foundation"}</span>
           <span>Detailed documentation · Expert Development</span>
           <b>{existingDesignSource ? "Source geometry locked" : requiredFloorPlansReady ? "Plans approved" : "Approval required"}</b>
         </div>
@@ -4753,7 +4769,7 @@ function PlansTab({
 
       <div className="plan-scope-note surface-card">
         <strong>Focused concept scope</strong>
-        <span>Heyy Studio keeps one coordinated multi-floor Plan Foundation as the plan output. Elevations, sections and construction documentation belong to Expert Development.</span>
+        <span>Heyy Studio keeps one coordinated Plan Foundation model and automatically spreads larger projects across additional readable sheets when needed. Elevations, sections and construction documentation belong to Expert Development.</span>
       </div>
       <div className="plan-visual-grid">
         {orderedPlanVisuals.map((visual) => (
@@ -5137,7 +5153,7 @@ function PlanVisualCard({
 }) {
   const metadata = recordValue(visual.metadata);
   const canonicalFloor = isCanonicalFloorVisualType(visual.visual_type);
-  const foundationSheet = visual.visual_type === "plan_foundation_sheet";
+  const foundationSheet = isPlanFoundationSheetVisualType(visual.visual_type);
   const lockedCanonicalPlanView = canonicalFloor || foundationSheet;
   const renderedOnly = /^perspective_/.test(visual.visual_type);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -5194,7 +5210,7 @@ function PlanVisualCard({
       )}
       {loading && <ImageGenerationOverlay title={viewMode === "rendered" ? "Generating rendered plan" : "Generating detailed concept plan"} detail={generationStatus} />}
       <div className="plan-card-copy">
-        <span>{foundationSheet ? "One coordinated multi-floor Plan Foundation" : canonicalFloor ? "Internal canonical floor" : viewMode === "rendered" ? "Rendered Plan" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
+        <span>{foundationSheet ? `Coordinated Plan Foundation${Number(metadata.plan_foundation_sheet_count || 1) > 1 ? ` · Sheet ${planFoundationSheetIndex(visual)} of ${Number(metadata.plan_foundation_sheet_count || 1)}` : ""}` : canonicalFloor ? "Internal canonical floor" : viewMode === "rendered" ? "Rendered Plan" : sourceLocked ? "Source-faithful redraw" : "Detailed AI Concept Plan"}</span>
         <h3>{visual.title || visual.visual_type}</h3>
       </div>
       <div className="plan-card-actions">
@@ -5306,17 +5322,18 @@ function VisualsTab({
   const existingDesignSource = project.workflow_mode === "plan_to_render" && documents.some(
     (document) => document.category.startsWith("source") && document.mime_type?.startsWith("image/"),
   );
-  const approvedFoundationSheet = planRows.find((visual) => visual.visual_type === "plan_foundation_sheet");
+  const approvedFoundationSheets = planRows.filter((visual) => isPlanFoundationSheetVisualType(visual.visual_type));
   const plansReady = existingDesignSource || Boolean(
-    approvedFoundationSheet?.is_approved &&
-    (assetPreviewUrl(recordValue(approvedFoundationSheet.metadata).technical_assets) || approvedFoundationSheet.image_url),
+    approvedFoundationSheets.length && approvedFoundationSheets.every((sheet) =>
+      sheet.is_approved && (assetPreviewUrl(recordValue(sheet.metadata).technical_assets) || sheet.image_url),
+    ),
   );
   if (!plansReady) {
     return (
       <StageLocked
         eyebrow="Approved Plan Foundation Required"
         title="Approve the coordinated Plan Foundation before creating visuals"
-        body="Visuals use the single approved multi-floor Plan Foundation as the building geometry authority, while the selected Direction controls architectural expression."
+        body="Visuals use the approved coordinated Plan Foundation sheet set as the building geometry authority, while the selected Direction controls architectural expression."
         onOpenDirections={onOpenPlans}
         actionLabel="Open Plan Foundation →"
       />
@@ -5324,6 +5341,14 @@ function VisualsTab({
   }
 
   const galleryTypes = [
+    "full_building_view",
+    "primary_frontage_view",
+    "secondary_frontage_view",
+    "spatial_experience_view",
+    "additional_spatial_view",
+    "upper_massing_view",
+    "detail_material_collage",
+    // Backward compatibility for projects generated before the four-view upgrade.
     "hero_exterior_concept",
     "outdoor_living_concept",
   ];
@@ -5340,7 +5365,7 @@ function VisualsTab({
           <p>
             {existingDesignSource
               ? "Turn the uploaded existing plans into coordinated architectural visuals while keeping the source geometry fixed."
-              : "Create only the concept imagery Heyy Studio can responsibly deliver: one hero exterior concept and one supporting outdoor-living concept."}
+              : "Create a coordinated Concept Visual set sized to the project. Small projects keep the focused four-view set; larger and taller projects automatically add the extra whole-building, upper-massing or key-experience coverage they need."}
           </p>
           <div className="demo-explanation">
             <strong>{existingDesignSource ? "Existing plans stay fixed." : "Concept imagery, not measured documentation."}</strong>
@@ -5352,7 +5377,7 @@ function VisualsTab({
         <button type="button" className="primary-action" disabled={generating} onClick={onGenerate}>
           {generating ? "Preparing Concept Visual Briefs..." : `Prepare Concept Visual Briefs · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
         </button>
-        {generating && <StageGenerationLoading title="Preparing Concept Visuals" detail="Preparing one hero exterior concept and one supporting outdoor-living concept from the approved project references." />}
+        {generating && <StageGenerationLoading title="Preparing Concept Visuals" detail="Preparing the right number of coordinated view briefs for this project from the approved Direction, Plan Foundation and programme." />}
       </section>
     );
   }
@@ -5365,14 +5390,14 @@ function VisualsTab({
           <h2>{direction.title} Concept Boards</h2>
           <p>{existingDesignSource
             ? "Source plans/elevations define the building. The selected direction controls style only. Regenerate any older view that was created before the source drawings were organised."
-            : "Approve the concept boards that best communicate the project intent. Each board combines several visual studies and is not an exact elevation or measured architectural view."}</p>
+            : `Review ${gallery.length} coordinated Concept Visual${gallery.length === 1 ? "" : "s"} of the same approved project. Larger/taller projects receive broader coverage while smaller projects stay focused. All remain conceptual, not measured documentation.`}</p>
         </div>
         <button type="button" className="secondary-action" disabled={generating} onClick={onGenerate}>
           {generating ? "Refreshing..." : `Refresh Concept Briefs · ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits`}
         </button>
       </div>
 
-      {generating && <StageGenerationLoading title="Refreshing Concept Visual Briefs" detail={`Updating the two focused concept-board briefs. ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits are reserved; images are generated separately.`} />}
+      {generating && <StageGenerationLoading title="Refreshing Concept Visual Briefs" detail={`Updating the adaptive project-type-aware visual set. ${ARCHITECTURE_CREDIT_COSTS.conceptText} credits are reserved; images are generated separately.`} />}
       <div className="visual-gallery-grid">
         {gallery.map((visual) => {
           const visualMetadata = recordValue(visual.metadata);
@@ -5512,10 +5537,13 @@ function DesignPackTab({
   const generatedGallery = gallery.filter((visual) => Boolean(visual.image_url));
   const approved = generatedGallery.filter((visual) => visual.is_approved);
   const packVisuals = approved.length > 0 ? approved : generatedGallery;
-  const foundationSheet = visuals.find((visual) => visual.visual_type === "plan_foundation_sheet");
+  const foundationSheets = visuals
+    .filter((visual) => isPlanFoundationSheetVisualType(visual.visual_type))
+    .sort((a, b) => planFoundationSheetIndex(a) - planFoundationSheetIndex(b));
   const foundationApproved = Boolean(
-    foundationSheet?.is_approved &&
-    (assetPreviewUrl(recordValue(foundationSheet.metadata).technical_assets) || foundationSheet.image_url),
+    foundationSheets.length && foundationSheets.every((sheet) =>
+      sheet.is_approved && (assetPreviewUrl(recordValue(sheet.metadata).technical_assets) || sheet.image_url),
+    ),
   );
   const complete = Boolean(planSet && foundationApproved && generatedGallery.length > 0);
 
@@ -5614,7 +5642,7 @@ function DesignPackTab({
           <section className="pack-page">
             <div className="pack-page-heading"><span>03</span><div><p>Plan Foundation</p><h2>Approved plans and area schedule</h2></div></div>
             <div className="pack-plan-grid">
-              {visuals.filter((visual) => visual.visual_type === "plan_foundation_sheet").map((visual) => (
+              {foundationSheets.map((visual) => (
                 <figure key={visual.id}>{visual.image_url && <img src={visual.image_url} alt={visual.title || visual.visual_type} loading="lazy" decoding="async" />}<figcaption>{visual.title}</figcaption></figure>
               ))}
             </div>
@@ -5727,10 +5755,11 @@ function EstimateTab({
         visual.visual_type === "plan_foundation_sheet" ||
         isCanonicalFloorVisualType(visual.visual_type),
     );
-    const foundationSheet = planRows.find((visual) => visual.visual_type === "plan_foundation_sheet");
+    const foundationSheets = planRows.filter((visual) => isPlanFoundationSheetVisualType(visual.visual_type));
     const plansReady = Boolean(
-      foundationSheet?.is_approved &&
-      (assetPreviewUrl(recordValue(foundationSheet.metadata).technical_assets) || foundationSheet.image_url),
+      foundationSheets.length && foundationSheets.every((sheet) =>
+        sheet.is_approved && (assetPreviewUrl(recordValue(sheet.metadata).technical_assets) || sheet.image_url),
+      ),
     );
 
     if (!plansReady) {
@@ -5965,12 +5994,12 @@ function ArchitectureProductionTab({
     },
     ...visuals.filter((visual) => {
       const group = recordValue(visual.metadata).group;
-      return visual.visual_type === "plan_foundation_sheet" || group === "visuals";
+      return isPlanFoundationSheetVisualType(visual.visual_type) || group === "visuals";
     }).map((visual) => {
       const metadata = recordValue(visual.metadata);
       return {
         id: visual.id,
-        group: visual.visual_type === "plan_foundation_sheet" ? "plan_foundation" : "concept_visuals",
+        group: isPlanFoundationSheetVisualType(visual.visual_type) ? "plan_foundation" : "concept_visuals",
         visual_type: visual.visual_type,
         title: visual.title,
         is_approved: visual.is_approved,

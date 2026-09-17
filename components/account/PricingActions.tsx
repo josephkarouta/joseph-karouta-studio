@@ -4,12 +4,29 @@ import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/heyy";
-import { normalizePlan, PLANS, type PlanId } from "@/lib/platform/plans";
+import {
+  normalizeBillingInterval,
+  normalizePlan,
+  PLANS,
+  type BillingInterval,
+  type PlanId,
+} from "@/lib/platform/plans";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { openHeyyAuthModal } from "@/lib/auth-modal";
 
 const PLAN_ORDER: Record<PlanId, number> = { free: 0, starter: 1, pro: 2 };
 
-export default function PricingAction({ planId, current, featured }: { planId: PlanId; current?: boolean; featured?: boolean }) {
+export default function PricingAction({
+  planId,
+  billingInterval = "month",
+  current,
+  featured,
+}: {
+  planId: PlanId;
+  billingInterval?: BillingInterval;
+  current?: boolean;
+  featured?: boolean;
+}) {
   const { plan, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -23,11 +40,15 @@ export default function PricingAction({ planId, current, featured }: { planId: P
       return;
     }
     if (planId === "free") {
-      window.location.href = user ? "/credits" : "/signup";
+      if (user) {
+        window.location.href = "/credits";
+      } else {
+        openHeyyAuthModal("signup", "/credits");
+      }
       return;
     }
     if (!user) {
-      window.location.href = `/login?next=${encodeURIComponent("/pricing")}`;
+      openHeyyAuthModal("signup", "/pricing");
       return;
     }
     if (currentPlan !== "free") {
@@ -43,7 +64,10 @@ export default function PricingAction({ planId, current, featured }: { planId: P
       const response = await fetch("/api/create-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ planName: planId }),
+        body: JSON.stringify({
+          planName: planId,
+          billingInterval: normalizeBillingInterval(billingInterval),
+        }),
       });
       const result = await response.json();
 

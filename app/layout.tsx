@@ -4,7 +4,12 @@ import Providers from "@/components/providers";
 import HeyyAssistant from "@/components/assistant/HeyyAssistant";
 
 import ApiResponseSafety from "@/components/system/ApiResponseSafety";
+import CookieConsent from "@/components/system/CookieConsent";
+import AuthModalController from "@/components/system/AuthModalController";
 const isPublicBeta = process.env.NEXT_PUBLIC_HEYY_PUBLIC_BETA === "true";
+const isPrelaunch =
+  String(process.env.HEYY_PUBLIC_MODE || "beta").trim().toLowerCase() ===
+  "prelaunch";
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
   (isPublicBeta ? "http://localhost:3000" : "https://heyystudio.com");
@@ -63,7 +68,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <ApiResponseSafety />
         <Providers>
           {children}
-          <HeyyAssistant />
+          {!isPrelaunch && <HeyyAssistant />}
+          {!isPrelaunch && <AuthModalController />}
+          <CookieConsent />
         </Providers>
       </body>
     </html>

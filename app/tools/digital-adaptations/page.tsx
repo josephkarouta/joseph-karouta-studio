@@ -14,6 +14,8 @@ export default function DigitalAdaptationsPage() {
       iconName="adaptation"
       accent="#6f2dff"
       soft="rgba(111,45,255,.12)"
+      imageSrc="/tool-heroes/digital-adaptations-hero.webp"
+      imagePosition="center 54%"
       creditLabel={`${CREDIT_COSTS.digitalAdaptationFamily} credits per aspect-ratio composition`}
     >
       <DigitalAdaptationsWorkbench />

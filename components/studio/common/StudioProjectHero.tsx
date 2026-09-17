@@ -11,6 +11,13 @@ const ACCENTS: Record<StudioTone, string> = {
   marketing: "#eb3d87",
 };
 
+const HERO_IMAGES: Partial<Record<StudioTone, string>> = {
+  brand: "/studio-heroes/brand-studio-hero.webp",
+  marketing: "/studio-heroes/marketing-studio-hero.webp",
+  architecture: "/studio-heroes/architecture-studio-hero.webp",
+  interior: "/studio-heroes/interior-studio-hero.webp",
+};
+
 export default function StudioProjectHero({
   tone,
   eyebrow,
@@ -43,7 +50,8 @@ export default function StudioProjectHero({
       eyebrow={eyebrow}
       title={title}
       description={description}
-      className="min-h-[220px]"
+      imageSrc={HERO_IMAGES[tone]}
+      imagePosition="center 58%"
       controls={(
         <div className="flex min-h-[132px] flex-col justify-center">
           {normalizedProgress !== null ? (

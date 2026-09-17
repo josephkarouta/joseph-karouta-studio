@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
-import { toFile } from "openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getOpenAI } from "@/lib/ai/openai-server";
+import { generateRoutedStudioImage } from "@/lib/ai/studio-image-provider";
+import { recordProviderCall } from "@/lib/ai/provider-telemetry";
 import { imageQualityForTier, type AiPlanConfig, type ImageGenerationTier } from "@/lib/ai/config";
 import { renderArchitecturalDrawingSvg } from "@/lib/ai/architecture-drawing";
 import {
@@ -134,6 +135,15 @@ export type CanonicalPlanSpec = {
     depth_m: number;
     north_label: string;
     access_edge: string;
+  };
+  orientation_lock?: {
+    coordinate_convention: "north_up";
+    primary_frontage_edge: "north" | "south" | "east" | "west";
+    primary_frontage_role: string;
+    secondary_frontage_edge: "north" | "south" | "east" | "west";
+    secondary_frontage_role: string;
+    no_mirror_rule: string;
+    fixed_anchors: string[];
   };
   footprint: { x: number; y: number; width: number; height: number };
   building_outline?: { shape_label: string; points: CanonicalPlanPoint[] };
@@ -384,7 +394,7 @@ const planSchema = {
       canonical_plan: {
         type: "object",
         additionalProperties: false,
-        required: ["site", "footprint", "building_outline", "vertical_cores", "circulation_routes", "pool", "driveway", "entry", "section_cuts", "levels"],
+        required: ["site", "orientation_lock", "footprint", "building_outline", "vertical_cores", "circulation_routes", "pool", "driveway", "entry", "section_cuts", "levels"],
         properties: {
           site: {
             type: "object",
@@ -395,6 +405,23 @@ const planSchema = {
               depth_m: { type: "number" },
               north_label: { type: "string" },
               access_edge: { type: "string" },
+            },
+          },
+          orientation_lock: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "coordinate_convention", "primary_frontage_edge", "primary_frontage_role",
+              "secondary_frontage_edge", "secondary_frontage_role", "no_mirror_rule", "fixed_anchors",
+            ],
+            properties: {
+              coordinate_convention: { type: "string", enum: ["north_up"] },
+              primary_frontage_edge: { type: "string", enum: ["north", "south", "east", "west"] },
+              primary_frontage_role: { type: "string" },
+              secondary_frontage_edge: { type: "string", enum: ["north", "south", "east", "west"] },
+              secondary_frontage_role: { type: "string" },
+              no_mirror_rule: { type: "string" },
+              fixed_anchors: { type: "array", minItems: 2, maxItems: 12, items: { type: "string" } },
             },
           },
           footprint: {
@@ -799,7 +826,43 @@ async function structuredCompletion<T>(args: {
       request.verbosity = "low";
     }
 
-    return openai.chat.completions.create(request as never);
+    const startedAt = new Date();
+    const startedMs = Date.now();
+    try {
+      const completion = await openai.chat.completions.create(request as never);
+      await recordProviderCall({
+        provider: "openai",
+        model,
+        callKind: `architecture_structured_${args.schema.name}`,
+        status: "succeeded",
+        startedAt: startedAt.toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs,
+        referenceCount: 0,
+        requestedQuality: /^gpt-5(?:[.-]|$)/i.test(model) ? "minimal-reasoning" : "standard",
+        requestedSize: null,
+        usage: completion.usage || null,
+        metadata: { endpoint: "chat.completions", max_completion_tokens: maxCompletionTokens },
+      });
+      return completion;
+    } catch (error) {
+      await recordProviderCall({
+        provider: "openai",
+        model,
+        callKind: `architecture_structured_${args.schema.name}`,
+        status: "failed",
+        startedAt: startedAt.toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs,
+        referenceCount: 0,
+        requestedQuality: /^gpt-5(?:[.-]|$)/i.test(model) ? "minimal-reasoning" : "standard",
+        requestedSize: null,
+        usage: null,
+        error: error instanceof Error ? error.message : "Structured architecture completion failed.",
+        metadata: { endpoint: "chat.completions", max_completion_tokens: maxCompletionTokens },
+      });
+      throw error;
+    }
   }
 
   let modelUsed = args.plan.textModel;
@@ -847,6 +910,63 @@ async function structuredCompletion<T>(args: {
       `Architecture generation returned invalid project data.`,
     );
   }
+}
+
+type ArchitecturePlanReasoningEffort =
+  | "none"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+
+function architecturePlanReasoningEffort(
+  phase: "initial" | "correction",
+): ArchitecturePlanReasoningEffort {
+  const envName =
+    phase === "correction"
+      ? "ARCHITECTURE_PLAN_CORRECTION_REASONING_EFFORT"
+      : "ARCHITECTURE_PLAN_REASONING_EFFORT";
+  const fallback =
+    phase === "correction"
+      ? process.env.ARCHITECTURE_PLAN_REASONING_EFFORT?.trim() || "medium"
+      : "medium";
+  const raw = process.env[envName]?.trim().toLowerCase() || fallback;
+
+  if (
+    raw === "none" ||
+    raw === "low" ||
+    raw === "medium" ||
+    raw === "high" ||
+    raw === "xhigh" ||
+    raw === "max"
+  ) {
+    return raw;
+  }
+
+  return "medium";
+}
+
+function architecturePlanCorrectionModel(defaultModel: string) {
+  return (
+    process.env.ARCHITECTURE_PLAN_CORRECTION_MODEL?.trim() ||
+    defaultModel
+  );
+}
+
+function architecturePlanCorrectionEnabled() {
+  const raw = process.env.ARCHITECTURE_PLAN_CORRECTION_ENABLED
+    ?.trim()
+    .toLowerCase();
+  return raw !== "false" && raw !== "0" && raw !== "off";
+}
+
+function architecturePlanCorrectionIssueLimit() {
+  const raw = Number.parseInt(
+    process.env.ARCHITECTURE_PLAN_CORRECTION_MAX_ISSUES?.trim() || "8",
+    10,
+  );
+  return Number.isFinite(raw) ? Math.max(1, Math.min(raw, 12)) : 8;
 }
 
 async function structuredCompletionWithImage<T>(args: {
@@ -914,11 +1034,70 @@ async function structuredCompletionWithImage<T>(args: {
     max_output_tokens: args.plan.maxOutputTokens,
   };
 
-  if (/^gpt-5(?:[.-]|$)/i.test(args.plan.textModel)) {
-    request.reasoning = { effort: "high" };
+  const reasoningPhase = args.correctionIssues?.length
+    ? "correction"
+    : "initial";
+  const reasoningEffort = architecturePlanReasoningEffort(reasoningPhase);
+
+  if (/^gpt-(?:5|6)(?:[.-]|$)/i.test(args.plan.textModel)) {
+    request.reasoning = { effort: reasoningEffort };
   }
 
-  const response = await openai.responses.create(request as never);
+  const startedAt = new Date();
+  const startedMs = Date.now();
+  let response;
+  try {
+    response = await openai.responses.create(request as never);
+    await recordProviderCall({
+      provider: "openai",
+      model: args.plan.textModel,
+      callKind: args.correctionIssues?.length
+        ? "architecture_plan_reasoning_correction"
+        : "architecture_plan_reasoning",
+      status: "succeeded",
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedMs,
+      referenceCount: 1,
+      requestedQuality: /^gpt-(?:5|6)(?:[.-]|$)/i.test(args.plan.textModel)
+        ? `${reasoningEffort}-reasoning`
+        : "standard",
+      requestedSize: "high-detail-image-input",
+      usage: response.usage || null,
+      metadata: {
+        endpoint: "responses",
+        schema: args.schema.name,
+        max_output_tokens: args.plan.maxOutputTokens,
+        reasoning_effort: reasoningEffort,
+        correction_issue_count: args.correctionIssues?.length || 0,
+      },
+    });
+  } catch (error) {
+    await recordProviderCall({
+      provider: "openai",
+      model: args.plan.textModel,
+      callKind: args.correctionIssues?.length
+        ? "architecture_plan_reasoning_correction"
+        : "architecture_plan_reasoning",
+      status: "failed",
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedMs,
+      referenceCount: 1,
+      requestedQuality: /^gpt-(?:5|6)(?:[.-]|$)/i.test(args.plan.textModel)
+        ? `${reasoningEffort}-reasoning`
+        : "standard",
+      requestedSize: "high-detail-image-input",
+      usage: null,
+      error: error instanceof Error ? error.message : "Architecture Plan Foundation reasoning failed.",
+      metadata: {
+        endpoint: "responses",
+        schema: args.schema.name,
+        reasoning_effort: reasoningEffort,
+      },
+    });
+    throw error;
+  }
   const content = String(response.output_text || "").trim();
   if (!content) {
     throw new Error("Architecture Plan Foundation reasoning returned no usable structured plan.");
@@ -2271,6 +2450,267 @@ function rendererPlanForFloor(plan: CanonicalPlanSpec, visualType: string) {
   };
 }
 
+type ArchitectureViewProfile = {
+  family: string;
+  directionViews: [string, string, string, string];
+  orientationGuidance: string[];
+  visualSlots: Array<{
+    visualType: string;
+    title: string;
+    instruction: string;
+  }>;
+};
+
+function architectureViewProfile(projectType: string): ArchitectureViewProfile {
+  const template = getArchitectureProjectTemplate(projectType);
+  const lower = projectType.toLowerCase();
+
+  if (template.category === "residential" && !/apartment|tower|mixed|multi/.test(lower)) {
+    return {
+      family: "residential low-rise",
+      directionViews: [
+        "PRIMARY FRONTAGE / STREET ARRIVAL: clearly show the main entry and vehicle/garage access when present",
+        "SECONDARY / PRIVATE OUTDOOR SIDE: show garden, pool, terrace or principal private outdoor relationship when present",
+        "OBLIQUE AERIAL / MASSING OVERVIEW: show the whole building, site access, primary frontage and secondary outdoor side together",
+        "MATERIAL + ARCHITECTURAL DETAIL STUDIES: coordinated facade, opening, shading, landscape and threshold details from the same design",
+      ],
+      orientationGuidance: [
+        "Primary frontage means the street/arrival/entry side.",
+        "Secondary frontage means the private garden/pool/outdoor-living side when present.",
+        "If a garage/driveway is visible, lock its side relative to the primary frontage and never mirror it later.",
+        "If a pool or major outdoor zone is visible, lock its side relative to the building and entry and never mirror it later.",
+      ],
+      visualSlots: [
+        { visualType: "primary_frontage_view", title: "Front / Arrival Aerial", instruction: "Create one premium oblique front/arrival view showing the primary frontage, entry and vehicle access where present. Preserve the exact left/right orientation from the approved Plan Foundation." },
+        { visualType: "secondary_frontage_view", title: "Rear / Outdoor Aerial", instruction: "Create one premium oblique rear/private-outdoor view showing the garden, pool, terrace or principal outdoor relationship where present. It must be the same building, not a mirrored variant." },
+        { visualType: "spatial_experience_view", title: "Living & Landscape Concept", instruction: "Create one ground-level spatial experience focused on the principal living/social zone and its relationship to landscape/outdoor space. Preserve openings, massing and plan relationships." },
+        { visualType: "detail_material_collage", title: "Architectural Detail Collage", instruction: "Create a refined multi-panel collage of 4–6 coordinated architectural moments such as entry, facade junction, material transition, shading, glazing, landscape edge and pool/terrace detail. Every panel must belong to the same project." },
+      ],
+    };
+  }
+
+  if (template.category === "hospitality") {
+    return {
+      family: "hospitality",
+      directionViews: [
+        "PRIMARY GUEST ARRIVAL / PUBLIC FRONTAGE: show entrance identity, drop-off or street presence",
+        "SECONDARY AMENITY / OUTDOOR OR SERVICE-SIDE RELATIONSHIP: show the important second edge without redesigning the building",
+        "OBLIQUE AERIAL / SITE + MASSING OVERVIEW: show guest arrival, public realm, amenity and service logic together",
+        "MATERIAL + EXPERIENCE DETAIL STUDIES: facade, lobby/threshold, lighting, landscape and hospitality material moments",
+      ],
+      orientationGuidance: [
+        "Primary frontage means the principal guest/public arrival edge.",
+        "Secondary frontage means the major amenity, outdoor, service or back-of-house edge identified by the brief/site.",
+        "Keep guest arrival and service access on their established sides; never mirror them between Direction, Plan and Visuals.",
+      ],
+      visualSlots: [
+        { visualType: "primary_frontage_view", title: "Primary Arrival / Frontage View", instruction: "Create one premium oblique view of the principal guest/public arrival and frontage, preserving the approved access and entry side." },
+        { visualType: "secondary_frontage_view", title: "Secondary / Amenity View", instruction: "Create one coordinated oblique view of the project's important secondary edge: amenity, outdoor, landscape or service relationship as appropriate to the brief." },
+        { visualType: "spatial_experience_view", title: "Main Guest Experience", instruction: "Create one ground-level guest experience in the project's primary public interior or indoor-outdoor space, selected from the actual programme rather than defaulting to a residential living room." },
+        { visualType: "detail_material_collage", title: "Hospitality Detail Collage", instruction: "Create a 4–6 panel collage of coordinated arrival, facade, interior threshold, material, lighting, signage/brand-zone and landscape details belonging to the same project." },
+      ],
+    };
+  }
+
+  if (template.category === "commercial" && /office|workspace|studio/.test(lower)) {
+    return {
+      family: "workplace / office",
+      directionViews: [
+        "PRIMARY ARRIVAL / BRAND FRONTAGE: show the main entry and workplace identity",
+        "SECONDARY EDGE / TERRACE / SERVICE RELATIONSHIP: show another meaningful building side without mirroring",
+        "OBLIQUE AERIAL / MASSING OVERVIEW: show access, core logic, public/private edges and major outdoor/terrace relationships",
+        "WORKPLACE MATERIAL + DETAIL STUDIES: lobby, facade, meeting/work zones, shading and material moments",
+      ],
+      orientationGuidance: [
+        "Primary frontage means the public/brand arrival edge.",
+        "Secondary frontage means the major terrace, service or secondary public edge.",
+        "Keep public arrival, service access, core and principal facade sides fixed throughout the workflow.",
+      ],
+      visualSlots: [
+        { visualType: "primary_frontage_view", title: "Primary Arrival / Office Frontage", instruction: "Create one premium oblique view of the main public/brand frontage and entry." },
+        { visualType: "secondary_frontage_view", title: "Secondary / Terrace View", instruction: "Create one coordinated oblique view of the secondary facade, terrace, public realm or service edge that matters to this project." },
+        { visualType: "spatial_experience_view", title: "Main Workplace Experience", instruction: "Create one ground-level workplace experience selected from the actual programme, such as reception, open workspace, collaboration or breakout space. Preserve plan openings and circulation." },
+        { visualType: "detail_material_collage", title: "Workplace Detail Collage", instruction: "Create a 4–6 panel collage of coordinated reception, facade, meeting/workplace, material, lighting and wayfinding details from the same project." },
+      ],
+    };
+  }
+
+  if (template.category === "industrial") {
+    return {
+      family: "industrial / logistics",
+      directionViews: [
+        "PRIMARY ARRIVAL / ADMIN FRONTAGE",
+        "SERVICE / LOADING / LOGISTICS EDGE",
+        "OBLIQUE AERIAL / SITE + VEHICLE MOVEMENT OVERVIEW",
+        "MATERIAL + OPERATIONAL DETAIL STUDIES",
+      ],
+      orientationGuidance: [
+        "Primary frontage means visitor/admin arrival.",
+        "Secondary frontage means loading, logistics or service access.",
+        "Do not swap public arrival and logistics/service sides between outputs.",
+      ],
+      visualSlots: [
+        { visualType: "primary_frontage_view", title: "Primary Arrival / Admin Frontage", instruction: "Create one premium oblique view of the visitor/admin frontage and entry." },
+        { visualType: "secondary_frontage_view", title: "Service / Logistics View", instruction: "Create one coordinated oblique view of loading, logistics or service operations according to the approved plan." },
+        { visualType: "spatial_experience_view", title: "Operational Spatial Experience", instruction: "Create one ground-level view of the key operational or staff space that best explains the project type and programme." },
+        { visualType: "detail_material_collage", title: "Industrial Detail Collage", instruction: "Create a 4–6 panel collage of coordinated envelope, loading, structural/material, entry and operational details." },
+      ],
+    };
+  }
+
+  if (template.category === "healthcare" || template.category === "education" || template.category === "community") {
+    return {
+      family: "institutional / civic",
+      directionViews: [
+        "PRIMARY PUBLIC ARRIVAL / CIVIC FRONTAGE",
+        "SECONDARY OPERATIONAL / SERVICE / CAMPUS EDGE",
+        "OBLIQUE AERIAL / SITE + WAYFINDING OVERVIEW",
+        "MATERIAL + PUBLIC/OPERATIONAL DETAIL STUDIES",
+      ],
+      orientationGuidance: [
+        "Primary frontage means the main public arrival edge.",
+        "Secondary frontage means the relevant staff/service/campus/operational edge.",
+        "Keep public and operational access relationships fixed and never mirror them between outputs.",
+      ],
+      visualSlots: [
+        { visualType: "primary_frontage_view", title: "Primary Public Arrival", instruction: "Create one premium oblique view of the principal public/civic arrival and frontage." },
+        { visualType: "secondary_frontage_view", title: "Secondary / Operational Edge", instruction: "Create one coordinated oblique view of the major secondary operational, staff, service or campus edge." },
+        { visualType: "spatial_experience_view", title: "Main Public / User Experience", instruction: "Create one ground-level experience of the most important public/user space from the actual programme, preserving circulation and openings." },
+        { visualType: "detail_material_collage", title: "Institutional Detail Collage", instruction: "Create a 4–6 panel collage of coordinated arrival, facade, wayfinding, material, daylight and key operational/public-space details." },
+      ],
+    };
+  }
+
+  if (template.category === "mixed" || /apartment|tower|mixed|high.?rise|building/.test(lower)) {
+    return {
+      family: "multi-residential / large building",
+      directionViews: [
+        "PRIMARY URBAN FRONTAGE / PODIUM ARRIVAL",
+        "SECONDARY ELEVATION / PUBLIC-REALM OR SERVICE EDGE",
+        "OBLIQUE AERIAL / SITE + FULL MASSING OVERVIEW",
+        "FACADE SYSTEM + PODIUM / ENTRY DETAIL STUDIES",
+      ],
+      orientationGuidance: [
+        "Primary frontage means the principal urban/public arrival edge.",
+        "Secondary frontage means the important second urban, public-realm or service edge.",
+        "Keep podium, cores, access sides and tower/upper-massing orientation fixed throughout the workflow.",
+      ],
+      visualSlots: [
+        { visualType: "primary_frontage_view", title: "Primary Urban Frontage", instruction: "Create one premium oblique or aerial view of the primary urban frontage, podium and arrival." },
+        { visualType: "secondary_frontage_view", title: "Secondary Elevation / Public Realm", instruction: "Create one coordinated oblique view of the secondary elevation and its public-realm/service relationship." },
+        { visualType: "spatial_experience_view", title: "Key Public / Amenity Experience", instruction: "Create one ground-level experience of the project's most important lobby, amenity, retail/public or shared space according to the actual programme." },
+        { visualType: "detail_material_collage", title: "Facade & Detail Collage", instruction: "Create a 4–6 panel collage of coordinated podium, facade system, entry, material, shading and public-realm details from the same building." },
+      ],
+    };
+  }
+
+  return {
+    family: "general architecture",
+    directionViews: [
+      "PRIMARY FRONTAGE / ARRIVAL VIEW",
+      "SECONDARY FRONTAGE / IMPORTANT SECOND EDGE",
+      "OBLIQUE AERIAL / SITE + MASSING OVERVIEW",
+      "MATERIAL + ARCHITECTURAL DETAIL STUDIES",
+    ],
+    orientationGuidance: [
+      "Primary frontage means the main public/arrival edge established by the brief and site.",
+      "Secondary frontage means the project's most important second edge: outdoor, public realm, amenity, operational or service as appropriate.",
+      "Once these edges are established, preserve them without mirroring or swapping sides in plans or later visuals.",
+    ],
+    visualSlots: [
+      { visualType: "primary_frontage_view", title: "Primary Frontage / Arrival", instruction: "Create one premium oblique view of the project's primary public/arrival frontage." },
+      { visualType: "secondary_frontage_view", title: "Secondary Frontage / Site Edge", instruction: "Create one coordinated oblique view of the project's most important secondary side or site edge." },
+      { visualType: "spatial_experience_view", title: "Key Spatial Experience", instruction: "Create one ground-level experience of the most important space or indoor-outdoor relationship from the actual programme." },
+      { visualType: "detail_material_collage", title: "Architectural Detail Collage", instruction: "Create a 4–6 panel collage of coordinated entry, facade, material, shading, landscape and key spatial details from the same project." },
+    ],
+  };
+}
+
+function architectureAdaptiveVisualSlots(args: {
+  project: Record<string, unknown>;
+  canonicalPlan: CanonicalPlanSpec | null;
+  profile: ArchitectureViewProfile;
+}) {
+  const projectType = String(args.project.project_type || "Other").toLowerCase();
+  const scope = String(args.project.scope || "").toLowerCase();
+  const levelCount = Array.isArray(args.canonicalPlan?.levels) ? args.canonicalPlan!.levels.length : 0;
+  const selectedSpaceCount = Array.isArray(args.project.selected_spaces) ? args.project.selected_spaces.length : 0;
+  const tallOrLargeType = /tower|high.?rise|mixed.?use|multi.?building|apartment|hotel|resort|hospital|campus|university|industrial|warehouse|logistics/.test(projectType);
+  const mediumType = /office|workspace|commercial|restaurant|hospitality|retail|school|clinic|community|institution/.test(projectType);
+  const largeScope = /masterplan|multi.?building|large|campus|tower|high.?rise/.test(scope);
+  const large = tallOrLargeType || largeScope || levelCount >= 5 || selectedSpaceCount >= 12;
+  const medium = large || mediumType || levelCount >= 3 || selectedSpaceCount >= 8;
+
+  const base = args.profile.visualSlots;
+  if (!medium) return base;
+
+  if (!large) {
+    const detail = base.find((slot) => slot.visualType === "detail_material_collage") || base[base.length - 1];
+    const withoutDetail = base.filter((slot) => slot !== detail);
+    return [
+      ...withoutDetail,
+      {
+        visualType: "additional_spatial_view",
+        title: "Additional Key Experience",
+        instruction: "Create one additional project-type-appropriate spatial experience from a DIFFERENT meaningful zone than the main spatial experience. Choose it from the actual programme and approved plan; do not invent a generic residential room. Preserve the same building, materials, openings and circulation.",
+      },
+      detail,
+    ];
+  }
+
+  const tall = /tower|high.?rise|apartment|mixed.?use/.test(projectType) || levelCount >= 8;
+  const primary = base.find((slot) => slot.visualType === "primary_frontage_view") || base[0];
+  const secondary = base.find((slot) => slot.visualType === "secondary_frontage_view") || base[1];
+  const spatial = base.find((slot) => slot.visualType === "spatial_experience_view") || base[2];
+  const detail = base.find((slot) => slot.visualType === "detail_material_collage") || base[base.length - 1];
+  return [
+    {
+      visualType: "full_building_view",
+      title: tall ? "Full Building / Skyline View" : "Overall Building / Site View",
+      instruction: tall
+        ? "Create one premium view that shows the ENTIRE building from base/podium to crown in a single frame. The full tower silhouette, overall height, podium relationship and skyline/context must be legible; do not crop the top or base."
+        : "Create one premium overall view showing the complete building or coordinated project composition in its site/context so the whole massing can be understood in one frame.",
+    },
+    primary,
+    secondary,
+    spatial,
+    tall
+      ? {
+          visualType: "upper_massing_view",
+          title: "Upper Levels / Crown View",
+          instruction: "Create one premium upper-level view focused on the tower crown, upper terraces, roof architecture and skyline relationship. Preserve the same facade system and massing established by the approved project.",
+        }
+      : {
+          visualType: "additional_spatial_view",
+          title: "Additional Key Experience",
+          instruction: "Create one additional project-type-appropriate spatial experience from a second meaningful public, amenity, operational or shared zone selected from the actual programme. It must belong to the same approved project.",
+        },
+    detail,
+  ];
+}
+
+export function architecturePlanFoundationSheetGroups(levelCount: number) {
+  const count = Math.max(1, Math.floor(levelCount || 0));
+  const sheetCount = count <= 2 ? 1 : count <= 8 ? 2 : 3;
+  const groups: number[][] = Array.from({ length: sheetCount }, () => []);
+  for (let index = 0; index < count; index += 1) {
+    const bucket = Math.min(sheetCount - 1, Math.floor((index * sheetCount) / count));
+    groups[bucket].push(index);
+  }
+  return groups.filter((group) => group.length);
+}
+
+function directionBoardInstruction(projectType: string) {
+  const profile = architectureViewProfile(projectType);
+  return [
+    `Create ONE clear Design Direction board for this ${profile.family} project.`,
+    "Show one FRONT / PRIMARY ARRIVAL view and one REAR / SECONDARY view of the same architectural direction.",
+    "Use the remaining space for material, facade, roof, opening, landscape and close-up detail studies.",
+    "Keep the board visually simple and useful as a reference for the later floor plans and concept visuals.",
+    "Do not include floor plans, technical diagrams or long text paragraphs.",
+  ].join(" ");
+}
+
 export async function generateArchitectureDirection(args: {
   plan: AiPlanConfig;
   directionNumber: number;
@@ -2301,7 +2741,7 @@ export async function generateArchitectureDirection(args: {
       "If the user supplied an exact number of floors, the massing and image prompt must preserve exactly that number. If floors are unspecified, choose a credible storey count from the programme, capacity, site and target area instead of defaulting to two storeys.",
       "Write concise but complete professional content suitable for an architecture design pack.",
       safetyInstruction,
-      "The direction image prompt must clearly define a single repeatable building identity, including massing, roof geometry, facade rhythm, openings, material placement, pool and landscape relationship.",
+      "The direction image prompt should describe one clear architectural direction as a simple reference board with a front view, a rear view and material/detail close-ups.",
     ].join(" "),
     payload: {
       requested_direction: `Direction ${letter}`,
@@ -2321,6 +2761,8 @@ export async function generateArchitectureDirection(args: {
       saved_space_program: args.spaceProgram || [],
       selected_materials: args.selectedMaterials,
       project_type_template: template,
+      project_view_profile: architectureViewProfile(projectType),
+      direction_board_rule: directionBoardInstruction(projectType),
       hard_project_requirements: {
         capacity_text: projectCapacityText(args.project) || null,
         parsed_capacity: parseCapacityConstraint(projectType, args.project),
@@ -2328,7 +2770,17 @@ export async function generateArchitectureDirection(args: {
       },
       mandatory_disclaimer: "Conceptual architecture only; professional local verification is required.",
     },
-  }).then(({ value, usage }) => ({ direction: value, usage }));
+  }).then(({ value, usage }) => ({
+    direction: {
+      ...value,
+      image_prompt: [
+        directionBoardInstruction(projectType),
+        value.image_prompt,
+        "ORIENTATION CONTINUITY: primary frontage, secondary frontage, entry/access, service/vehicle access, major outdoor/public-realm edge and any pool/amenity relationship must remain on the same side in every panel. Never mirror the proposal for composition.",
+      ].filter(Boolean).join(" "),
+    },
+    usage,
+  }));
 }
 
 export async function generateArchitectureDna(args: {
@@ -2435,8 +2887,15 @@ function expandedPlanViews(planSet: LivePlanSet, architectureDna: ArchitectureDn
       : `Coordinated ${String(level.label || `Level ${index}`).toLowerCase()} plan aligned with the same footprint, structure, vertical circulation and programme. This floor is part of the same canonical multi-floor building.`,
   }));
 
+  const foundationGroups = architecturePlanFoundationSheetGroups(levels.length);
+  const foundationViews: LivePlanSet["plan_images"] = foundationGroups.map((group, index) => ({
+    visual_type: index === 0 ? "plan_foundation_sheet" : `plan_foundation_sheet_${index + 1}`,
+    title: foundationGroups.length === 1 ? "Coordinated Plan Foundation" : `Coordinated Plan Foundation · Sheet ${index + 1}`,
+    prompt: `Coordinated Plan Foundation sheet ${index + 1} of ${foundationGroups.length}, presenting canonical level${group.length === 1 ? "" : "s"} ${group.map((levelIndex) => levelIndex + 1).join(", ")} from the SAME building model and plan reasoning result.`,
+  }));
+
   const views: LivePlanSet["plan_images"] = [
-    { visual_type: "plan_foundation_sheet", title: "Coordinated Plan Foundation", prompt: "One deterministic coordinated sheet containing every canonical floor from the same building model." },
+    ...foundationViews,
     ...floorViews,
     { visual_type: "functional_zoning", title: "Functional Zoning", prompt: "Colour-coded functional zones derived from the same canonical multi-floor geometry." },
     { visual_type: "site_plan", title: "Site Plan", prompt: "Coordinated site plan showing the same footprint, access, driveway, pool, landscape, orientation and conceptual setbacks." },
@@ -2476,6 +2935,63 @@ export async function generateArchitecturePlanSet(args: {
   const projectType = String(args.project.project_type || "Other");
   const capacityConstraint = parseCapacityConstraint(projectType, args.project);
   const requestedStoreys = requestedProjectStoreys(args.project, args.site);
+
+  // Architecture reset baseline: Plan Foundation uses one direct multimodal reasoning pass.
+  // No site-logic gates, geometry locks, correction loops or deterministic plan rewrites.
+  if (args.planFoundationMode) {
+    const simpleSystem = [
+      "You are Heyy Studio's conceptual architect.",
+      "Create one coherent concept floor-plan set from the user's project details, site information, Space Program, selected materials and selected Design Direction image.",
+      "Use the Design Direction image as a visual reference for the building character and the visible front/rear relationships, then resolve a sensible conceptual plan from the actual project brief.",
+      "This is concept design only, not measured, permit or construction documentation.",
+      "Return the complete structured plan required by the supplied schema in one pass.",
+    ].join(" ");
+
+    const simplePayload = {
+      project: args.project,
+      site: args.site,
+      planning: args.planning,
+      selected_direction: args.direction,
+      selected_materials: args.selectedMaterials,
+      space_program: args.spaceProgram,
+      requested_storeys: requestedStoreys || null,
+      adjustment_instruction: adjustmentInstruction || null,
+      existing_plan: isAdjustment ? args.existingPlan : null,
+    };
+
+    const simpleResult = args.directionImageReference && args.supabase
+      ? await structuredCompletionWithImage<LivePlanSet>({
+          plan: args.plan,
+          schema: planSchema,
+          system: simpleSystem,
+          payload: simplePayload,
+          supabase: args.supabase,
+          referenceImage: args.directionImageReference,
+        })
+      : await structuredCompletion<LivePlanSet>({
+          plan: args.plan,
+          schema: planSchema,
+          system: simpleSystem,
+          payload: simplePayload,
+        });
+
+    const value = simpleResult.value;
+    return {
+      planSet: {
+        ...value,
+        planning_assumptions: [
+          ...(Array.isArray(value.planning_assumptions) ? value.planning_assumptions : []),
+          "Concept plans only. Professional architectural development is required before measured, permit or construction use.",
+        ],
+        plan_images: expandedPlanViews(value, args.architectureDna),
+      },
+      usage: {
+        plan_generation: simpleResult.usage,
+        architecture_reset_simple_path: true,
+        multimodal_direction_reference: Boolean(args.directionImageReference),
+      },
+    };
+  }
 
   // Plan Foundation is intentionally a fast concept-planning stage. Do not run the
   // multi-call Requirement Contract extraction/audit pipeline here; it made a simple
@@ -2534,7 +3050,12 @@ export async function generateArchitecturePlanSet(args: {
       ? `A legacy deterministic capacity parser also recognized at least ${capacityConstraint.requestedCount} ${capacityConstraint.metric.replace(/_/g, " ")}. Treat this as supporting evidence, not as the only type of requirement the system understands.`
       : "Do not assume the absence of a recognized legacy capacity metric means there is no capacity requirement; use the universal Requirement Contract.",
     "For every canonical room, set capacity_type and capacity_count. Use capacity_count=0 and capacity_type='' when the room carries no measurable programme quantity. For capacity-bearing rooms, use the same normalized metric language as the Requirement Contract wherever practical.",
-    "Coordinates use a 0 to 100 site grid. All rooms, pool, driveway, entry and footprint must fit within that grid.",
+    "Coordinates use a 0 to 100 NORTH-UP site grid. All rooms, outdoor/site elements, driveway/service access, entry and footprint must fit within that grid.",
+    "Create canonical_plan.orientation_lock before placing rooms. Lock the primary frontage/access edge, the important secondary edge and the fixed side relationships that can be read from the selected Direction, site and brief.",
+    "PRIMARY FRONTAGE means the principal public/street/arrival edge for this project type. SECONDARY FRONTAGE means the most important second edge: private outdoor/amenity, public realm, service/logistics, campus or operational edge as appropriate to the brief.",
+    "NO MIRRORING: once primary/secondary edges and fixed anchors are established, do not swap east/west or left/right relationships for visual convenience. Ground and upper levels use the same NORTH-UP coordinate convention.",
+    "Translate viewpoint-relative evidence from the Design Direction into cardinal site relationships before planning. Example: if a garage/service access is on the viewer-left side of the PRIMARY FRONTAGE, preserve that same physical side in the north-up plan rather than reproducing viewer-left from a different camera.",
+    `Project orientation guidance: ${architectureViewProfile(projectType).orientationGuidance.join(" ")}` ,
     "Use the full coordinate canvas: distribute each level between approximately 8 and 92 rather than clustering rooms in one small corner.",
     "Rooms on the same level must not overlap. Align shared walls, keep circulation legible and give every room a practical minimum width and height.",
     "Create a mostly contiguous architectural footprint. Avoid isolated floating room boxes; gaps are allowed only for real courtyards, patios, light wells or separated service buildings when the brief requires them.",
@@ -2546,7 +3067,7 @@ export async function generateArchitecturePlanSet(args: {
     "Define at least two perpendicular architectural section cuts in canonical_plan.section_cuts. Label them A—A and B—B, specify the cut axis and viewing direction, and list the rooms crossed by each cut.",
     "At least one section cut must pass through the principal vertical circulation so the section can show floor-to-floor relationships.",
     args.planFoundationMode
-      ? "DIRECTION-LED PLAN FOUNDATION MODE IS ACTIVE. The selected Direction image is supplied directly to you together with the user brief, site, planning information, Space Program and Requirement Contract. The image is the visible architectural source of truth. Preserve its garage side, front-entry relationship, pool/outdoor relationship, dominant glazed living side, visible storey count, roof form and upper-level massing while resolving hidden interior rooms from the Space Program. The resulting Plan Foundation becomes the geometry reference for all later Concept Visuals."
+      ? "DIRECTION-LED PLAN FOUNDATION MODE IS ACTIVE. The selected multi-view Direction board is supplied directly together with the user brief, site, planning information, Space Program and Requirement Contract. Use its visible architectural relationships as evidence: primary arrival/frontage, important secondary edge, access/service relationships, major outdoor/public-realm/amenity relationships, visible storey count, roof form and upper-level massing. Residential projects may include garage/driveway and pool/garden anchors; hospitality, office, institutional, tower, industrial and other projects must instead preserve the equivalent public, operational, service, amenity and urban/site anchors appropriate to their programme. Resolve hidden rooms from the Space Program without moving those visible anchors. The resulting Plan Foundation becomes the geometry reference for all later Concept Visuals."
       : "All levels must align vertically and describe one single building represented by the selected Architecture Direction and Architecture DNA.",
     args.planFoundationMode
       ? "Create one explicit canonical building_outline polygon by translating the selected Direction's massing/form strategy into the site envelope, programme, access, outdoor requirements and room relationships. Keep the plan recognisably connected to the selected Direction rather than inventing a different building."
@@ -2655,38 +3176,53 @@ export async function generateArchitecturePlanSet(args: {
   let correctionUsage: unknown = null;
   let correctionAuditUsage: unknown = null;
 
-  // Focused Concept Studio: Plan Foundation should be fast and dependable.
-  // One structured plan-generation call is enough. We run local geometry checks and,
-  // only when necessary, the deterministic stabiliser. We deliberately do NOT run
-  // independent AI audits or two additional AI correction rounds in this mode.
-  // Those extra calls were the main source of multi-minute waits and intermittent
-  // "validation failed" refunds for conceptual projects.
+  // Focused Concept Studio: Plan Foundation should be fast, affordable and
+  // conceptually dependable. The first multimodal structured pass carries the
+  // architectural intent. At most one cheaper correction pass is allowed, and
+  // only for major geometry failures. Minor issues become coordination warnings.
   if (args.planFoundationMode) {
     const initialGeometryIssues = [
       ...planValidationIssues({ planSet: value, project: args.project, site: args.site }),
       ...geometryCoordinationIssues({ planSet: value, project: args.project }),
     ];
-    const geometryFailurePattern = /overlaps|outside the (?:master building|locked level) outline|no explicit door opening|no clear circulation|door .* wall|opening .* missing source room|stair core .* not stacked|multi-floor building must define|floor count|storeys/i;
-    const blockingGeometryIssues = initialGeometryIssues.filter((issue) => geometryFailurePattern.test(issue));
+    // This is a conceptual Plan Foundation. Do not pay for a second reasoning
+    // call merely because a door/opening/circulation annotation is imperfect.
+    // Only serious geometry failures justify another AI pass.
+    const paidCorrectionFailurePattern =
+      /overlaps|outside the (?:master building|locked level) outline|stair core .* not stacked|multi-floor building must define|floor count|storeys/i;
+    const paidCorrectionIssues = initialGeometryIssues.filter((issue) =>
+      paidCorrectionFailurePattern.test(issue),
+    );
 
-    if (blockingGeometryIssues.length && useDirectionImage) {
+    if (
+      architecturePlanCorrectionEnabled() &&
+      paidCorrectionIssues.length &&
+      useDirectionImage
+    ) {
+      const correctionPlan: AiPlanConfig = {
+        ...args.plan,
+        textModel: architecturePlanCorrectionModel(args.plan.textModel),
+      };
+
       const corrected = await structuredCompletionWithImage<LivePlanSet>({
-        plan: args.plan,
+        plan: correctionPlan,
         schema: planSchema,
-        system: `${baseSystem} This is one correction pass. Preserve the attached Direction image relationships while correcting only the listed plan-coordination failures. Do not solve an overlap by moving the garage, entry, pool, outdoor-living zone or upper-floor massing to a different side of the house.`,
+        system: `${baseSystem} This is one focused correction pass for a conceptual Plan Foundation. Preserve the selected Direction, orientation_lock and the previous plan wherever they already work. Correct only the listed major geometry failures. Do not redesign the project, mirror it, swap primary/secondary frontage, move entry/access/core/service/amenity relationships to the opposite side, or alter upper-level massing unless the listed failure makes that unavoidable.`,
         payload: {
           ...payload,
           previous_plan: value,
         },
         supabase: args.supabase as SupabaseClient,
         referenceImage: args.directionImageReference as ArchitectureImageReference,
-        correctionIssues: blockingGeometryIssues.slice(0, 12),
+        correctionIssues: paidCorrectionIssues.slice(
+          0,
+          architecturePlanCorrectionIssueLimit(),
+        ),
       });
+
       value = repairCanonicalPlanAccess(corrected.value);
       correctionUsage = corrected.usage;
-    } else if (blockingGeometryIssues.length) {
-      // Legacy/non-visual fallback only. The multimodal Direction-first path never
-      // uses the old stabiliser because it can destroy the image-established layout.
+    } else if (paidCorrectionIssues.length && !useDirectionImage) {
       value = stabilizeCanonicalPlanGeometry(value);
     }
 
@@ -2845,30 +3381,37 @@ export async function generateArchitectureVisualPrompts(args: {
 }) {
   const projectType = String(args.project.project_type || "Other");
   const template = getArchitectureProjectTemplate(projectType);
-  const requestedViews = args.requestedViews.length
-    ? args.requestedViews
-    : ["Exterior Concept Board", "Living & Landscape Concept Board"];
+  const profile = architectureViewProfile(projectType);
   const existingDesignSource = String(args.project.workflow_mode || "") === "plan_to_render";
+  const adaptiveSlots = existingDesignSource
+    ? profile.visualSlots.slice(0, 4)
+    : architectureAdaptiveVisualSlots({ project: args.project, canonicalPlan: args.canonicalPlan, profile });
+  const requestedViews = existingDesignSource
+    ? (args.requestedViews.length ? args.requestedViews.slice(0, 4) : template.visualViews.slice(0, 4))
+    : adaptiveSlots.map((slot) => slot.title);
+  const outputCount = existingDesignSource ? requestedViews.length : adaptiveSlots.length;
 
   return structuredCompletion<{ visuals: LiveVisualPrompt[] }>({
     plan: args.plan,
     schema: visualPromptsSchema,
     system: [
       "You are Heyy Studio's architecture visual director.",
-      "Prepare a small, focused set of architecture CONCEPT BOARD prompts. These must feel different from the single Design Direction hero render: each output is a composed presentation board with several coordinated visual studies rather than one standalone building image. Do not present them as measured elevations or exact coordinated render views.",
-      `This is a ${projectType} project. Include the appropriate interior experiences and operational spaces rather than using a residential-only gallery.`,
-      `The gallery must reflect these priorities: ${template.directionFocus.join(", ")}.`,
       existingDesignSource
-        ? "This is an Existing Design / Plan-to-Visual workflow. The uploaded drawings will be supplied directly to the image editor as authoritative geometry. Do not describe or invent a specific footprint, room layout, stair position, opening pattern, roof geometry or massing that is not explicitly stated by the user."
-        : "This is a DIRECTION-FIRST new-design workflow. The selected Direction establishes the architectural identity first; the approved Plan Foundation then becomes the geometry reference for Concept Visuals. Preserve the approved plan footprint, floor stacking, entry, pool/site relationship and circulation while applying the selected Direction's architecture, facade, roof, materials and landscape language.",
+        ? "Prepare coordinated architecture visualization prompts for the exact uploaded existing design."
+        : `Prepare EXACTLY ${outputCount} coordinated Concept Visual prompts for one approved architecture project. These outputs are different viewpoints/experiences of the SAME building, not alternative designs.`,
+      `This is a ${projectType} project in the ${profile.family} view profile. Never default to villa/residential camera logic unless the actual project is residential.`,
+      `The visual priorities are: ${template.directionFocus.join(", ")}.`,
       existingDesignSource
-        ? "Prompts should describe only the requested camera/view, material character, atmosphere, lighting, landscape treatment and functional experience. Always say to reconstruct the exact uploaded design."
-        : "Every prompt must explicitly preserve the approved plan footprint, floor stacking, stair/core positions, entry, pool/site relationship and circulation while applying the selected Direction's architectural language.",
+        ? "Uploaded source drawings are the geometry authority. Do not invent a footprint, room layout, stair position, opening pattern, roof geometry or massing that is absent from those drawings."
+        : "The approved Plan Foundation and canonical_plan.orientation_lock are the geometry and orientation authority. The selected Direction is the architectural-expression authority.",
       existingDesignSource
-        ? "Do not rely on a generated canonical plan, concept render or direction render to define geometry."
-        : "All views, especially aerial and site-related views, must be derived from the approved plan geometry. Do not invent a U-shape, courtyard, wing, pool location, entry or massing relationship that conflicts with the approved plans.",
-      "For new designs, preserve the major project anchors visible in the approved Plan Foundation: storey count, main entry zone, garage side, pool/outdoor relationship and overall massing family. Minor architectural differences may occur and the imagery remains conceptual.",
-      "Each concept board should combine one main atmospheric render with 3–5 supporting studies such as material close-ups, façade/details, quick sketch or diagram fragments, landscape/lighting studies and spatial moments. Keep the board premium and graphic, with minimal or no generated text inside the image.",
+        ? "Prompts should describe only the requested camera/view, material character, atmosphere, lighting, landscape treatment and functional experience."
+        : "Never mirror the project. Preserve the same primary frontage, secondary frontage, entry/access, vertical core, service/vehicle access, major outdoor/public-realm/amenity relationships and floor stacking in all four outputs.",
+      existingDesignSource
+        ? "Return one prompt per requested view in the same order."
+        : `Return exactly ${adaptiveSlots.length} prompts in this order: ${adaptiveSlots.map((slot, index) => `${index + 1}) ${slot.title}`).join("; ")}.`,
+      "Do not create four generic glamour renders. Each output has a distinct coordination role and must help the user understand the approved project from another side, scale or experience.",
+      "Keep generated text inside images minimal or absent.",
       "Use stable snake_case visual_type values.",
       safetyInstruction,
       imagePromptInstruction,
@@ -2894,16 +3437,19 @@ export async function generateArchitectureVisualPrompts(args: {
           selected_direction: args.direction,
           architecture_dna: args.architectureDna,
           canonical_plan: args.canonicalPlan,
+          orientation_lock: args.canonicalPlan?.orientation_lock || null,
           concept: null,
-          geometry_authority: "Approved floor plans and canonical plan. Selected Direction controls architectural expression only.",
+          geometry_authority: "Approved Plan Foundation/canonical plan. Selected Direction controls architectural expression only.",
+          project_view_profile: profile,
+          requested_views: requestedViews,
           site: args.site,
           selected_materials: args.selectedMaterials,
-          requested_views: requestedViews,
           project_type_template: template,
         },
-  }).then(({ value, usage }) => ({
-    visuals: existingDesignSource
-      ? value.visuals.map((visual) => ({
+  }).then(({ value, usage }) => {
+    if (existingDesignSource) {
+      return {
+        visuals: value.visuals.slice(0, 4).map((visual) => ({
           ...visual,
           prompt: [
             `Create the ${visual.title || visual.visual_type.replace(/_/g, " ")} view of the exact uploaded existing design.`,
@@ -2911,21 +3457,34 @@ export async function generateArchitectureVisualPrompts(args: {
             visual.prompt,
             "Do not invent a different footprint, storey arrangement, stair position, opening pattern or massing.",
           ].join(" "),
-        }))
-      : value.visuals.slice(0, 2).map((visual, index) => ({
-          ...visual,
-          visual_type: index === 0 ? "exterior_concept_board" : "living_landscape_concept_board",
-          title: index === 0 ? "Exterior Concept Board" : "Living & Landscape Concept Board",
-          prompt: [
-            index === 0
-              ? "Create a premium architectural EXTERIOR CONCEPT BOARD, not another single hero render. Use one main exterior perspective plus smaller supporting studies: façade/material details, a loose sketch or massing diagram, entry/landscape moments and material swatches derived from the selected project palette."
-              : "Create a premium LIVING & LANDSCAPE CONCEPT BOARD, not another standalone exterior render. Use one main indoor-outdoor or terrace/pool scene plus supporting studies: landscape/material close-ups, lighting mood, threshold/detail sketches and smaller spatial vignettes.",
-            visual.prompt,
-            "Compose the studies into one clean presentation board with a consistent architectural language. Avoid long AI-generated text; visual labels, if any, should be minimal. Keep the number of levels and major entry, garage, pool and outdoor-living relationships recognisable from the approved Plan Foundation. This is concept imagery, not exact documentation.",
-          ].join(" "),
         })),
-    usage,
-  }));
+        usage,
+      };
+    }
+
+    const modelPrompts = value.visuals || [];
+    const orientationLock = args.canonicalPlan?.orientation_lock;
+    const common = [
+      "GEOMETRY + ORIENTATION LOCK: use the approved Plan Foundation and north-up canonical plan as the source of truth.",
+      orientationLock
+        ? `Primary frontage: ${orientationLock.primary_frontage_role} on the ${orientationLock.primary_frontage_edge} edge. Secondary frontage: ${orientationLock.secondary_frontage_role} on the ${orientationLock.secondary_frontage_edge} edge. ${orientationLock.no_mirror_rule}`
+        : "Preserve the primary/secondary frontage relationship, entry/access, core, service/vehicle side, major outdoor/public-realm/amenity edge and floor stacking. Never mirror the project.",
+      "The result is conceptual architecture, not measured technical documentation.",
+    ].join(" ");
+
+    return {
+      visuals: adaptiveSlots.map((slot, index) => ({
+        visual_type: slot.visualType,
+        title: slot.title,
+        prompt: [
+          slot.instruction,
+          modelPrompts[index]?.prompt || "",
+          common,
+        ].filter(Boolean).join(" "),
+      })),
+      usage,
+    };
+  });
 }
 
 function safeFilePart(value: string) {
@@ -2980,15 +3539,6 @@ async function loadReferenceAsset(
     mimeType,
     filename: `${index + 1}-${safeFilePart(reference.label)}.${extension}`,
   };
-}
-
-async function loadReferenceFile(
-  supabase: SupabaseClient,
-  reference: ArchitectureImageReference,
-  index: number,
-) {
-  const asset = await loadReferenceAsset(supabase, reference, index);
-  return asset ? toFile(asset.bytes, asset.filename, { type: asset.mimeType }) : null;
 }
 
 function continuityPrompt(args: {
@@ -3149,7 +3699,6 @@ export async function generateAndStoreArchitectureImage(args: {
   preserveSourceGeometry?: boolean;
   targetRole?: string;
 }) {
-  const openai = getOpenAI();
   const tier = args.tier || "preview";
   const sourceGeometryReferences = (args.sourceGeometryReferences || []).filter(
     (reference) => Boolean(reference.storagePath || reference.url),
@@ -3158,62 +3707,54 @@ export async function generateAndStoreArchitectureImage(args: {
     (reference) => Boolean(reference.storagePath || reference.url),
   ).slice(0, Math.max(0, 6 - sourceGeometryReferences.length));
 
-  const sourceFiles = (
-    await Promise.all(sourceGeometryReferences.map((reference, index) => loadReferenceFile(args.supabase, reference, index)))
-  ).filter((file): file is NonNullable<typeof file> => Boolean(file));
-  const styleFiles = (
-    await Promise.all(referenceImages.map((reference, index) => loadReferenceFile(args.supabase, reference, index + sourceFiles.length)))
-  ).filter((file): file is NonNullable<typeof file> => Boolean(file));
-  const uploadables = [...sourceFiles, ...styleFiles].slice(0, 6);
+  const sourceAssets = (
+    await Promise.all(sourceGeometryReferences.map((reference, index) => loadReferenceAsset(args.supabase, reference, index)))
+  ).filter((asset): asset is ArchitectureReferenceAsset => Boolean(asset));
+  const styleAssets = (
+    await Promise.all(referenceImages.map((reference, index) => loadReferenceAsset(args.supabase, reference, index + sourceAssets.length)))
+  ).filter((asset): asset is ArchitectureReferenceAsset => Boolean(asset));
+  const references = [...sourceAssets, ...styleAssets];
 
   const prompt = continuityPrompt({
     prompt: args.prompt,
     architectureDna: args.architectureDna,
-    sourceGeometryReferences: sourceGeometryReferences.slice(0, sourceFiles.length),
-    referenceImages: referenceImages.slice(0, styleFiles.length),
+    sourceGeometryReferences: sourceGeometryReferences.slice(0, sourceAssets.length),
+    referenceImages: referenceImages.slice(0, styleAssets.length),
     preserveSourceGeometry: args.preserveSourceGeometry,
     targetRole: args.targetRole,
   });
   const quality = imageQualityForTier(args.plan, tier);
-
-  const result = uploadables.length
-    ? await openai.images.edit({
-        model: args.plan.imageModel,
-        image: uploadables,
-        prompt,
-        size: "1536x1024",
-        quality,
-        output_format: "png",
-      })
-    : await openai.images.generate({
-        model: args.plan.imageModel,
-        prompt,
-        size: "1536x1024",
-        quality,
-        output_format: "png",
-      });
-
-  const base64 = result.data?.[0]?.b64_json;
-  if (!base64) throw new Error("Architecture generation returned no image data.");
+  const generated = await generateRoutedStudioImage({
+    scope: "architecture",
+    prompt,
+    references,
+    size: "1536x1024",
+    quality,
+    fallbackOpenAIModel: args.plan.imageModel,
+  });
   const stored = await storeArchitectureImageVariants({
     supabase: args.supabase,
     userId: args.userId,
     projectId: args.projectId,
     folder: args.folder,
     filenamePrefix: args.filenamePrefix,
-    sourceBytes: Buffer.from(base64, "base64"),
+    sourceBytes: generated.bytes,
     tier,
   });
 
+  const sourceReferenceCount = Math.min(sourceAssets.length, generated.referenceCount);
+  const styleReferenceCount = Math.max(0, generated.referenceCount - sourceReferenceCount);
   return {
     ...stored,
     tier,
     quality,
-    referenceCount: uploadables.length,
-    sourceReferenceCount: sourceFiles.length,
-    styleReferenceCount: styleFiles.length,
-    usage: result.usage || null,
-    generationMethod: uploadables.length ? "reference-edit" : "text-generation",
+    provider: generated.provider,
+    model: generated.model,
+    referenceCount: generated.referenceCount,
+    sourceReferenceCount,
+    styleReferenceCount,
+    usage: generated.usage,
+    generationMethod: generated.generationMethod,
   };
 }
 
@@ -3790,12 +4331,19 @@ export async function generateAndStorePlanFoundationSheetImage(args: {
   architectureDna?: ArchitectureDna | null;
   plan: AiPlanConfig;
   directionImageReference?: ArchitectureImageReference | null;
+  levelIndexes?: number[];
+  sheetNumber?: number;
+  sheetCount?: number;
 }) {
-  const levels = Array.isArray(args.canonicalPlan.levels) ? args.canonicalPlan.levels : [];
+  const allLevels = Array.isArray(args.canonicalPlan.levels) ? args.canonicalPlan.levels : [];
+  const requestedIndexes = Array.isArray(args.levelIndexes) && args.levelIndexes.length
+    ? args.levelIndexes.filter((index) => Number.isInteger(index) && index >= 0 && index < allLevels.length)
+    : allLevels.map((_, index) => index);
+  const levels = requestedIndexes.map((index) => allLevels[index]).filter(Boolean);
   if (!levels.length) throw new Error("The Plan Foundation has no coordinated floors to render.");
 
-  const floorBrief = levels.map((level, index) => ({
-    floor: floorPlanTitle(level, index),
+  const floorBrief = levels.map((level, localIndex) => ({
+    floor: floorPlanTitle(level, requestedIndexes[localIndex] ?? localIndex),
     rooms: (level.rooms || []).map((room) => ({
       name: room.name,
       zone: room.zone,
@@ -3830,23 +4378,22 @@ export async function generateAndStorePlanFoundationSheetImage(args: {
     site_elements: siteElements,
   };
 
+  const sheetNumber = Math.max(1, Number(args.sheetNumber || 1));
+  const sheetCount = Math.max(1, Number(args.sheetCount || 1));
+  const selectedCanonicalPlan = { ...args.canonicalPlan, levels };
   const prompt = [
-    `Create ONE premium architectural PLAN FOUNDATION presentation sheet for ${args.projectName}.`,
-    `The sheet must show ALL ${levels.length} floor plans together on the same page, side-by-side in a clean architectural presentation.`,
-    "THIS SINGLE IMAGE IS THE PROJECT'S PLAN GEOMETRY REFERENCE. Every floor shown must clearly belong to the same building.",
-    "Coordinate the floors as one building: same orientation, same main structural/vertical core, stairs directly aligned floor-to-floor, sensible upper-floor footprint over the ground floor, and consistent exterior/site relationships.",
-    "Do not create separate unrelated floor-plan designs. Do not rotate one floor relative to another.",
-    "Every enclosed room must have a real door opening connected to circulation or an adjacent accessible space. Doors must sit in walls; no floating symbols.",
-    "Use professional black-and-white architectural plan graphics with strong wall hierarchy, proper door swings, windows, stairs, fixtures and restrained furniture. The result should look like a high-quality architect concept-plan sheet, not a debug diagram, zoning block plan or wireframe.",
-    "Do NOT invent numeric site dimensions, scale bars, area schedules or construction dimensions. Do not print fake measurements. Room names may be shown clearly, but keep annotations minimal and legible.",
-    "Keep every site relationship and every project-specific program element represented in the canonical plan consistent across the sheet where relevant. Do not invent residential features for non-residential projects, and do not assume a pool, garage, terrace, loading area, parking area or any other feature unless it exists in the project data.",
+    `Create ONE detailed professional architectural PLAN FOUNDATION presentation sheet for ${args.projectName}${sheetCount > 1 ? ` · SHEET ${sheetNumber} OF ${sheetCount}` : ""}.`,
+    `Show the ${levels.length} selected canonical level${levels.length === 1 ? "" : "s"} assigned to this sheet together on one clean presentation board, in their original building order. This is one page of a larger coordinated plan set, not a new design.`,
+    "Use polished architect-style floor-plan graphics: strong wall hierarchy, real door swings, windows, stairs, fixtures, furniture, cabinetry, landscaping/site context, clear room labels, north arrow and restrained dimensions where useful.",
+    "Keep the drawing detailed and presentation-quality, not a basic block diagram.",
+    `PLAN DATA — SELECTED LEVELS FROM THE SAME CANONICAL BUILDING MODEL: ${JSON.stringify(selectedCanonicalPlan)}`,
     `FLOOR PROGRAMS: ${JSON.stringify(floorBrief)}`,
     sharedCore.length ? `SHARED VERTICAL CORES: ${JSON.stringify(sharedCore)}` : "",
-    `SITE RELATIONSHIPS: ${JSON.stringify(siteBrief)}`,
+    `SITE INFORMATION: ${JSON.stringify(siteBrief)}`,
     args.directionImageReference
-      ? "REFERENCE 1 is the selected Design Direction image. Preserve its visible building identity in plan: garage side, front-entry position, pool/outdoor-living side, major massing proportions, upper-level footprint/setback and roof-related footprint cues. Do not copy perspective distortion; translate the same house into plan."
+      ? "REFERENCE 1 is the selected Design Direction board. Use it as the visual reference for the building character and visible front/rear relationship while drawing the plan described by the supplied plan data."
       : "",
-    "Composition: white presentation board, equal visual scale for all floors, generous margins, Ground Floor first then Upper/Level floors in order. No photorealistic render, no elevation, no perspective, no mood board.",
+    "Do not create elevations or perspective renders on this sheet.",
   ].filter(Boolean).join("\n\n");
 
   return generateAndStoreArchitectureImage({
@@ -3861,7 +4408,7 @@ export async function generateAndStorePlanFoundationSheetImage(args: {
     referenceImages: args.directionImageReference ? [args.directionImageReference] : [],
     sourceGeometryReferences: [],
     preserveSourceGeometry: false,
-    targetRole: "Generate one coordinated multi-floor architectural plan sheet. All floors must be designed together in the same image and must read as one building. This sheet becomes the approved geometry reference for later Directions and Visuals.",
+    targetRole: `Generate coordinated Plan Foundation sheet ${sheetNumber} of ${sheetCount}. It must present only the assigned levels from the same canonical building model, at a clear readable scale, with no redesign. Together the Plan Foundation sheets form one approved geometry reference set for later visuals.`,
     tier: "preview",
   });
 }
@@ -3962,17 +4509,12 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
           ...(styleReference ? [styleReference] : []),
         ]
   ).slice(0, 6);
-  const openai = getOpenAI();
-  const referenceFiles = await Promise.all(
-    allAssets.map((asset) => toFile(asset.bytes, asset.filename, { type: asset.mimeType })),
-  );
   const quality = imageQualityForTier(args.plan, tier);
   const imageSize = isFloorPlanVisualType(args.visualType) || args.visualType === "site_plan"
     ? "1024x1536"
     : "1536x1024";
-  const result = await openai.images.edit({
-    model: args.plan.imageModel,
-    image: referenceFiles,
+  const generated = await generateRoutedStudioImage({
+    scope: "architecture",
     prompt: architectureDocumentPrompt({
       visualType: args.visualType,
       title: args.title,
@@ -3981,19 +4523,18 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
       architectureDna: args.architectureDna,
       sourceGeometryLocked,
     }),
+    references: allAssets,
     size: imageSize,
     quality,
-    output_format: "png",
+    fallbackOpenAIModel: args.plan.imageModel,
   });
-  const base64 = result.data?.[0]?.b64_json;
-  if (!base64) throw new Error("Architecture document generation returned no image data.");
   const stored = await storeArchitectureImageVariants({
     supabase: args.supabase,
     userId: args.userId,
     projectId: args.projectId,
     folder: "plans",
     filenamePrefix: `${args.filenamePrefix}-detailed-concept`,
-    sourceBytes: Buffer.from(base64, "base64"),
+    sourceBytes: generated.bytes,
     tier,
   });
 
@@ -4001,13 +4542,13 @@ export async function generateAndStoreArchitectureDocumentImage(args: {
     ...stored,
     tier,
     quality,
-    provider: "openai" as const,
-    model: args.plan.imageModel,
-    referenceCount: allAssets.length,
-    usage: result.usage || null,
+    provider: generated.provider,
+    model: generated.model,
+    referenceCount: generated.referenceCount,
+    usage: generated.usage,
     generationMethod: sourceGeometryLocked
-      ? "openai-existing-source-faithful-document-edit"
-      : "openai-detailed-concept-document-reference-edit",
+      ? `${generated.provider}-existing-source-faithful-document-edit`
+      : `${generated.provider}-detailed-concept-document-reference-edit`,
   };
 }
 
@@ -4113,80 +4654,6 @@ function renderedDocumentationPrompt(args: {
   ].join("\n\n");
 }
 
-type ArchitectureRenderProvider = "openai" | "gemini";
-
-function resolveArchitectureRenderProvider(): ArchitectureRenderProvider {
-  return process.env.ARCHITECTURE_RENDER_PROVIDER?.trim().toLowerCase() === "gemini"
-    ? "gemini"
-    : "openai";
-}
-
-async function generateGeminiArchitectureImage(args: {
-  prompt: string;
-  assets: ArchitectureReferenceAsset[];
-  tier: ImageGenerationTier;
-}) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is required when ARCHITECTURE_RENDER_PROVIDER=gemini.");
-  }
-  const model = process.env.ARCHITECTURE_GEMINI_IMAGE_MODEL?.trim() || "gemini-3-pro-image";
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [
-            { text: args.prompt },
-            ...args.assets.slice(0, 6).map((asset) => ({
-              inlineData: {
-                mimeType: asset.mimeType,
-                data: asset.bytes.toString("base64"),
-              },
-            })),
-          ],
-        }],
-        generationConfig: {
-          responseModalities: ["IMAGE"],
-          imageConfig: {
-            aspectRatio: "3:2",
-            imageSize: args.tier === "final" ? "4K" : "2K",
-          },
-        },
-      }),
-    },
-  );
-  const payload = await response.json() as {
-    error?: { message?: string };
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          inlineData?: { data?: string; mimeType?: string };
-          inline_data?: { data?: string; mime_type?: string };
-        }>;
-      };
-    }>;
-    usageMetadata?: unknown;
-  };
-  if (!response.ok) {
-    throw new Error(`Architecture image generation failed (${response.status}).`);
-  }
-  const parts = payload.candidates?.flatMap((candidate) => candidate.content?.parts || []) || [];
-  const image = parts.find((part) => part.inlineData?.data || part.inline_data?.data);
-  const base64 = image?.inlineData?.data || image?.inline_data?.data;
-  if (!base64) throw new Error("Architecture image generation returned no image data.");
-  return {
-    bytes: Buffer.from(base64, "base64"),
-    usage: payload.usageMetadata || null,
-    model,
-  };
-}
 
 export async function generateAndStoreRenderedPlanImage(args: {
   supabase: SupabaseClient;
@@ -4249,43 +4716,20 @@ export async function generateAndStoreRenderedPlanImage(args: {
     architectureDna: args.architectureDna,
     sourceGeometryLocked,
   });
-  const provider = resolveArchitectureRenderProvider();
   const quality = imageQualityForTier(args.plan, tier);
+  const generated = await generateRoutedStudioImage({
+    scope: "architecture",
+    prompt,
+    references: renderAssets,
+    size: "1536x1024",
+    quality,
+    fallbackOpenAIModel: args.plan.imageModel,
+  });
+  const provider = generated.provider;
+  const model = generated.model;
+  const usage = generated.usage;
 
-  let sourceBytes: Buffer;
-  let usage: unknown = null;
-  let model = args.plan.imageModel;
-  if (provider === "gemini") {
-    const generated = await generateGeminiArchitectureImage({
-      prompt,
-      assets: renderAssets,
-      tier,
-    });
-    sourceBytes = generated.bytes;
-    usage = generated.usage;
-    model = generated.model;
-  } else {
-    const openai = getOpenAI();
-    const referenceFiles = await Promise.all(
-      renderAssets.map((asset) =>
-        toFile(asset.bytes, asset.filename, { type: asset.mimeType }),
-      ),
-    );
-    const result = await openai.images.edit({
-      model: args.plan.imageModel,
-      image: referenceFiles,
-      prompt,
-      size: "1536x1024",
-      quality,
-      output_format: "png",
-    });
-    const base64 = result.data?.[0]?.b64_json;
-    if (!base64) throw new Error("Rendered plan generation returned no image data.");
-    sourceBytes = Buffer.from(base64, "base64");
-    usage = result.usage || null;
-  }
-
-  const renderedBase = sharp(sourceBytes)
+  const renderedBase = sharp(generated.bytes)
     .rotate()
     .resize(1536, 1024, sourceGeometryLocked
       ? { fit: "contain", background: "#FFFFFF" }
@@ -4321,7 +4765,7 @@ export async function generateAndStoreRenderedPlanImage(args: {
     quality,
     provider,
     model,
-    referenceCount: renderAssets.length,
+    referenceCount: generated.referenceCount,
     usage,
     generationMethod: sourceGeometryLocked
       ? `${provider}-existing-source-rendered-plan-reference-edit`

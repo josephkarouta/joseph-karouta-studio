@@ -2,6 +2,32 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasAdminRole } from "@/lib/auth/admin-role";
 
+const PRELAUNCH_PUBLIC_ROUTES = [
+  "/",
+  "/expertsnetwork",
+  "/privacy",
+  "/terms",
+  "/refunds",
+  "/content-policy",
+  "/responsible-ai",
+  "/security",
+] as const;
+
+function publicMode() {
+  return String(process.env.HEYY_PUBLIC_MODE || "beta")
+    .trim()
+    .toLowerCase();
+}
+
+function isPrelaunchPublicPath(pathname: string) {
+  if (pathname === "/") return true;
+  if (pathname.startsWith("/api/public/expert-network")) return true;
+
+  return PRELAUNCH_PUBLIC_ROUTES.some(
+    (route) => route !== "/" && (pathname === route || pathname.startsWith(`${route}/`)),
+  );
+}
+
 function copyAuthCookies(target: NextResponse, source: NextResponse) {
   source.cookies.getAll().forEach((cookie) => {
     const { name, value, ...options } = cookie;
@@ -11,6 +37,24 @@ function copyAuthCookies(target: NextResponse, source: NextResponse) {
 }
 
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const isAdminApi = pathname.startsWith("/api/admin");
+  const isAdminRoute = pathname.startsWith("/admin");
+
+  // Production pre-launch: expose only the Coming Soon home, Expert Network,
+  // its public API and the public legal/trust pages. Beta/live modes keep the
+  // normal application routing.
+  if (publicMode() === "prelaunch" && !isPrelaunchPublicPath(pathname)) {
+    const homeUrl = new URL("/", request.url);
+    return NextResponse.redirect(homeUrl);
+  }
+
+  // The broad matcher is only needed for the pre-launch gate. Outside Admin,
+  // no Supabase session work is required here.
+  if (!isAdminRoute && !isAdminApi) {
+    return NextResponse.next();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -47,9 +91,6 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-  const isAdminApi = pathname.startsWith("/api/admin");
-
   if (!user) {
     if (isAdminApi) {
       return copyAuthCookies(
@@ -80,5 +121,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/admin/:path*"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|apple-icon.png|icon.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml|woff|woff2|mp4|webm)$).*)",
+  ],
 };

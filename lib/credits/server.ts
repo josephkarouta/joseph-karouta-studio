@@ -7,6 +7,7 @@ import { getPlan, type PlanId } from "@/lib/platform/plans";
 import { resolveSubscriptionPlan } from "@/lib/server/subscription-plan";
 import { commitReservedCredits } from "@/lib/credits/lifecycle";
 import { getWelcomeCreditAmount } from "@/lib/credits/welcome";
+import { subscriptionCreditPeriodFromRecord } from "@/lib/billing/stripe";
 
 export type CreditReservation = {
   id: string;
@@ -102,8 +103,9 @@ function monthlyPeriodForPlan(
   subscription: Record<string, unknown> | null,
 ) {
   if (plan !== "free" && subscription) {
-    const start = validIsoDate(subscription.current_period_start);
-    const end = validIsoDate(subscription.current_period_end);
+    const creditPeriod = subscriptionCreditPeriodFromRecord(subscription);
+    const start = validIsoDate(creditPeriod?.start);
+    const end = validIsoDate(creditPeriod?.end);
     const subscriptionId = String(subscription.stripe_subscription_id || "").trim();
 
     if (start && end && new Date(end).getTime() > new Date(start).getTime()) {
@@ -111,7 +113,10 @@ function monthlyPeriodForPlan(
         start,
         end,
         grantKey: `stripe:${subscriptionId || plan}:${start}`,
-        source: "stripe_subscription",
+        source:
+          creditPeriod?.interval === "year"
+            ? "annual_subscription_monthly_entitlement"
+            : "stripe_subscription",
       };
     }
   }

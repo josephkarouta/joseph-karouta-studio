@@ -709,6 +709,8 @@ async function approveAsset(asset: ProjectAsset) {
             eyebrow={config.eyebrow}
             title={config.title}
             description={config.description}
+            imageSrc="/studio-heroes/marketing-studio-hero.webp"
+            imagePosition="center 58%"
             controls={(
               <>
                 <StudioModeToggle value={workMode} onChange={(mode) => void changeWorkMode(mode)} tone="marketing" compact />
