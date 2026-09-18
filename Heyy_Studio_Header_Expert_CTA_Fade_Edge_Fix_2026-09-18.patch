@@ -1,0 +1,18 @@
+--- a/components/site-header.tsx
++++ b/components/site-header.tsx
+@@ -149,13 +149,13 @@
+                 src="/expert-contact-bubble.png"
+                 alt=""
+                 aria-hidden="true"
+-                className="pointer-events-none absolute bottom-[3px] left-1/2 h-[56px] w-auto max-w-[98px] -translate-x-1/2 object-contain opacity-100 transition-[opacity,transform] duration-250 ease-out group-hover:translate-y-1 group-hover:opacity-0"
++                className="pointer-events-none absolute bottom-[3px] left-1/2 h-[56px] w-auto max-w-[98px] -translate-x-1/2 object-contain opacity-100 transition-opacity duration-200 ease-out group-hover:opacity-0"
+               />
+               <img
+                 src="/expert-contact-desktop.png"
+                 alt=""
+                 aria-hidden="true"
+-                className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[60px] w-full translate-y-3 object-contain opacity-0 transition-[opacity,transform] duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100"
++                className="pointer-events-none absolute inset-x-0 bottom-[3px] h-[60px] w-full object-contain opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+               />
+             </Link>
+           )}

@@ -55,6 +55,10 @@ export default function ContactForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [successId, setSuccessId] = useState("");
+  // Keep the server render and the client's first render identical.
+  // After hydration, replace this fallback with the browser's real URL so
+  // sign-in/sign-up returns preserve topic/project query parameters.
+  const [authReturnPath, setAuthReturnPath] = useState("/contact?topic=expert");
   const [linkedProject, setLinkedProject] = useState<{
     projectId: string;
     projectName: string;
@@ -73,6 +77,7 @@ export default function ContactForm() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    setAuthReturnPath(window.location.pathname + window.location.search);
     const params = new URLSearchParams(window.location.search);
     const rawTopic = params.get("topic")?.trim().toLowerCase() || "";
     const topic = rawTopic === "expert-production" ? "expert" : rawTopic;
@@ -270,8 +275,8 @@ export default function ContactForm() {
               <p className="font-black text-[var(--text-primary)]">A Heyy Studio account is required for Expert production.</p>
               <p className="mt-1">You do not need to create anything with AI. The account simply keeps your quote, payment, production files and revisions private and connected.</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link href={`/login?next=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/contact?topic=expert")}`} className="inline-flex min-h-10 items-center rounded-full bg-[var(--text-primary)] px-4 text-xs font-black text-[var(--surface-strong)]">Sign in</Link>
-                <Link href={`/signup?next=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/contact?topic=expert")}`} className="inline-flex min-h-10 items-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-xs font-black">Create free account</Link>
+                <Link href={`/login?next=${encodeURIComponent(authReturnPath)}`} className="inline-flex min-h-10 items-center rounded-full bg-[var(--text-primary)] px-4 text-xs font-black text-[var(--surface-strong)]">Sign in</Link>
+                <Link href={`/signup?next=${encodeURIComponent(authReturnPath)}`} className="inline-flex min-h-10 items-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 text-xs font-black">Create free account</Link>
               </div>
             </div>
           )}

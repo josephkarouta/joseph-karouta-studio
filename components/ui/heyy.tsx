@@ -13,7 +13,7 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
 const buttonBase =
-  "heyy-button heyy-control-motion inline-flex min-h-[var(--touch-target)] items-center justify-center gap-2 rounded-full font-extrabold tracking-[-0.01em] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--focus-ring)] disabled:pointer-events-none disabled:opacity-45";
+  "heyy-button heyy-control-motion inline-flex min-h-[var(--touch-target)] cursor-pointer items-center justify-center gap-2 rounded-full font-extrabold tracking-[-0.01em] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--focus-ring)] disabled:pointer-events-none disabled:opacity-45";
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary:

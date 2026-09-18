@@ -340,7 +340,20 @@ function InteriorExperience() {
     : Math.round(((step + completedInputs / Math.max(1, allFields.length)) / (activeSteps.length + 1)) * 100);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      // Guest browsing is a valid state. Do not leave the workspace stuck
+      // waiting for an authenticated project that can never be resolved.
+      setArchitectureProjects([]);
+      setProject(null);
+      setAssets([]);
+      setResult(null);
+      setForm(initialState());
+      setStep(0);
+      setActiveTab("overview");
+      setSourcePlanFiles([]);
+      setResolvingProject(false);
+      return;
+    }
     void loadArchitectureProjects();
     const projectId = new URLSearchParams(window.location.search).get("project");
     if (!projectId) {

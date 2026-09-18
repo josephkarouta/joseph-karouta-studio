@@ -141,8 +141,8 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   return (
     <div className="mx-auto max-w-7xl">
       <Link href="/expertsnetwork" className="inline-flex items-center gap-2 text-xs font-black text-[var(--text-secondary)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14}/>All Expert Network opportunities</Link>
-      <div className="mt-5 grid gap-7 xl:grid-cols-[minmax(0,1.08fr)_minmax(500px,.92fr)] xl:items-start">
-        <div className="grid gap-5">
+      <div className="mt-5 grid gap-7 xl:grid-cols-[minmax(0,1.04fr)_minmax(480px,.96fr)] xl:items-start">
+        <div className="min-w-0 grid gap-5">
           <GlassCard className="overflow-hidden">
             <div className="bg-[linear-gradient(135deg,#17131f,#6f2dff_78%,#dc36c8)] p-7 text-white sm:p-9">
               <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-white/70">{expertStudioLabel(selected)} · Expert Network</p>
@@ -153,7 +153,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
           </GlassCard>
         </div>
 
-        <GlassCard id="expert-application" className="p-6 sm:p-7 xl:sticky xl:top-24">
+        <GlassCard id="expert-application" className="min-w-0 p-6 sm:p-7">
           {sent ? <div className="py-8 text-center"><CheckCircle2 size={42} className="mx-auto text-emerald-500"/><h3 className="mt-4 text-2xl font-black">Application received</h3><p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Thanks, {form.name.split(/\s+/)[0] || "there"}. Your application is now in the Heyy Studio Expert Network review queue.</p><p className="mt-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">If you’re shortlisted, Heyy Studio will contact you directly. You do not need to apply again for the same opportunity.</p>{linkedInUrl && <a href={linkedInUrl} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0a66c2] px-4 py-2.5 text-xs font-black text-white">Follow Heyy Studio on LinkedIn <ExternalLink size={13}/></a>}</div> : (
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
               <div className="mb-2 sm:col-span-2"><p className="text-[.62rem] font-black uppercase tracking-[.17em] text-[var(--accent-strong)]">Apply to the Expert Network</p><h3 className="mt-2 text-2xl font-black tracking-[-.045em]">Your expert profile starts here.</h3><p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">This application does not create an Expert Portal account. Shortlisted candidates are invited separately.</p></div>
@@ -179,7 +179,27 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
               </div>
 
               <Field className="sm:col-span-2" label="Tell us about your work *" hint="What kind of projects are you strongest at?"><textarea className="heyy-input min-h-28 w-full resize-y" required minLength={30} value={form.message} onChange={(e)=>setForm({...form,message:e.target.value})}/></Field>
-              <label className="flex items-start gap-3 rounded-2xl bg-[var(--surface)] p-3 text-xs sm:col-span-2 font-semibold leading-5 text-[var(--text-secondary)]"><input type="checkbox" className="mt-1" checked={form.consent} onChange={(e)=>setForm({...form,consent:e.target.checked})}/><span>I confirm the information is accurate and allow Heyy Studio to store and review this application for Expert Network opportunities. *</span></label>
+              <div className="rounded-2xl bg-[var(--surface)] p-3 text-xs sm:col-span-2 font-semibold leading-5 text-[var(--text-secondary)]">
+                <div className="flex items-start gap-3">
+                  <input
+                    id="expert-network-consent"
+                    type="checkbox"
+                    required
+                    className="mt-1 cursor-pointer"
+                    checked={form.consent}
+                    onChange={(e)=>setForm({...form,consent:e.target.checked})}
+                  />
+                  <p>
+                    I confirm the information is accurate, allow Heyy Studio to store and review this application for Expert Network opportunities, and agree to the{" "}
+                    <Link href="/terms" target="_blank" rel="noreferrer" className="font-black text-[var(--accent-strong)] underline underline-offset-2 hover:text-[var(--text-primary)]">Terms</Link>{" "}
+                    and{" "}
+                    <Link href="/privacy" target="_blank" rel="noreferrer" className="font-black text-[var(--accent-strong)] underline underline-offset-2 hover:text-[var(--text-primary)]">Privacy Policy</Link>. *
+                  </p>
+                </div>
+                <p className="mt-2 pl-7 text-[.64rem] font-semibold leading-5 text-[var(--text-muted)]">
+                  Project invitations are optional. Scope, fee, timeline and payment terms are confirmed with you before each project begins.
+                </p>
+              </div>
               {source !== "direct" && <p className="text-[.62rem] sm:col-span-2 font-bold text-[var(--text-muted)]">Application source: {source}</p>}
               {error&&<p className="rounded-xl bg-red-500/10 sm:col-span-2 px-3 py-2 text-xs font-bold text-red-600">{error}</p>}
               <div className="sm:col-span-2"><Button type="submit" className="w-full" disabled={sending || !form.consent}>{sending?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>}Submit Expert Network application</Button></div>

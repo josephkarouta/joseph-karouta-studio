@@ -1,0 +1,35 @@
+--- a/components/site-header.tsx
++++ b/components/site-header.tsx
+@@ -85,7 +85,7 @@
+     ? user.app_metadata.roles.map((role: unknown) => String(role).toLowerCase())
+     : [];
+   const isExpert = Boolean(user?.app_metadata?.expert_profile_id) || expertRoles.includes("expert");
+-  const showDesktopExpertCta = !prelaunch && pathname === "/";
++  const showDesktopExpertCta = !prelaunch;
+ 
+   useEffect(() => {
+     setMenuOpen(false);
+@@ -143,19 +143,19 @@
+             <Link
+               href="/contact?topic=expert"
+               aria-label="Contact an Expert"
+-              className="group relative hidden h-[58px] w-[124px] shrink-0 cursor-pointer self-end items-end justify-start overflow-visible -mb-px lg:flex"
++              className="group relative hidden h-[60px] w-[132px] shrink-0 cursor-pointer self-end items-end justify-center overflow-visible -mb-px lg:flex"
+             >
+               <img
+                 src="/expert-contact-bubble.png"
+                 alt=""
+                 aria-hidden="true"
+-                className="pointer-events-none absolute bottom-[5px] left-0 h-[50px] w-[78px] object-contain transition-transform duration-300 ease-out group-hover:-translate-x-0.5 group-hover:scale-[1.02]"
++                className="pointer-events-none absolute bottom-[3px] left-1/2 h-[56px] w-auto max-w-[98px] -translate-x-1/2 object-contain opacity-100 transition-[opacity,transform] duration-250 ease-out group-hover:translate-y-1 group-hover:opacity-0"
+               />
+               <img
+-                src="/expert-3d.png"
++                src="/expert-contact-desktop.png"
+                 alt=""
+                 aria-hidden="true"
+-                className="pointer-events-none absolute bottom-[-1px] right-0 h-[55px] w-auto origin-bottom translate-y-4 scale-[.88] opacity-0 transition-[transform,opacity] duration-300 ease-out group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100"
++                className="pointer-events-none absolute inset-x-0 bottom-[-1px] h-[60px] w-full translate-y-3 object-contain opacity-0 transition-[opacity,transform] duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100"
+               />
+             </Link>
+           )}

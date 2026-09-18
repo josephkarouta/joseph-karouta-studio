@@ -85,6 +85,7 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
     ? user.app_metadata.roles.map((role: unknown) => String(role).toLowerCase())
     : [];
   const isExpert = Boolean(user?.app_metadata?.expert_profile_id) || expertRoles.includes("expert");
+  const showDesktopExpertCta = !prelaunch;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -138,18 +139,26 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
         </nav>
 
         <div className="flex self-stretch items-center gap-2">
-          <Link
-            href={prelaunch ? "/" : "/contact?topic=expert"}
-            aria-label="Contact an Expert"
-            className="group relative hidden h-[58px] w-[124px] shrink-0 self-end items-end justify-center overflow-visible -mb-px lg:flex"
-          >
-            <img
-              src="/expert-contact-desktop.png"
-              alt=""
-              aria-hidden="true"
-              className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover:scale-[1.045]"
-            />
-          </Link>
+          {showDesktopExpertCta && (
+            <Link
+              href="/contact?topic=expert"
+              aria-label="Contact an Expert"
+              className="group relative hidden h-[60px] w-[132px] shrink-0 cursor-pointer self-end items-end justify-center overflow-visible -mb-px lg:flex"
+            >
+              <img
+                src="/expert-contact-bubble.png"
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-[3px] left-1/2 h-[56px] w-auto max-w-[98px] -translate-x-1/2 object-contain opacity-100 transition-opacity duration-200 ease-out group-hover:opacity-0"
+              />
+              <img
+                src="/expert-contact-desktop.png"
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 bottom-[3px] h-[60px] w-full object-contain opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+              />
+            </Link>
+          )}
 
           <ThemeToggle compact />
 
@@ -167,13 +176,13 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
             <div className="hidden items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-sm sm:flex">
               <Link
                 href="/"
-                className="min-h-8 rounded-full px-3.5 py-2 text-xs font-black text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                className="min-h-8 cursor-pointer rounded-full px-3.5 py-2 text-xs font-black text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
               >
                 Sign in
               </Link>
               <Link
                 href="/"
-                className="min-h-8 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 py-2 text-xs font-black text-white shadow-[0_6px_16px_rgba(109,40,217,.22)] transition-[filter,box-shadow] hover:brightness-[0.97] hover:shadow-[0_8px_20px_rgba(109,40,217,.28)]"
+                className="min-h-8 cursor-pointer rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 py-2 text-xs font-black text-white shadow-[0_6px_16px_rgba(109,40,217,.22)] transition-[filter,box-shadow,transform] hover:-translate-y-px hover:brightness-[1.08] hover:saturate-[1.08] hover:shadow-[0_8px_20px_rgba(109,40,217,.30)]"
               >
                 Sign up
               </Link>
@@ -195,7 +204,7 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
                   setNotificationsOpen(false);
                   setMenuOpen((value) => !value);
                 }}
-                className="flex h-10 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] pl-2 pr-3 text-left shadow-sm transition hover:border-[var(--accent-border)]"
+                className="flex h-10 cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] pl-2 pr-3 text-left shadow-sm transition hover:border-[var(--accent-border)]"
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
               >
@@ -244,7 +253,7 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
                   <button
                     type="button"
                     onClick={handleSignOut}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-[var(--text-secondary)] transition hover:bg-red-500/10 hover:text-red-500"
+                    className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-[var(--text-secondary)] transition hover:bg-red-500/10 hover:text-red-500"
                   >
                     <LogOut size={16} /> Sign out
                   </button>
@@ -256,14 +265,14 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
               <button
                 type="button"
                 onClick={() => setAuthMode("signin")}
-                className="min-h-8 rounded-full px-3.5 text-xs font-black text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                className="min-h-8 cursor-pointer rounded-full px-3.5 text-xs font-black text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
               >
                 Sign in
               </button>
               <button
                 type="button"
                 onClick={() => setAuthMode("signup")}
-                className="min-h-8 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-xs font-black text-white shadow-[0_6px_16px_rgba(109,40,217,.22)] transition-[filter,box-shadow] hover:brightness-[0.97] hover:shadow-[0_8px_20px_rgba(109,40,217,.28)]"
+                className="min-h-8 cursor-pointer rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-xs font-black text-white shadow-[0_6px_16px_rgba(109,40,217,.22)] transition-[filter,box-shadow,transform] hover:-translate-y-px hover:brightness-[1.08] hover:saturate-[1.08] hover:shadow-[0_8px_20px_rgba(109,40,217,.30)]"
               >
                 Sign up
               </button>
@@ -273,7 +282,7 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
           <button
             type="button"
             onClick={() => setMobileOpen((value) => !value)}
-            className="grid h-10 w-10 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-primary)] lg:hidden"
+            className="grid h-10 w-10 cursor-pointer place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-primary)] lg:hidden"
             aria-label="Toggle navigation"
           >
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
@@ -422,7 +431,7 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
                 <MenuLink href="/billing" icon={<CreditCard size={16} />} label="Billing & plan" />
                 <MenuLink href="/credits" icon={<CircleDollarSign size={16} />} label="Credits" />
                 <MenuLink href="/help" icon={<BadgeHelp size={16} />} label="Help center" />
-                <button type="button" onClick={handleSignOut} className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/10">
+                <button type="button" onClick={handleSignOut} className="mt-1 flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/10">
                   <LogOut size={16} /> Sign out
                 </button>
               </div>

@@ -316,7 +316,19 @@ function MarketingExperience() {
   } as CSSProperties;
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      // Guest browsing is a valid state. Do not leave the workspace stuck
+      // waiting for an authenticated project that can never be resolved.
+      setBrandProjects([]);
+      setProject(null);
+      setAssets([]);
+      setResult(null);
+      setForm(initialState());
+      setStep(0);
+      setActiveTab("overview");
+      setResolvingProject(false);
+      return;
+    }
     void loadBrandProjects();
     const projectId = new URLSearchParams(window.location.search).get("project");
     if (!projectId) {
