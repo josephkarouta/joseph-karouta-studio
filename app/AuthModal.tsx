@@ -127,7 +127,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
         throw error;
       }
 
-      onClose();
+      window.location.assign(currentNextPath());
     } catch (value) {
       setMessage(value instanceof Error ? value.message : "Authentication failed.");
     } finally {
@@ -169,7 +169,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
         // Welcome email is non-blocking; the account is already verified.
       }
 
-      onClose();
+      window.location.assign(currentNextPath());
     } catch (value) {
       setMessage(value instanceof Error ? value.message : "Verification failed.");
     } finally {

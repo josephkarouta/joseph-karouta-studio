@@ -31,11 +31,24 @@ export async function sendExpertNetworkApplicationEmails(input: ExpertApplicatio
   ]);
 
   results.forEach((result, index) => {
+    const label = index === 0
+      ? "Expert Network applicant confirmation email"
+      : "Expert Network Admin notification email";
+
     if (result.status === "rejected") {
-      console.error(index === 0
-        ? "Expert Network applicant confirmation email failed:"
-        : "Expert Network Admin notification email failed:", result.reason);
+      console.error(`${label} failed:`, result.reason);
+      return;
     }
+
+    if (!result.value?.sent && !result.value?.duplicate) {
+      console.error(`${label} was not sent.`, { applicationId: input.applicationId });
+    }
+  });
+
+  console.info("Expert Network application email delivery:", {
+    applicationId: input.applicationId,
+    applicant: deliveryState(results[0]),
+    admin: deliveryState(results[1]),
   });
 
   return { applicant: results[0], admin: results[1] };
@@ -52,6 +65,16 @@ async function retryApplicationEmail<T>(send: () => Promise<T>) {
       throw firstError;
     }
   }
+}
+
+function deliveryState(result: PromiseSettledResult<{ sent: boolean; duplicate: boolean; id?: string | null }>) {
+  if (result.status === "rejected") return { sent: false, duplicate: false, failed: true };
+  return {
+    sent: Boolean(result.value?.sent),
+    duplicate: Boolean(result.value?.duplicate),
+    failed: false,
+    providerMessageId: result.value?.id || null,
+  };
 }
 
 // Backward-compatible alias for any older code paths.
@@ -76,7 +99,9 @@ async function sendApplicantConfirmation(input: ExpertApplicationEmailInput) {
     },
   });
 
-  if (!resolved.enabled) return { sent: false, duplicate: false };
+  if (!resolved.enabled) {
+    console.warn("Expert Network applicant confirmation template is disabled in Admin; sending anyway because this is a required transactional email.");
+  }
 
   const template = {
     eyebrow: resolved.eyebrow,
@@ -110,10 +135,10 @@ async function sendApplicantConfirmation(input: ExpertApplicationEmailInput) {
 }
 
 async function sendAdminNotification(input: ExpertApplicationEmailInput) {
-  const adminEmail = String(process.env.ADMIN_EMAIL || "").trim();
-  if (!adminEmail) {
-    console.warn("Expert Network Admin notification skipped because ADMIN_EMAIL is not configured.");
-    return { sent: false, duplicate: false };
+  const configuredAdminEmail = String(process.env.ADMIN_EMAIL || "").trim();
+  const adminEmail = configuredAdminEmail || "hello@heyystudio.com";
+  if (!configuredAdminEmail) {
+    console.warn("ADMIN_EMAIL is not configured; using hello@heyystudio.com for the Expert Network Admin notification.");
   }
 
   const resolved = await resolveCommunicationTemplate({
@@ -129,7 +154,9 @@ async function sendAdminNotification(input: ExpertApplicationEmailInput) {
     variables: { role_title: input.position.title, applicant_name: input.name },
   });
 
-  if (!resolved.enabled) return { sent: false, duplicate: false };
+  if (!resolved.enabled) {
+    console.warn("Expert Network Admin notification template is disabled in Admin; sending anyway because this is a required operational email.");
+  }
 
   const details = [
     { label: "Opportunity", value: input.position.title },

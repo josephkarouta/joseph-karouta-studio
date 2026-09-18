@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { hasAdminRole } from "@/lib/auth/admin-role";
+import { hasAdminAccess } from "@/lib/auth/admin-role";
 
 const PRELAUNCH_PUBLIC_ROUTES = [
   "/",
@@ -28,6 +28,16 @@ function isPrelaunchPublicPath(pathname: string) {
   );
 }
 
+function isPrelaunchAdminAccessPath(pathname: string) {
+  return (
+    pathname === "/login" ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/api/admin") ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/api/auth/")
+  );
+}
+
 function copyAuthCookies(target: NextResponse, source: NextResponse) {
   source.cookies.getAll().forEach((cookie) => {
     const { name, value, ...options } = cookie;
@@ -44,7 +54,11 @@ export async function proxy(request: NextRequest) {
   // Production pre-launch: expose only the Coming Soon home, Expert Network,
   // its public API and the public legal/trust pages. Beta/live modes keep the
   // normal application routing.
-  if (publicMode() === "prelaunch" && !isPrelaunchPublicPath(pathname)) {
+  if (
+    publicMode() === "prelaunch" &&
+    !isPrelaunchPublicPath(pathname) &&
+    !isPrelaunchAdminAccessPath(pathname)
+  ) {
     const homeUrl = new URL("/", request.url);
     return NextResponse.redirect(homeUrl);
   }
@@ -104,7 +118,7 @@ export async function proxy(request: NextRequest) {
     return copyAuthCookies(NextResponse.redirect(loginUrl), supabaseResponse);
   }
 
-  if (!hasAdminRole(user)) {
+  if (!hasAdminAccess(user)) {
     if (isAdminApi) {
       return copyAuthCookies(
         NextResponse.json({ error: "Admin access required." }, { status: 403 }),

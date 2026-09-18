@@ -28,6 +28,12 @@ function adminClient() {
   );
 }
 
+function assertEmailProviderConfigured() {
+  if (!String(process.env.RESEND_API_KEY || "").trim()) {
+    throw new Error("RESEND_API_KEY is not configured.");
+  }
+}
+
 export async function sendTrackedEmail({
   eventKey,
   userId,
@@ -53,6 +59,8 @@ export async function sendTrackedEmail({
   relatedId?: string | null;
   metadata?: Record<string, unknown>;
 }) {
+  assertEmailProviderConfigured();
+
   const admin = adminClient();
   let claimId: string | null = null;
 

@@ -14,14 +14,14 @@ function safeNextPath(value: string | null) {
   return value;
 }
 
-export default function AuthModalController() {
+export default function AuthModalController({ allowSignup = true }: { allowSignup?: boolean }) {
   const [request, setRequest] = useState<AuthRequest | null>(null);
 
   useEffect(() => {
     const initialUrl = new URL(window.location.href);
     const initialAuth = initialUrl.searchParams.get("auth");
 
-    if (initialAuth === "signin" || initialAuth === "signup") {
+    if (initialAuth === "signin" || (allowSignup && initialAuth === "signup")) {
       setRequest({
         mode: initialAuth,
         nextPath:
@@ -40,8 +40,11 @@ export default function AuthModalController() {
 
     function openFromEvent(event: Event) {
       const custom = event as CustomEvent<AuthRequest>;
+      const requestedMode = custom.detail?.mode === "signup" ? "signup" : "signin";
+      if (requestedMode === "signup" && !allowSignup) return;
+
       setRequest({
-        mode: custom.detail?.mode === "signup" ? "signup" : "signin",
+        mode: requestedMode,
         nextPath: safeNextPath(custom.detail?.nextPath || null),
       });
     }
@@ -75,6 +78,7 @@ export default function AuthModalController() {
 
       if (url.origin !== window.location.origin) return;
       if (url.pathname !== "/login" && url.pathname !== "/signup") return;
+      if (url.pathname === "/signup" && !allowSignup) return;
 
       event.preventDefault();
 
@@ -96,7 +100,7 @@ export default function AuthModalController() {
       window.removeEventListener("heyy:open-auth", openFromEvent as EventListener);
       document.removeEventListener("click", interceptLegacyAuthLink, true);
     };
-  }, []);
+  }, [allowSignup]);
 
   if (!request) return null;
 

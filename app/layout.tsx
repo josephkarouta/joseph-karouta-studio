@@ -69,7 +69,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Providers>
           {children}
           {!isPrelaunch && <HeyyAssistant />}
-          {!isPrelaunch && <AuthModalController />}
+          <AuthModalController allowSignup={!isPrelaunch} />
           <CookieConsent />
         </Providers>
       </body>
