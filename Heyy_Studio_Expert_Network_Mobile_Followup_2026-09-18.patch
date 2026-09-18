@@ -1,0 +1,48 @@
+--- a/components/public/ExpertNetworkPage.tsx
++++ b/components/public/ExpertNetworkPage.tsx
+@@ -1,4 +1,4 @@
+-import { ArrowDown, BriefcaseBusiness, CheckCircle2, Globe2, ShieldCheck, UsersRound } from "lucide-react";
++import { BriefcaseBusiness, CheckCircle2, Globe2, ShieldCheck, UsersRound } from "lucide-react";
+ import SiteHeader from "@/components/site-header";
+ import SiteFooter from "@/components/site-footer";
+ import { GlassCard, PageContainer } from "@/components/ui/heyy";
+@@ -35,9 +35,6 @@
+                   <span className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2">Remote / worldwide</span>
+                   <span className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2">Paid per approved project</span>
+                 </div>
+-                <a href="#open-opportunities" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--text-primary)] px-5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white md:hidden">
+-                  View open roles <ArrowDown size={14} />
+-                </a>
+               </div>
+             </PageContainer>
+           </section>
+--- a/components/public/ExpertsNetworkContent.tsx
++++ b/components/public/ExpertsNetworkContent.tsx
+@@ -140,8 +140,7 @@
+ 
+   return (
+     <div className="mx-auto max-w-7xl">
+-      <Link href="/expertsnetwork" className="inline-flex items-center gap-2 text-xs font-black text-[var(--text-secondary)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14}/>All Expert Network opportunities</Link>
+-      <div className="mt-4 grid gap-5 sm:mt-5 sm:gap-7 xl:grid-cols-[minmax(0,1.04fr)_minmax(480px,.96fr)] xl:items-start">
++      <div className="grid gap-5 sm:gap-7 xl:grid-cols-[minmax(0,1.04fr)_minmax(480px,.96fr)] xl:items-start">
+         <div className="min-w-0 grid gap-5">
+           <GlassCard className="overflow-hidden">
+             <div className="bg-[linear-gradient(135deg,#17131f,#6f2dff_78%,#dc36c8)] p-5 text-white sm:p-9">
+@@ -195,7 +194,7 @@
+                   <Field label="Time zone"><input className="heyy-input" placeholder="AEST / GMT+10" value={form.timezone} onChange={(e)=>setForm({...form,timezone:e.target.value})}/></Field>
+                   <Field label="Years of relevant experience"><input className="heyy-input" type="number" min="0" max="60" inputMode="numeric" placeholder="8" value={form.yearsExperience} onChange={(e)=>setForm({...form,yearsExperience:e.target.value})}/></Field>
+                   <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder="Illustrator, InDesign, Figma" value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
+-                  <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Arabic" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
++                  <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Spanish" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
+                 </div>
+               </details>
+ 
+@@ -203,7 +202,7 @@
+                 <Field label="Time zone"><input className="heyy-input" placeholder="AEST / GMT+10" value={form.timezone} onChange={(e)=>setForm({...form,timezone:e.target.value})}/></Field>
+                 <Field label="Years of relevant experience"><input className="heyy-input" type="number" min="0" max="60" inputMode="numeric" placeholder="8" value={form.yearsExperience} onChange={(e)=>setForm({...form,yearsExperience:e.target.value})}/></Field>
+                 <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder="Illustrator, InDesign, Figma" value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
+-                <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Arabic" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
++                <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Spanish" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
+               </div>
+ 
+               <input ref={resumeRef} type="file" className="hidden" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e)=>chooseResume(e.target.files?.[0])}/>

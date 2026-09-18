@@ -3,7 +3,7 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, FileText, Loader2, MapPin, Send, Upload, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ExternalLink, FileText, Loader2, MapPin, Send, Upload, X } from "lucide-react";
 import { Button, GlassCard, StatusPill } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { expertRoleSections, expertRoleSlug, expertStudioLabel, type ExpertNetworkPosition } from "@/lib/expert-network/public";
@@ -121,14 +121,14 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   if (!selected) {
     return (
       <div>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-[.64rem] font-black uppercase tracking-[.18em] text-[var(--accent-strong)]">Open Expert Network opportunities</p><h2 className="mt-3 text-3xl font-black tracking-[-.05em] sm:text-4xl">Choose the Studio that matches your work.</h2></div>
-          <p className="max-w-md text-sm font-semibold leading-6 text-[var(--text-secondary)]">Apply to the closest match. Shortlisted experts may later be considered for related project types across the network.</p>
+        <div className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
+          <div><p className="text-[.6rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)] sm:text-[.64rem] sm:tracking-[.18em]">Open Expert Network opportunities</p><h2 className="mt-2 text-2xl font-black tracking-[-.05em] sm:mt-3 sm:text-4xl">Choose the Studio that matches your work.</h2></div>
+          <p className="max-w-md text-xs font-semibold leading-5 text-[var(--text-secondary)] sm:text-sm sm:leading-6">Apply to the closest match. Shortlisted experts may later be considered for related project types across the network.</p>
         </div>
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
+        <div className="mt-5 grid gap-3 sm:mt-8 sm:gap-4 md:grid-cols-2">
           {positions.length ? positions.map((position) => {
             const slug = position.slug || expertRoleSlug(position.title);
-            return <GlassCard key={position.id} interactive className="p-6 sm:p-7"><div className="flex h-full flex-col"><div className="flex flex-wrap gap-2"><StatusPill tone="info">{expertStudioLabel(position)}</StatusPill><StatusPill>{position.employment_type || "Freelance / Project-based"}</StatusPill></div><h3 className="mt-5 text-2xl font-black tracking-[-.045em]">{position.title}</h3><p className="mt-3 flex-1 text-sm font-semibold leading-7 text-[var(--text-secondary)]">{position.summary || "Join Heyy Studio for selected project-based expert work."}</p><p className="mt-5 flex items-center gap-2 text-xs font-bold text-[var(--text-muted)]"><MapPin size={14}/>{position.location || "Remote / Worldwide"}</p><Link href={`/expertsnetwork/${slug}${source !== "direct" ? `?source=${encodeURIComponent(source)}` : ""}`} className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--text-primary)] px-4 py-2.5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white">View & apply <ArrowRight size={14}/></Link></div></GlassCard>;
+            return <GlassCard key={position.id} interactive className="p-5 sm:p-7"><div className="flex h-full flex-col"><div className="flex flex-wrap gap-2"><StatusPill tone="info">{expertStudioLabel(position)}</StatusPill><StatusPill>{position.employment_type || "Freelance / Project-based"}</StatusPill></div><h3 className="mt-5 text-2xl font-black tracking-[-.045em]">{position.title}</h3><p className="mt-3 flex-1 text-sm font-semibold leading-7 text-[var(--text-secondary)]">{position.summary || "Join Heyy Studio for selected project-based expert work."}</p><p className="mt-5 flex items-center gap-2 text-xs font-bold text-[var(--text-muted)]"><MapPin size={14}/>{position.location || "Remote / Worldwide"}</p><Link href={`/expertsnetwork/${slug}${source !== "direct" ? `?source=${encodeURIComponent(source)}` : ""}`} className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--text-primary)] px-4 py-2.5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white">View & apply <ArrowRight size={14}/></Link></div></GlassCard>;
           }) : <GlassCard className="p-8 text-center md:col-span-2"><h3 className="text-2xl font-black">Applications will open shortly</h3><p className="mt-3 text-sm font-semibold text-[var(--text-secondary)]">The first Expert Network opportunities are being prepared.</p></GlassCard>}
         </div>
       </div>
@@ -140,34 +140,66 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
 
   return (
     <div className="mx-auto max-w-7xl">
-      <Link href="/expertsnetwork" className="inline-flex items-center gap-2 text-xs font-black text-[var(--text-secondary)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14}/>All Expert Network opportunities</Link>
-      <div className="mt-5 grid gap-7 xl:grid-cols-[minmax(0,1.04fr)_minmax(480px,.96fr)] xl:items-start">
+      <div className="grid gap-5 sm:gap-7 xl:grid-cols-[minmax(0,1.04fr)_minmax(480px,.96fr)] xl:items-start">
         <div className="min-w-0 grid gap-5">
           <GlassCard className="overflow-hidden">
-            <div className="bg-[linear-gradient(135deg,#17131f,#6f2dff_78%,#dc36c8)] p-7 text-white sm:p-9">
-              <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-white/70">{expertStudioLabel(selected)} · Expert Network</p>
-              <h2 className="mt-4 text-4xl font-black leading-[.98] tracking-[-.055em] sm:text-5xl">{selected.title}</h2>
-              <div className="mt-5 flex flex-wrap gap-2 text-xs font-black"><span className="rounded-full bg-white/12 px-3 py-2">{selected.employment_type || "Freelance / Project-based"}</span><span className="rounded-full bg-white/12 px-3 py-2">{selected.location || "Remote / Worldwide"}</span></div>
+            <div className="bg-[linear-gradient(135deg,#17131f,#6f2dff_78%,#dc36c8)] p-5 text-white sm:p-9">
+              <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-white/70 sm:text-[.62rem] sm:tracking-[.18em]">{expertStudioLabel(selected)} · Expert Network</p>
+              <h2 className="mt-3 text-3xl font-black leading-[.98] tracking-[-.055em] sm:mt-4 sm:text-5xl">{selected.title}</h2>
+              <div className="mt-4 flex flex-wrap gap-2 text-[.68rem] font-black sm:mt-5 sm:text-xs"><span className="rounded-full bg-white/12 px-3 py-2">{selected.employment_type || "Freelance / Project-based"}</span><span className="rounded-full bg-white/12 px-3 py-2">{selected.location || "Remote / Worldwide"}</span></div>
             </div>
-            <div className="p-6 sm:p-8"><p className="text-base font-semibold leading-8 text-[var(--text-secondary)]">{selected.summary}</p>{sections.map((section) => <section key={section.title} className="mt-7 border-t border-[var(--border)] pt-6"><h3 className="text-xl font-black">{section.title}</h3>{section.paragraphs.map((paragraph) => <p key={paragraph} className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-[var(--text-secondary)]">{paragraph}</p>)}{section.bullets.length > 0 && <ul className="mt-4 space-y-3">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]"/>{bullet}</li>)}</ul>}</section>)}{selected.closes_at && <p className="mt-7 text-xs font-bold text-[var(--text-muted)]">Applications close {new Date(selected.closes_at).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}.</p>}</div>
+            <div className="p-5 sm:p-8">
+              <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:text-base sm:leading-8">{selected.summary}</p>
+              <details className="group mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] xl:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black">
+                  View role details
+                  <ChevronDown size={16} className="transition group-open:rotate-180"/>
+                </summary>
+                <div className="border-t border-[var(--border)] px-4 pb-4">
+                  {sections.map((section) => <section key={section.title} className="mt-5"><h3 className="text-base font-black">{section.title}</h3>{section.paragraphs.map((paragraph) => <p key={paragraph} className="mt-2 whitespace-pre-wrap text-xs font-semibold leading-5 text-[var(--text-secondary)]">{paragraph}</p>)}{section.bullets.length > 0 && <ul className="mt-3 space-y-2">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-2 text-xs font-semibold leading-5 text-[var(--text-secondary)]"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]"/>{bullet}</li>)}</ul>}</section>)}
+                  {selected.closes_at && <p className="mt-5 text-xs font-bold text-[var(--text-muted)]">Applications close {new Date(selected.closes_at).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}.</p>}
+                </div>
+              </details>
+
+              <div className="hidden xl:block">
+                {sections.map((section) => <section key={section.title} className="mt-7 border-t border-[var(--border)] pt-6"><h3 className="text-xl font-black">{section.title}</h3>{section.paragraphs.map((paragraph) => <p key={paragraph} className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-[var(--text-secondary)]">{paragraph}</p>)}{section.bullets.length > 0 && <ul className="mt-4 space-y-3">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]"/>{bullet}</li>)}</ul>}</section>)}
+                {selected.closes_at && <p className="mt-7 text-xs font-bold text-[var(--text-muted)]">Applications close {new Date(selected.closes_at).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}.</p>}
+              </div>
+            </div>
           </GlassCard>
         </div>
 
-        <GlassCard id="expert-application" className="min-w-0 p-6 sm:p-7">
+        <GlassCard id="expert-application" className="min-w-0 scroll-mt-24 p-5 sm:p-7">
           {sent ? <div className="py-8 text-center"><CheckCircle2 size={42} className="mx-auto text-emerald-500"/><h3 className="mt-4 text-2xl font-black">Application received</h3><p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Thanks, {form.name.split(/\s+/)[0] || "there"}. Your application is now in the Heyy Studio Expert Network review queue.</p><p className="mt-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">If you’re shortlisted, Heyy Studio will contact you directly. You do not need to apply again for the same opportunity.</p>{linkedInUrl && <a href={linkedInUrl} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0a66c2] px-4 py-2.5 text-xs font-black text-white">Follow Heyy Studio on LinkedIn <ExternalLink size={13}/></a>}</div> : (
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-              <div className="mb-2 sm:col-span-2"><p className="text-[.62rem] font-black uppercase tracking-[.17em] text-[var(--accent-strong)]">Apply to the Expert Network</p><h3 className="mt-2 text-2xl font-black tracking-[-.045em]">Your expert profile starts here.</h3><p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">This application does not create an Expert Portal account. Shortlisted candidates are invited separately.</p></div>
+              <div className="mb-1 sm:col-span-2 sm:mb-2"><p className="text-[.6rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)] sm:text-[.62rem] sm:tracking-[.17em]">Apply to the Expert Network</p><h3 className="mt-2 text-xl font-black tracking-[-.045em] sm:text-2xl">Your expert profile starts here.</h3><p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">Shortlisted candidates are invited separately. This application does not create an Expert Portal account.</p></div>
               <Field label="Full name *"><input className="heyy-input" required minLength={2} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field>
               <Field label="Email address *"><input className="heyy-input" type="email" required value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})}/></Field>
               <Field label="Current city & country *"><input className="heyy-input" required placeholder="Melbourne, Australia" value={form.location} onChange={(e)=>setForm({...form,location:e.target.value})}/></Field>
-              <Field label="Time zone"><input className="heyy-input" placeholder="AEST / GMT+10" value={form.timezone} onChange={(e)=>setForm({...form,timezone:e.target.value})}/></Field>
-              <Field label="Years of relevant experience"><input className="heyy-input" type="number" min="0" max="60" inputMode="numeric" placeholder="8" value={form.yearsExperience} onChange={(e)=>setForm({...form,yearsExperience:e.target.value})}/></Field>
               <Field label="Current availability *"><HeyySelect value={form.availability} options={AVAILABILITY} placeholder="Select availability" ariaLabel="Current availability" onChange={(value)=>setForm({...form,availability:value})}/></Field>
               <Field label="Portfolio"><input className="heyy-input" inputMode="url" placeholder="www.yourportfolio.com" value={form.portfolioUrl} onChange={(e)=>setForm({...form,portfolioUrl:e.target.value})}/></Field>
               <Field label="LinkedIn"><input className="heyy-input" inputMode="url" placeholder="linkedin.com/in/yourname" value={form.linkedinUrl} onChange={(e)=>setForm({...form,linkedinUrl:e.target.value})}/></Field>
               <Field className="sm:col-span-2" label="Specialties *" hint="Separate with commas"><input className="heyy-input" required placeholder="Brand identity, packaging, typography" value={form.specialties} onChange={(e)=>setForm({...form,specialties:e.target.value})}/></Field>
-              <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder="Illustrator, InDesign, Figma" value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
-              <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Arabic" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
+
+              <details className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] sm:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-black">
+                  Add more profile details <span className="font-semibold text-[var(--text-muted)]">(optional)</span>
+                  <ChevronDown size={15}/>
+                </summary>
+                <div className="grid gap-4 border-t border-[var(--border)] p-4">
+                  <Field label="Time zone"><input className="heyy-input" placeholder="AEST / GMT+10" value={form.timezone} onChange={(e)=>setForm({...form,timezone:e.target.value})}/></Field>
+                  <Field label="Years of relevant experience"><input className="heyy-input" type="number" min="0" max="60" inputMode="numeric" placeholder="8" value={form.yearsExperience} onChange={(e)=>setForm({...form,yearsExperience:e.target.value})}/></Field>
+                  <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder="Illustrator, InDesign, Figma" value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
+                  <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Spanish" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
+                </div>
+              </details>
+
+              <div className="hidden sm:contents">
+                <Field label="Time zone"><input className="heyy-input" placeholder="AEST / GMT+10" value={form.timezone} onChange={(e)=>setForm({...form,timezone:e.target.value})}/></Field>
+                <Field label="Years of relevant experience"><input className="heyy-input" type="number" min="0" max="60" inputMode="numeric" placeholder="8" value={form.yearsExperience} onChange={(e)=>setForm({...form,yearsExperience:e.target.value})}/></Field>
+                <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder="Illustrator, InDesign, Figma" value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
+                <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Spanish" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
+              </div>
 
               <input ref={resumeRef} type="file" className="hidden" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e)=>chooseResume(e.target.files?.[0])}/>
               <div className="flex min-h-20 items-center justify-between gap-3 rounded-2xl border border-dashed sm:col-span-2 border-[var(--border-strong)] bg-[var(--surface)] p-4 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">

@@ -1,0 +1,13 @@
+--- a/components/public/ExpertsNetworkContent.tsx
++++ b/components/public/ExpertsNetworkContent.tsx
+@@ -150,10 +150,6 @@
+             </div>
+             <div className="p-5 sm:p-8">
+               <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:text-base sm:leading-8">{selected.summary}</p>
+-              <a href="#expert-application" className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--text-primary)] px-5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white xl:hidden">
+-                Apply now <ArrowRight size={14}/>
+-              </a>
+-
+               <details className="group mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] xl:hidden">
+                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-black">
+                   View role details
