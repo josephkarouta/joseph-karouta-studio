@@ -38,6 +38,49 @@ export async function listExpertNetworkPositions() {
   });
 }
 
+
+export async function checkExpertNetworkEmail(request: Request) {
+  try {
+    const email = clean(new URL(request.url).searchParams.get("email")).toLowerCase();
+    if (!validEmail(email)) {
+      return NextResponse.json({ registered: false });
+    }
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      return NextResponse.json({ registered: false, error: "Expert Network applications are not configured." }, { status: 503 });
+    }
+
+    const admin = createClient(url, key, { auth: { persistSession: false } });
+    const [existingApplicationResult, existingProfileResult] = await Promise.all([
+      admin
+        .from("career_applications")
+        .select("id")
+        .eq("application_kind", "expert_network")
+        .eq("email", email)
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("expert_profiles")
+        .select("id")
+        .eq("email", email)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (existingApplicationResult.error) throw existingApplicationResult.error;
+    if (existingProfileResult.error) throw existingProfileResult.error;
+
+    return NextResponse.json({
+      registered: Boolean(existingApplicationResult.data || existingProfileResult.data),
+    });
+  } catch (error) {
+    console.error("Expert Network email check failed:", error);
+    return NextResponse.json({ registered: false }, { status: 500 });
+  }
+}
+
 export async function submitExpertNetworkApplication(request: Request) {
   let uploadedResumePath: string | null = null;
   let cleanupUploadedResume: (() => Promise<void>) | null = null;
@@ -212,7 +255,7 @@ export async function submitExpertNetworkApplication(request: Request) {
 function duplicateExpertNetworkEmailResponse() {
   return NextResponse.json(
     {
-      error: "This email address is already registered for the Heyy Studio Expert Network or already has an application on file. You do not need to apply again. Sign in to your existing Heyy Studio account or contact hello@heyystudio.com if you need help.",
+      error: "This email is already registered with the Heyy Studio Expert Network.",
       code: "expert_network_email_exists",
     },
     { status: 409 },

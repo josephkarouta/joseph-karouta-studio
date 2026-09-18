@@ -34,6 +34,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
   const [verificationCode, setVerificationCode] = useState("");
   const [awaitingVerification, setAwaitingVerification] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [navigating, setNavigating] = useState(false);
   const [resending, setResending] = useState(false);
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
@@ -82,6 +83,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
   }
 
   async function handleEmailSubmit() {
+    let navigatingAway = false;
     setLoading(true);
     resetFeedback();
 
@@ -127,11 +129,13 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
         throw error;
       }
 
+      navigatingAway = true;
+      setNavigating(true);
       window.location.assign(currentNextPath());
     } catch (value) {
       setMessage(value instanceof Error ? value.message : "Authentication failed.");
     } finally {
-      setLoading(false);
+      if (!navigatingAway) setLoading(false);
     }
   }
 
@@ -145,6 +149,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
       return;
     }
 
+    let navigatingAway = false;
     setLoading(true);
     resetFeedback();
 
@@ -169,11 +174,13 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
         // Welcome email is non-blocking; the account is already verified.
       }
 
+      navigatingAway = true;
+      setNavigating(true);
       window.location.assign(currentNextPath());
     } catch (value) {
       setMessage(value instanceof Error ? value.message : "Verification failed.");
     } finally {
-      setLoading(false);
+      if (!navigatingAway) setLoading(false);
     }
   }
 
@@ -202,6 +209,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
   }
 
   const title = mode === "signup" ? "Create your Heyy Studio account" : "Welcome back";
+  const busy = loading || navigating;
   const subtitle = mode === "signup"
     ? "Sign up when you are ready to save your work and start creating."
     : "Sign in to continue to your Heyy Studio workspace.";
@@ -271,9 +279,9 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
                       placeholder="00000000"
                     />
                   </div>
-                  <button type="button" onClick={() => void verifyEmail()} disabled={loading || verificationCode.length !== 8} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--button-primary)] px-4 text-sm font-black text-[var(--button-primary-text)] shadow-[var(--shadow-button)] transition hover:bg-[var(--button-primary-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] disabled:opacity-100">
-                    {loading && <LoaderCircle size={16} className="animate-spin" />}
-                    Verify email
+                  <button type="button" onClick={() => void verifyEmail()} disabled={busy || verificationCode.length !== 8} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--button-primary)] px-4 text-sm font-black text-[var(--button-primary-text)] shadow-[var(--shadow-button)] transition hover:bg-[var(--button-primary-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] disabled:opacity-100">
+                    {busy && <LoaderCircle size={16} className="animate-spin" />}
+                    {navigating ? "Opening workspace…" : loading ? "Verifying…" : "Verify email"}
                   </button>
                   <button type="button" onClick={() => void resendCode()} disabled={resending} className="min-h-11 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 text-xs font-black text-[var(--text-secondary)] transition hover:border-[var(--accent-border)] hover:text-[var(--text-primary)] disabled:opacity-50">
                     {resending ? "Sending…" : "Resend code"}
@@ -292,7 +300,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
                   <div className="mt-7">
                     <OAuthButtons
                       nextPath={currentNextPath()}
-                      disabled={loading}
+                      disabled={busy}
                       onStart={() => { setLoading(true); resetFeedback(); }}
                       onError={(value) => { setMessage(value); setLoading(false); }}
                       onEmail={() => { setEmailMode(true); resetFeedback(); }}
@@ -308,9 +316,19 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
                     )}
                     <input className="heyy-input" type="email" placeholder="Email address" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
                     <input className="heyy-input" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void handleEmailSubmit(); }} autoComplete={mode === "signup" ? "new-password" : "current-password"} />
-                    <button type="button" onClick={() => void handleEmailSubmit()} disabled={loading || !email || !password || (mode === "signup" && !name.trim())} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--button-primary)] px-4 text-sm font-black text-[var(--button-primary-text)] shadow-[var(--shadow-button)] transition hover:bg-[var(--button-primary-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] disabled:opacity-100">
-                      {loading && <LoaderCircle size={16} className="animate-spin" />}
-                      {mode === "signup" ? "Create account with email" : "Sign in with email"}
+                    <button type="button" onClick={() => void handleEmailSubmit()} disabled={busy || !email || !password || (mode === "signup" && !name.trim())} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--button-primary)] px-4 text-sm font-black text-[var(--button-primary-text)] shadow-[var(--shadow-button)] transition hover:bg-[var(--button-primary-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] disabled:opacity-100">
+                      {busy && <LoaderCircle size={16} className="animate-spin" />}
+                      {navigating
+                        ? currentNextPath().startsWith("/admin")
+                          ? "Opening Admin…"
+                          : "Opening workspace…"
+                        : loading
+                          ? mode === "signup"
+                            ? "Creating account…"
+                            : "Signing in…"
+                          : mode === "signup"
+                            ? "Create account with email"
+                            : "Sign in with email"}
                     </button>
                   </div>
                 )}

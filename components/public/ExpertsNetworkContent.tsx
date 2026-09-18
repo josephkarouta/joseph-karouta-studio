@@ -44,8 +44,12 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   const [resume, setResume] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [emailRegistered, setEmailRegistered] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [profileLinkError, setProfileLinkError] = useState(false);
   const [sent, setSent] = useState(false);
   const resumeRef = useRef<HTMLInputElement>(null);
+  const emailCheckRef = useRef(0);
   const source = String(initialSource || "direct").trim().toLowerCase();
 
   useEffect(() => {
@@ -88,11 +92,35 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
     setResume(file);
   }
 
+  async function checkEmailRegistration() {
+    const email = form.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailRegistered(false);
+      return;
+    }
+
+    const checkId = emailCheckRef.current + 1;
+    emailCheckRef.current = checkId;
+    setCheckingEmail(true);
+    try {
+      const response = await fetch(`/api/public/expert-network?mode=email-check&email=${encodeURIComponent(email)}`, { cache: "no-store" });
+      const result = await response.json();
+      if (checkId !== emailCheckRef.current) return;
+      setEmailRegistered(response.ok && Boolean(result.registered));
+    } catch {
+      if (checkId === emailCheckRef.current) setEmailRegistered(false);
+    } finally {
+      if (checkId === emailCheckRef.current) setCheckingEmail(false);
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!selected) return;
+    if (emailRegistered) return;
     if (!resume) { setError("Attach your CV or resume."); return; }
-    if (!form.portfolioUrl.trim() && !form.linkedinUrl.trim()) { setError("Add either a portfolio or LinkedIn profile."); return; }
+    if (!form.portfolioUrl.trim() && !form.linkedinUrl.trim()) { setProfileLinkError(true); setError(""); return; }
+    setProfileLinkError(false);
     if (form.message.trim().length < 30) { setError("Tell us a little about your experience and the projects you enjoy (at least 30 characters)."); return; }
     setSending(true); setError("");
     try {
@@ -103,6 +131,10 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
       body.append("resume", resume, resume.name);
       const response = await fetch("/api/public/expert-network", { method: "POST", body });
       const result = await response.json();
+      if (!response.ok && result.code === "expert_network_email_exists") {
+        setEmailRegistered(true);
+        return;
+      }
       if (!response.ok) throw new Error(result.error || "Application could not be sent.");
       setSent(true);
       window.scrollTo({ top: document.getElementById("expert-application")?.offsetTop || 0, behavior: "smooth" });
@@ -174,11 +206,32 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
               <div className="mb-1 sm:col-span-2 sm:mb-2"><p className="text-[.6rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)] sm:text-[.62rem] sm:tracking-[.17em]">Apply to the Expert Network</p><h3 className="mt-2 text-xl font-black tracking-[-.045em] sm:text-2xl">Your expert profile starts here.</h3><p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">Shortlisted candidates are invited separately. This application does not create an Expert Portal account.</p></div>
               <Field label="Full name *"><input className="heyy-input" required minLength={2} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field>
-              <Field label="Email address *"><input className="heyy-input" type="email" required value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})}/></Field>
+              <Field label="Email address *">
+                <input
+                  className="heyy-input"
+                  type="email"
+                  required
+                  aria-invalid={emailRegistered}
+                  aria-describedby={emailRegistered ? "expert-email-error" : undefined}
+                  style={emailRegistered ? { borderColor: "#ef4444", boxShadow: "0 0 0 4px rgba(239,68,68,.10)" } : undefined}
+                  value={form.email}
+                  onBlur={() => void checkEmailRegistration()}
+                  onChange={(e)=>{
+                    emailCheckRef.current += 1;
+                    setCheckingEmail(false);
+                    setEmailRegistered(false);
+                    setForm({...form,email:e.target.value});
+                  }}
+                />
+                {checkingEmail && <span className="mt-1.5 block text-[.62rem] font-semibold text-[var(--text-muted)]">Checking email…</span>}
+                {emailRegistered && <span id="expert-email-error" className="mt-1.5 block text-[.62rem] font-bold text-red-600">This email is already registered with the Heyy Studio Expert Network.</span>}
+              </Field>
               <Field label="Current city & country *"><input className="heyy-input" required placeholder="Melbourne, Australia" value={form.location} onChange={(e)=>setForm({...form,location:e.target.value})}/></Field>
               <Field label="Current availability *"><HeyySelect value={form.availability} options={AVAILABILITY} placeholder="Select availability" ariaLabel="Current availability" onChange={(value)=>setForm({...form,availability:value})}/></Field>
-              <Field label="Portfolio"><input className="heyy-input" inputMode="url" placeholder="www.yourportfolio.com" value={form.portfolioUrl} onChange={(e)=>setForm({...form,portfolioUrl:e.target.value})}/></Field>
-              <Field label="LinkedIn"><input className="heyy-input" inputMode="url" placeholder="linkedin.com/in/yourname" value={form.linkedinUrl} onChange={(e)=>setForm({...form,linkedinUrl:e.target.value})}/></Field>
+              <div className="sm:col-span-2 -mb-2 flex items-center justify-between gap-2 text-[.61rem] font-black uppercase tracking-[.12em] text-[var(--text-muted)]"><span>Portfolio or LinkedIn *</span><span className="normal-case tracking-normal text-[.58rem] font-semibold">Add at least one</span></div>
+              <Field label="Portfolio"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} style={profileLinkError ? { borderColor: "#ef4444" } : undefined} placeholder="www.yourportfolio.com" value={form.portfolioUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,portfolioUrl:e.target.value});}}/></Field>
+              <Field label="LinkedIn"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} style={profileLinkError ? { borderColor: "#ef4444" } : undefined} placeholder="linkedin.com/in/yourname" value={form.linkedinUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,linkedinUrl:e.target.value});}}/></Field>
+              {profileLinkError && <p className="-mt-2 text-[.62rem] font-bold text-red-600 sm:col-span-2">Add at least one portfolio or LinkedIn link.</p>}
               <Field className="sm:col-span-2" label="Specialties *" hint="Separate with commas"><input className="heyy-input" required placeholder="Brand identity, packaging, typography" value={form.specialties} onChange={(e)=>setForm({...form,specialties:e.target.value})}/></Field>
 
               <details className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] sm:hidden">

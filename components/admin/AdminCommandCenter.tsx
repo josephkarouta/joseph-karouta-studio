@@ -20,6 +20,7 @@ import {
   Inbox,
   Layers3,
   LayoutDashboard,
+  LogOut,
   Mail,
   Megaphone,
   MessageSquare,
@@ -35,6 +36,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
+
+import { useAuth } from "@/components/auth-provider";
 
 import HeyySelect from "@/components/ui/heyy-select";
 import {
@@ -126,7 +129,9 @@ export default function AdminCommandCenter({
   initialTab = "overview",
 }: Props) {
   const router = useRouter();
+  const { signOut } = useAuth();
   const [isRefreshing, startRefresh] = useTransition();
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
   const [search, setSearch] = useState("");
   const [requestStatus, setRequestStatus] = useState("All");
@@ -545,6 +550,17 @@ export default function AdminCommandCenter({
     startRefresh(() => router.refresh());
   }
 
+  async function handleSignOut() {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Admin sign out failed:", error);
+      setIsSigningOut(false);
+    }
+  }
+
   return (
     <main className="heyy-admin-root min-h-screen">
       <style>{ADMIN_STYLES}</style>
@@ -576,6 +592,14 @@ export default function AdminCommandCenter({
           <Link href="/" className="heyy-admin-button heyy-admin-button-primary" target="_blank">
             View website <ExternalLink size={15} />
           </Link>
+          <button
+            type="button"
+            className="heyy-admin-button heyy-admin-button-secondary"
+            onClick={() => void handleSignOut()}
+            disabled={isSigningOut}
+          >
+            <LogOut size={16} /> {isSigningOut ? "Signing out" : "Sign out"}
+          </button>
         </div>
       </header>
 
