@@ -54,9 +54,8 @@ const prelaunchPublicLinks = new Set([
   "/security",
 ]);
 
-function resolvedFooterHref(href: string, prelaunch: boolean) {
-  if (!prelaunch) return href;
-  return prelaunchPublicLinks.has(href) ? href : "/";
+function isFooterLinkActive(href: string, prelaunch: boolean) {
+  return !prelaunch || prelaunchPublicLinks.has(href);
 }
 
 export default function SiteFooter({ prelaunch = false }: { prelaunch?: boolean }) {
@@ -91,15 +90,20 @@ export default function SiteFooter({ prelaunch = false }: { prelaunch?: boolean 
                   {column.title}
                 </p>
                 <div className="mt-3.5 grid gap-2.5 sm:mt-4 sm:gap-2.5">
-                  {column.links.map(([label, href]) => (
-                    <Link
-                      key={label}
-                      href={resolvedFooterHref(href, prelaunch)}
-                      className="text-[0.82rem] font-semibold text-white/58 transition-colors hover:text-violet-300 sm:text-sm"
-                    >
-                      {label}
-                    </Link>
-                  ))}
+                  {column.links.map(([label, href]) => {
+                    const active = isFooterLinkActive(href, prelaunch);
+                    return (
+                      <Link
+                        key={label}
+                        href={active ? href : "#"}
+                        aria-disabled={!active || undefined}
+                        tabIndex={active ? undefined : -1}
+                        className={`text-[0.82rem] font-semibold sm:text-sm ${active ? "text-white/58 transition-colors hover:text-violet-300" : "pointer-events-none cursor-default text-white/25"}`}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             ))}

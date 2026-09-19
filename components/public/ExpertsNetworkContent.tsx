@@ -168,6 +168,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   }
 
   const sections = expertRoleSections(selected);
+  const applicationHints = expertApplicationHints(selected);
   const linkedInUrl = process.env.NEXT_PUBLIC_HEYY_LINKEDIN_URL;
 
   return (
@@ -232,7 +233,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
               <Field label="Portfolio"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} style={profileLinkError ? { borderColor: "#ef4444" } : undefined} placeholder="www.yourportfolio.com" value={form.portfolioUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,portfolioUrl:e.target.value});}}/></Field>
               <Field label="LinkedIn"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} style={profileLinkError ? { borderColor: "#ef4444" } : undefined} placeholder="linkedin.com/in/yourname" value={form.linkedinUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,linkedinUrl:e.target.value});}}/></Field>
               {profileLinkError && <p className="-mt-2 text-[.62rem] font-bold text-red-600 sm:col-span-2">Add at least one portfolio or LinkedIn link.</p>}
-              <Field className="sm:col-span-2" label="Specialties *" hint="Separate with commas"><input className="heyy-input" required placeholder="Brand identity, packaging, typography" value={form.specialties} onChange={(e)=>setForm({...form,specialties:e.target.value})}/></Field>
+              <Field className="sm:col-span-2" label="Specialties *" hint="Separate with commas"><input className="heyy-input" required placeholder={applicationHints.specialties} value={form.specialties} onChange={(e)=>setForm({...form,specialties:e.target.value})}/></Field>
 
               <details className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] sm:hidden">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-black">
@@ -242,7 +243,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
                 <div className="grid gap-4 border-t border-[var(--border)] p-4">
                   <Field label="Time zone"><input className="heyy-input" placeholder="AEST / GMT+10" value={form.timezone} onChange={(e)=>setForm({...form,timezone:e.target.value})}/></Field>
                   <Field label="Years of relevant experience"><input className="heyy-input" type="number" min="0" max="60" inputMode="numeric" placeholder="8" value={form.yearsExperience} onChange={(e)=>setForm({...form,yearsExperience:e.target.value})}/></Field>
-                  <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder="Illustrator, InDesign, Figma" value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
+                  <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder={applicationHints.softwareTools} value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
                   <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Spanish" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
                 </div>
               </details>
@@ -250,7 +251,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
               <div className="hidden sm:contents">
                 <Field label="Time zone"><input className="heyy-input" placeholder="AEST / GMT+10" value={form.timezone} onChange={(e)=>setForm({...form,timezone:e.target.value})}/></Field>
                 <Field label="Years of relevant experience"><input className="heyy-input" type="number" min="0" max="60" inputMode="numeric" placeholder="8" value={form.yearsExperience} onChange={(e)=>setForm({...form,yearsExperience:e.target.value})}/></Field>
-                <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder="Illustrator, InDesign, Figma" value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
+                <Field label="Software / tools" hint="Separate with commas"><input className="heyy-input" placeholder={applicationHints.softwareTools} value={form.softwareTools} onChange={(e)=>setForm({...form,softwareTools:e.target.value})}/></Field>
                 <Field label="Languages" hint="Separate with commas"><input className="heyy-input" placeholder="English, Spanish" value={form.languages} onChange={(e)=>setForm({...form,languages:e.target.value})}/></Field>
               </div>
 
@@ -294,6 +295,32 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
       </div>
     </div>
   );
+}
+
+function expertApplicationHints(position: Position) {
+  switch (expertStudioLabel(position)) {
+    case "Architecture Studio":
+      return {
+        specialties: "Design development, documentation, visualisation",
+        softwareTools: "AutoCAD, Revit, Archicad, SketchUp",
+      };
+    case "Interior Studio":
+      return {
+        specialties: "Space planning, FF&E, lighting, documentation",
+        softwareTools: "AutoCAD, SketchUp, Revit, InDesign",
+      };
+    case "Marketing Studio":
+      return {
+        specialties: "Campaign strategy, content, paid media",
+        softwareTools: "Meta Ads, Google Ads, HubSpot, Canva",
+      };
+    case "Brand Studio":
+    default:
+      return {
+        specialties: "Brand identity, packaging, typography",
+        softwareTools: "Illustrator, InDesign, Figma",
+      };
+  }
 }
 
 function Field({ label, hint, children, className = "" }: { label: string; hint?: string; children: ReactNode; className?: string }) {
