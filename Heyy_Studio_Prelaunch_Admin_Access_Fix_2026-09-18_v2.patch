@@ -1,0 +1,32 @@
+--- a/proxy.ts
++++ b/proxy.ts
+@@ -28,6 +28,16 @@
+   );
+ }
+ 
++function isPrelaunchAdminAccessPath(pathname: string) {
++  return (
++    pathname === "/login" ||
++    pathname.startsWith("/admin") ||
++    pathname.startsWith("/api/admin") ||
++    pathname.startsWith("/auth/") ||
++    pathname.startsWith("/api/auth/")
++  );
++}
++
+ function copyAuthCookies(target: NextResponse, source: NextResponse) {
+   source.cookies.getAll().forEach((cookie) => {
+     const { name, value, ...options } = cookie;
+@@ -44,7 +54,11 @@
+   // Production pre-launch: expose only the Coming Soon home, Expert Network,
+   // its public API and the public legal/trust pages. Beta/live modes keep the
+   // normal application routing.
+-  if (publicMode() === "prelaunch" && !isPrelaunchPublicPath(pathname)) {
++  if (
++    publicMode() === "prelaunch" &&
++    !isPrelaunchPublicPath(pathname) &&
++    !isPrelaunchAdminAccessPath(pathname)
++  ) {
+     const homeUrl = new URL("/", request.url);
+     return NextResponse.redirect(homeUrl);
+   }

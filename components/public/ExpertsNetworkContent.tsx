@@ -47,6 +47,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   const [emailRegistered, setEmailRegistered] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
   const [profileLinkError, setProfileLinkError] = useState(false);
+  const [showMissingRequirements, setShowMissingRequirements] = useState(false);
   const [sent, setSent] = useState(false);
   const resumeRef = useRef<HTMLInputElement>(null);
   const emailCheckRef = useRef(0);
@@ -78,6 +79,24 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
     if (!initialRoleSlug) return null;
     return positions.find((position) => (position.slug || expertRoleSlug(position.title)) === initialRoleSlug) || null;
   }, [initialRoleSlug, positions]);
+
+  const missingRequirements = useMemo(() => {
+    const missing: string[] = [];
+    if (form.name.trim().length < 2) missing.push("Full name");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) missing.push("Valid email address");
+    if (!form.location.trim()) missing.push("Current city & country");
+    if (!form.availability) missing.push("Current availability");
+    if (!form.portfolioUrl.trim() && !form.linkedinUrl.trim()) missing.push("Portfolio or LinkedIn link");
+    if (!form.specialties.trim()) missing.push("Specialties");
+    if (!resume) missing.push("CV / resume");
+    if (form.message.trim().length < 30) missing.push("About your work (at least 30 characters)");
+    if (!form.consent) missing.push("Agreement to the Terms & Privacy Policy");
+    if (emailRegistered) missing.push("Use an email that is not already registered");
+    if (checkingEmail) missing.push("Wait for the email check to finish");
+    return missing;
+  }, [checkingEmail, emailRegistered, form, resume]);
+
+  const canSubmit = missingRequirements.length === 0 && !sending;
 
   function chooseResume(file?: File) {
     if (!file) return;
@@ -117,22 +136,35 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!selected) return;
-    if (emailRegistered) return;
-    if (!resume) { setError("Attach your CV or resume."); return; }
-    if (!form.portfolioUrl.trim() && !form.linkedinUrl.trim()) { setProfileLinkError(true); setError(""); return; }
+
+    if (missingRequirements.length) {
+      setShowMissingRequirements(true);
+      setProfileLinkError(!form.portfolioUrl.trim() && !form.linkedinUrl.trim());
+      setError("");
+      return;
+    }
+
+    const resumeFile = resume;
+    if (!resumeFile) {
+      setShowMissingRequirements(true);
+      setError("");
+      return;
+    }
+
+    setShowMissingRequirements(false);
     setProfileLinkError(false);
-    if (form.message.trim().length < 30) { setError("Tell us a little about your experience and the projects you enjoy (at least 30 characters)."); return; }
     setSending(true); setError("");
     try {
       const body = new FormData();
       Object.entries(form).forEach(([key, value]) => body.append(key, String(value)));
       body.append("positionId", selected.id);
       body.append("source", source || "direct");
-      body.append("resume", resume, resume.name);
+      body.append("resume", resumeFile, resumeFile.name);
       const response = await fetch("/api/public/expert-network", { method: "POST", body });
       const result = await response.json();
       if (!response.ok && result.code === "expert_network_email_exists") {
         setEmailRegistered(true);
+        setShowMissingRequirements(true);
         return;
       }
       if (!response.ok) throw new Error(result.error || "Application could not be sent.");
@@ -204,7 +236,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
 
         <GlassCard id="expert-application" className="min-w-0 scroll-mt-24 p-5 sm:p-7">
           {sent ? <div className="py-8 text-center"><CheckCircle2 size={42} className="mx-auto text-emerald-500"/><h3 className="mt-4 text-2xl font-black">Application received</h3><p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Thanks, {form.name.split(/\s+/)[0] || "there"}. Your application is now in the Heyy Studio Expert Network review queue.</p><p className="mt-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">If you’re shortlisted, Heyy Studio will contact you directly. You do not need to apply again for the same opportunity.</p>{linkedInUrl && <a href={linkedInUrl} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0a66c2] px-4 py-2.5 text-xs font-black text-white">Follow Heyy Studio on LinkedIn <ExternalLink size={13}/></a>}</div> : (
-            <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+            <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2">
               <div className="mb-1 sm:col-span-2 sm:mb-2"><p className="text-[.6rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)] sm:text-[.62rem] sm:tracking-[.17em]">Apply to the Expert Network</p><h3 className="mt-2 text-xl font-black tracking-[-.045em] sm:text-2xl">Your expert profile starts here.</h3><p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">Shortlisted candidates are invited separately. This application does not create an Expert Portal account.</p></div>
               <Field label="Full name *"><input className="heyy-input" required minLength={2} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field>
               <Field label="Email address *">
@@ -288,7 +320,33 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
               </div>
               {source !== "direct" && <p className="text-[.62rem] sm:col-span-2 font-bold text-[var(--text-muted)]">Application source: {source}</p>}
               {error&&<p className="rounded-xl bg-red-500/10 sm:col-span-2 px-3 py-2 text-xs font-bold text-red-600">{error}</p>}
-              <div className="sm:col-span-2"><Button type="submit" className="w-full" disabled={sending || !form.consent}>{sending?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>}Submit Expert Network application</Button></div>
+              {showMissingRequirements && missingRequirements.length > 0 && (
+                <div className="rounded-2xl border border-red-500/25 bg-red-500/[.07] px-4 py-3 sm:col-span-2" role="alert" aria-live="polite">
+                  <p className="text-xs font-black text-red-600">Complete {missingRequirements.length === 1 ? "this required item" : `these ${missingRequirements.length} required items`} before submitting:</p>
+                  <ul className="mt-2 grid gap-1.5 text-[.7rem] font-semibold leading-5 text-[var(--text-secondary)] sm:grid-cols-2">
+                    {missingRequirements.map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <span className="mt-[.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" aria-hidden="true" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="sm:col-span-2">
+                <Button
+                  type="submit"
+                  className={`w-full ${canSubmit ? "" : "opacity-[.55]"}`}
+                  disabled={sending}
+                  aria-disabled={!canSubmit}
+                  title={!canSubmit ? "Click to see what is still required" : undefined}
+                >
+                  {sending?<Loader2 size={15} className="animate-spin"/>:<Send size={15}/>}Submit Expert Network application
+                </Button>
+                {!canSubmit && !sending && !showMissingRequirements && (
+                  <p className="mt-2 text-center text-[.66rem] font-semibold text-[var(--text-muted)]">Complete the required fields to submit. You can click the button to see what is missing.</p>
+                )}
+              </div>
             </form>
           )}
         </GlassCard>

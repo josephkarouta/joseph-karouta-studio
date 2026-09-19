@@ -2,6 +2,25 @@ import Image from "next/image";
 import Link from "next/link";
 import styles from "./PrelaunchHome.module.css";
 
+
+function LinkedInIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12ZM7.12 20.45H3.56V9h3.56v11.45Z" />
+    </svg>
+  );
+}
+
+function InstagramIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const expertRoles = [
   "Brand & Graphic Design",
   "Marketing Creative",
@@ -76,6 +95,14 @@ export default function PrelaunchHome() {
       </section>
 
       <footer className={styles.footer}>
+        <div className={styles.socials} aria-label="Heyy Studio social media">
+          <a href="https://www.linkedin.com/company/heyy-studio-ai/" target="_blank" rel="noreferrer" aria-label="Heyy Studio on LinkedIn">
+            <LinkedInIcon size={15} />
+          </a>
+          <a href="https://www.instagram.com/heyy_studio_/" target="_blank" rel="noreferrer" aria-label="Heyy Studio on Instagram">
+            <InstagramIcon size={15} />
+          </a>
+        </div>
         <span>Melbourne, Australia 🇦🇺</span>
         <span aria-hidden="true">·</span>
         <span>© 2026 Heyy Studio. All rights reserved.</span>

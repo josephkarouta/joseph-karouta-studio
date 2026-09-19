@@ -95,6 +95,10 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
   }, [pathname]);
 
   useEffect(() => {
+    if (prelaunch) setMobileOpen(false);
+  }, [prelaunch]);
+
+  useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
       if (!accountRef.current?.contains(event.target as Node)) setMenuOpen(false);
     }
@@ -277,16 +281,22 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
 
           <button
             type="button"
-            onClick={() => setMobileOpen((value) => !value)}
-            className="grid h-10 w-10 cursor-pointer place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-primary)] lg:hidden"
-            aria-label="Toggle navigation"
+            onClick={() => {
+              if (!prelaunch) setMobileOpen((value) => !value);
+            }}
+            disabled={prelaunch}
+            aria-disabled={prelaunch || undefined}
+            className={`grid h-10 w-10 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-primary)] lg:hidden ${
+              prelaunch ? "cursor-default opacity-35" : "cursor-pointer"
+            }`}
+            aria-label={prelaunch ? "Navigation unavailable during pre-launch" : "Toggle navigation"}
           >
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       </div>
 
-      {mobileOpen && (
+      {!prelaunch && mobileOpen && (
         <div className="max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] shadow-xl lg:hidden">
           <div className="px-4 py-5">
             <section>

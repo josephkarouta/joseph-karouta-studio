@@ -3,6 +3,25 @@
 import Link from "next/link";
 import HeyyLogo from "@/components/brand/HeyyLogo";
 
+
+function LinkedInIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12ZM7.12 20.45H3.56V9h3.56v11.45Z" />
+    </svg>
+  );
+}
+
+function InstagramIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 const columns = [
   {
     title: "Create",
@@ -77,10 +96,30 @@ export default function SiteFooter({ prelaunch = false }: { prelaunch?: boolean 
             </div>
             <a
               href="mailto:hello@heyystudio.com"
-              className="mt-4 block w-fit text-sm font-black text-violet-300 transition hover:text-white"
+              className="mt-4 block w-fit text-sm font-black text-[#a78bfa] transition-colors hover:text-white"
             >
               hello@heyystudio.com
             </a>
+            <div className="mt-4 flex items-center gap-2" aria-label="Heyy Studio social media">
+              <a
+                href="https://www.linkedin.com/company/heyy-studio-ai/"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Heyy Studio on LinkedIn"
+                className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-white/12 bg-white/[.04] text-white/70 transition-colors hover:border-[#8b5cf6]/65 hover:bg-[#8b5cf6] hover:text-white"
+              >
+                <LinkedInIcon size={16} />
+              </a>
+              <a
+                href="https://www.instagram.com/heyy_studio_/"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Heyy Studio on Instagram"
+                className="grid h-9 w-9 cursor-pointer place-items-center rounded-full border border-white/12 bg-white/[.04] text-white/70 transition-colors hover:border-[#8b5cf6]/65 hover:bg-[#8b5cf6] hover:text-white"
+              >
+                <InstagramIcon size={16} />
+              </a>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-x-8 gap-y-8 lg:contents">

@@ -1,0 +1,33 @@
+--- a/proxy.ts
++++ b/proxy.ts
+@@
+ function isPrelaunchPublicPath(pathname: string) {
+   if (pathname === "/") return true;
+   if (pathname.startsWith("/api/public/expert-network")) return true;
+
+   return PRELAUNCH_PUBLIC_ROUTES.some(
+     (route) => route !== "/" && (pathname === route || pathname.startsWith(`${route}/`)),
+   );
+ }
+
++function isPrelaunchAdminAccessPath(pathname: string) {
++  return (
++    pathname === "/login" ||
++    pathname.startsWith("/admin") ||
++    pathname.startsWith("/api/admin") ||
++    pathname.startsWith("/auth/") ||
++    pathname.startsWith("/api/auth/")
++  );
++}
++
+ function copyAuthCookies(target: NextResponse, source: NextResponse) {
+@@
+-  if (publicMode() === "prelaunch" && !isPrelaunchPublicPath(pathname)) {
++  if (
++    publicMode() === "prelaunch" &&
++    !isPrelaunchPublicPath(pathname) &&
++    !isPrelaunchAdminAccessPath(pathname)
++  ) {
+     const homeUrl = new URL("/", request.url);
+     return NextResponse.redirect(homeUrl);
+   }

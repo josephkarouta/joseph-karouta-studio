@@ -79,21 +79,42 @@ export function baseEmail({
   <head>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta name="color-scheme" content="light only" />
-    <meta name="supported-color-schemes" content="light" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
     <title>${escapeHtml(title)}</title>
     <style>
-      :root { color-scheme: light only; supported-color-schemes: light; }
+      :root { color-scheme: light dark; supported-color-schemes: light dark; }
       .heyy-email-bg { background-color:#f6f4fa !important; }
-      .heyy-email-card, .heyy-email-brand, .heyy-email-body { background-color:#ffffff !important; }
+      .heyy-email-card { background-color:#ffffff !important; }
+      .heyy-email-brand { background-color:#17131f !important; }
+      .heyy-email-body { background-color:#ffffff !important; }
       .heyy-email-copy { color:#555062 !important; }
       .heyy-email-strong { color:#17131f !important; }
+      .heyy-email-detail { background-color:#fbfafc !important; }
+      .heyy-email-detail-label { color:#81798b !important; }
+      .heyy-email-detail-value { color:#211a29 !important; }
+      .heyy-email-note { color:#51495c !important; }
       @media (prefers-color-scheme: dark) {
-        .heyy-email-bg { background-color:#f6f4fa !important; }
-        .heyy-email-card, .heyy-email-brand, .heyy-email-body { background-color:#ffffff !important; }
-        .heyy-email-copy { color:#555062 !important; }
-        .heyy-email-strong { color:#17131f !important; }
+        body, .heyy-email-bg { background-color:#120819 !important; }
+        .heyy-email-card { background-color:#211b27 !important; border-color:#3a3043 !important; box-shadow:none !important; }
+        .heyy-email-brand { background-color:#17131f !important; border-bottom-color:#33283c !important; }
+        .heyy-email-body { background-color:#211b27 !important; }
+        .heyy-email-copy { color:#d5cfdb !important; }
+        .heyy-email-strong { color:#ffffff !important; }
+        .heyy-email-detail { background-color:#18141d !important; border-color:#3a3043 !important; }
+        .heyy-email-detail-label { color:#aaa1b6 !important; border-bottom-color:#332b39 !important; }
+        .heyy-email-detail-value { color:#ffffff !important; border-bottom-color:#332b39 !important; }
+        .heyy-email-note { color:#e5dff0 !important; }
+        .heyy-email-muted { color:#aaa1b6 !important; }
       }
+      [data-ogsc] .heyy-email-bg { background-color:#120819 !important; }
+      [data-ogsc] .heyy-email-card { background-color:#211b27 !important; border-color:#3a3043 !important; }
+      [data-ogsc] .heyy-email-brand { background-color:#17131f !important; }
+      [data-ogsc] .heyy-email-body { background-color:#211b27 !important; }
+      [data-ogsc] .heyy-email-copy { color:#d5cfdb !important; }
+      [data-ogsc] .heyy-email-detail { background-color:#18141d !important; border-color:#3a3043 !important; }
+      [data-ogsc] .heyy-email-detail-label { color:#aaa1b6 !important; }
+      [data-ogsc] .heyy-email-detail-value { color:#ffffff !important; }
       @media only screen and (max-width: 620px) {
         .heyy-email-wrap { padding:16px 8px !important; }
         .heyy-email-pad { padding-left:20px !important; padding-right:20px !important; }
@@ -115,13 +136,13 @@ export function baseEmail({
         <td align="center" class="heyy-email-wrap" style="padding:28px 12px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" class="heyy-email-card" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #e5e0ec;border-radius:24px;overflow:hidden;box-shadow:0 18px 55px rgba(39,24,64,.10);">
             <tr>
-              <td bgcolor="#ffffff" class="heyy-email-brand heyy-email-pad" style="padding:20px 30px 18px;background:#ffffff;border-top:4px solid ${theme.accent};border-bottom:1px solid #ece8f0;">
+              <td bgcolor="#17131f" class="heyy-email-brand heyy-email-pad" style="padding:20px 30px 18px;background:#17131f;border-top:4px solid ${theme.accent};border-bottom:1px solid #33283c;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="vertical-align:middle;">
-                      <img src="${escapeAttribute(emailLogoUrl)}" alt="Heyy Studio" width="148" class="heyy-email-brand-logo" style="display:block;width:148px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;background:#ffffff;" />
+                      <img src="${escapeAttribute(emailLogoUrl)}" alt="Heyy Studio" width="148" class="heyy-email-brand-logo" style="display:block;width:148px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;background:#17131f;" />
                     </td>
-                    <td align="right" class="heyy-email-brand-label" style="color:${theme.accentDark};font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;vertical-align:middle;">
+                    <td align="right" class="heyy-email-brand-label" style="color:${theme.accent};font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;vertical-align:middle;">
                       ${escapeHtml(recipientLabel)}
                     </td>
                   </tr>
@@ -155,7 +176,7 @@ export function baseEmail({
               <td bgcolor="#ffffff" class="heyy-email-body heyy-email-pad" style="padding:12px 30px 0;background:#ffffff;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${theme.soft}" style="background:${theme.soft};border:1px solid ${theme.accent}33;border-radius:16px;">
                   <tr>
-                    <td style="padding:15px 17px;color:#51495c;font-size:13px;line-height:1.6;font-weight:600;">
+                    <td class="heyy-email-note" style="padding:15px 17px;color:#51495c;font-size:13px;line-height:1.6;font-weight:600;">
                       ${escapeHtml(note)}
                     </td>
                   </tr>
@@ -168,7 +189,7 @@ export function baseEmail({
                 <a href="${escapeAttribute(destination)}" style="display:inline-block;background:${theme.accent};color:#ffffff;text-decoration:none;font-size:14px;font-weight:900;padding:15px 22px;border-radius:999px;box-shadow:0 10px 24px ${theme.accent}33;">
                   ${escapeHtml(ctaLabel)}
                 </a>
-                <p class="heyy-email-copy" style="margin:22px 0 0;color:#8a8394;font-size:12px;line-height:1.65;">
+                <p class="heyy-email-copy heyy-email-muted" style="margin:22px 0 0;color:#8a8394;font-size:12px;line-height:1.65;">
                   ${escapeHtml(supportingCopy)}
                 </p>
               </td>
@@ -210,13 +231,13 @@ function renderDetails(
   const rows = details.map((detail, index) => `
     <tr>
       <td width="42%" class="heyy-email-detail-label" style="width:42%;padding:14px 16px;${index < details.length - 1 ? "border-bottom:1px solid #ebe7ef;" : ""}color:#81798b;font-size:12px;font-weight:700;vertical-align:top;">${escapeHtml(detail.label)}</td>
-      <td align="right" style="padding:14px 16px;${index < details.length - 1 ? "border-bottom:1px solid #ebe7ef;" : ""}color:#211a29;font-size:13px;font-weight:800;line-height:1.5;vertical-align:top;word-break:break-word;">${escapeHtml(String(detail.value ?? ""))}</td>
+      <td align="right" class="heyy-email-detail-value" style="padding:14px 16px;${index < details.length - 1 ? "border-bottom:1px solid #ebe7ef;" : ""}color:#211a29;font-size:13px;font-weight:800;line-height:1.5;vertical-align:top;word-break:break-word;">${escapeHtml(String(detail.value ?? ""))}</td>
     </tr>`).join("");
 
   return `
     <tr>
       <td bgcolor="#ffffff" class="heyy-email-body heyy-email-pad" style="padding:14px 30px 0;background:#ffffff;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#fbfafc" style="background:#fbfafc;border:1px solid #e8e3ed;border-radius:18px;overflow:hidden;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#fbfafc" class="heyy-email-detail" style="background:#fbfafc;border:1px solid #e8e3ed;border-radius:18px;overflow:hidden;">
           <tr>
             <td colspan="2" bgcolor="${theme.soft}" style="padding:12px 16px;background:${theme.soft};border-bottom:1px solid ${theme.accent}24;color:${theme.accent};font-size:10px;font-weight:900;letter-spacing:1.4px;text-transform:uppercase;">${escapeHtml(detailsTitle)}</td>
           </tr>
@@ -235,7 +256,7 @@ function getEmailLogoUrl(siteUrl: string) {
   const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(siteUrl);
   const useBetaAsset = process.env.NODE_ENV !== "production" || isLocal;
   const assetBase = useBetaAsset ? "https://heyystudiobeta.netlify.app" : siteUrl;
-  return `${assetBase}/brand/heyy/heyy-full-colour-dark-export.png?v=20260909-0838`;
+  return `${assetBase}/brand/heyy/heyy-full-colour-light-export.png?v=20260919-2355`;
 }
 
 function normaliseStudio(studio?: string | null) {
