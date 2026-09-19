@@ -17,8 +17,8 @@ const NAV_TONES: Record<StudioTone, Record<string, string>> = {
     "--studio-nav-soft": "var(--accent-soft)",
   },
   brand: {
-    "--studio-nav-accent": "#a13df0",
-    "--studio-nav-strong": "#7d20c4",
+    "--studio-nav-accent": "#8b5cf6",
+    "--studio-nav-strong": "#8b5cf6",
     "--studio-nav-soft": "rgba(161,61,240,.12)",
   },
   architecture: {

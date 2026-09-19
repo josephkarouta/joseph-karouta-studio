@@ -12,7 +12,7 @@ export default function TextToImagePage() {
       eyebrow="AI image generation"
       description="Create a high-quality visual from a clear prompt, save it as a project asset and see the credit cost before generation."
       iconName="image"
-      accent="#7c3aed"
+      accent="#8b5cf6"
       soft="rgba(124,58,237,.12)"
       imageSrc="/tool-heroes/text-to-image-hero.webp"
       imagePosition="center 54%"

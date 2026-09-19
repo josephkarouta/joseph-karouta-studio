@@ -476,7 +476,7 @@ export default function DigitalAdaptationsWorkbench() {
           {loading && activeJobId && (
             <div className="mt-5 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4">
               <div className="flex items-center gap-3"><Loader2 size={17} className="animate-spin text-[var(--accent-strong)]"/><div><p className="text-sm font-black">{progress?.message || "Your adaptations are running"}</p><p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">You can safely leave or refresh this page. The job will continue in the background.</p></div></div>
-              {Number(progress?.percent) > 0 && <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#6f2dff,#ef3fb4)] transition-[width]" style={{ width: `${Math.min(100, Number(progress?.percent) || 0)}%` }}/></div>}
+              {Number(progress?.percent) > 0 && <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface)]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#8b5cf6,#ef3fb4)] transition-[width]" style={{ width: `${Math.min(100, Number(progress?.percent) || 0)}%` }}/></div>}
             </div>
           )}
 

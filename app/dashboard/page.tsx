@@ -119,7 +119,7 @@ const studioIcons: Record<ProjectItem["studio"], LucideIcon> = {
 };
 
 const studioAccent: Record<ProjectItem["studio"], string> = {
-  brand: "#a23ce0",
+  brand: "#8b5cf6",
   architecture: "#1676e8",
   interior: "#d06b14",
   marketing: "#eb3d87",
@@ -403,7 +403,7 @@ export default function DashboardPage() {
           <GlassCard className="p-5 sm:p-6">
             <Eyebrow>Credit overview</Eyebrow>
             <div className="mt-3 flex items-end justify-between gap-4"><div><p className="text-5xl font-black tracking-[-.06em]">{credits.available}</p><p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">credits available</p></div><CreditPill credits={plan} label="plan" /></div>
-            <div className="mt-6 h-2 overflow-hidden rounded-full bg-[var(--surface-hover)]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#6f2dff,#ef3fb4)]" style={{ width: `${Math.min(100, credits.monthly ? (credits.available / credits.monthly) * 100 : 0)}%` }} /></div>
+            <div className="mt-6 h-2 overflow-hidden rounded-full bg-[var(--surface-hover)]"><div className="h-full rounded-full bg-[linear-gradient(90deg,#8b5cf6,#ef3fb4)]" style={{ width: `${Math.min(100, credits.monthly ? (credits.available / credits.monthly) * 100 : 0)}%` }} /></div>
             <div className="mt-5 flex flex-wrap gap-2"><ButtonLink href="/credits" variant="secondary" size="sm">Manage credits</ButtonLink><ButtonLink href="/billing" variant="ghost" size="sm">Manage plan</ButtonLink></div>
           </GlassCard>
 
@@ -426,7 +426,7 @@ function ContinueProject({ project }: { project: ProjectItem }) {
   return (
     <Link href={project.href} className="group mt-5 block overflow-hidden rounded-[1.45rem] border p-5 transition sm:p-6" style={{ borderColor: `${accent}36`, background: `linear-gradient(120deg,var(--surface-strong),${accent}12)` }}>
       <div className="flex items-start gap-4"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl" style={{ background: `${accent}16`, color: accent }}><Icon size={20}/></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><StatusPill tone="info">{capitalize(project.studio)}</StatusPill><StatusPill>{project.status || "Active"}</StatusPill></div><h3 className="mt-3 truncate text-2xl font-black tracking-[-.045em]">{project.name}</h3><p className="mt-1 truncate text-xs font-semibold text-[var(--text-muted)]">{project.subtitle}</p></div><ArrowRight size={19} className="mt-1 text-[var(--text-muted)] transition group-hover:translate-x-1 group-hover:text-[var(--accent-strong)]"/></div>
-      <div className="mt-6 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--surface-hover)]"><div className="h-full rounded-full" style={{ width: `${project.progress || 0}%`, background: `linear-gradient(90deg,${accent},#6f2dff)` }}/></div><span className="text-[.65rem] font-black text-[var(--text-muted)]">{project.progress || 0}%</span></div>
+      <div className="mt-6 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--surface-hover)]"><div className="h-full rounded-full" style={{ width: `${project.progress || 0}%`, background: `linear-gradient(90deg,${accent},#8b5cf6)` }}/></div><span className="text-[.65rem] font-black text-[var(--text-muted)]">{project.progress || 0}%</span></div>
       <p className="mt-3 text-[.65rem] font-bold text-[var(--text-muted)]">Updated {formatDate(project.updatedAt)}</p>
     </Link>
   );
@@ -527,7 +527,7 @@ function DashboardCardSkeleton({ className = "" }: { className?: string }) {
 }
 
 function DashboardLoading() {
-  return <main className="heyy-page flex min-h-[calc(100vh-var(--header-height))] items-center justify-center p-6"><GlassCard className="w-full max-w-xl p-8"><div className="flex items-center gap-4"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(135deg,#6f2dff,#ef3fb4)] text-white"><Sparkles size={19}/></span><div><Eyebrow>Heyy Studio Workspace</Eyebrow><h1 className="mt-2 text-2xl font-black">Preparing your dashboard</h1></div></div><div className="mt-7 grid gap-3 sm:grid-cols-2">{[1,2,3,4].map((item)=><span key={item} className="h-24 animate-pulse rounded-2xl bg-[var(--surface-hover)]"/>)}</div></GlassCard></main>;
+  return <main className="heyy-page flex min-h-[calc(100vh-var(--header-height))] items-center justify-center p-6"><GlassCard className="w-full max-w-xl p-8"><div className="flex items-center gap-4"><span className="grid h-12 w-12 place-items-center rounded-2xl bg-[linear-gradient(135deg,#8b5cf6,#ef3fb4)] text-white"><Sparkles size={19}/></span><div><Eyebrow>Heyy Studio Workspace</Eyebrow><h1 className="mt-2 text-2xl font-black">Preparing your dashboard</h1></div></div><div className="mt-7 grid gap-3 sm:grid-cols-2">{[1,2,3,4].map((item)=><span key={item} className="h-24 animate-pulse rounded-2xl bg-[var(--surface-hover)]"/>)}</div></GlassCard></main>;
 }
 
 

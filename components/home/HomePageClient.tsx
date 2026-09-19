@@ -96,59 +96,62 @@ export default function HomePageClient() {
   const { user, loading: accountLoading, plan: currentPlan, credits } = useAuth();
   const currentPlanId = String(currentPlan || "free").toLowerCase();
   return (
-    <main className="heyy-page home-page overflow-hidden">
-      <SiteHeader />
+    <main className="heyy-page home-page overflow-x-clip">
+      <SiteHeader heroOverlay />
 
-      <section className="home-hero relative isolate overflow-hidden pt-[var(--header-height)]">
-        <div className="home-grid absolute inset-0 -z-20 opacity-60" />
-        <div className="absolute -left-52 top-10 -z-10 h-[540px] w-[540px] rounded-full bg-fuchsia-400/14 blur-[120px]" />
-        <div className="absolute -right-52 top-4 -z-10 h-[620px] w-[620px] rounded-full bg-blue-400/12 blur-[130px]" />
-        <div className="absolute bottom-[-18rem] left-[38%] -z-10 h-[520px] w-[520px] rounded-full bg-violet-500/12 blur-[120px]" />
-<video
-  autoPlay
-  loop
-  muted
-  playsInline
-  preload="metadata"
-  poster="/hero-video-poster.jpg"
-  aria-hidden="true"
-  className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover object-center"
->
-  <source src="/hero-video-web.mp4" type="video/mp4" />
-</video>
-        <div className="hero-image-overlay pointer-events-none absolute inset-0 z-[1]" />
+      <section className="home-hero relative isolate h-[200svh]">
+        <div className="sticky top-0 h-[100svh] overflow-hidden">
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+            poster="/hero-video-poster.jpg"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover object-center"
+          >
+            <source src="/hero-video-web.mp4" type="video/mp4" />
+          </video>
+          <div className="hero-image-overlay pointer-events-none absolute inset-0 z-[1]" />
+        </div>
 
-        <PageContainer className="relative z-10 flex min-h-[600px] items-end py-10 sm:min-h-[660px] sm:py-16 lg:min-h-[680px] lg:items-center lg:py-20">
-          <div className="relative z-10 w-full max-w-[1320px] mx-auto">
-            <div className="max-w-[650px]">
-            <p className="text-[0.72rem] font-black uppercase tracking-[0.2em] text-white/80 lg:text-[var(--accent-strong)]">
+        <PageContainer className="absolute inset-x-0 top-0 z-10 flex min-h-[100svh] items-center justify-center pb-12 pt-[calc(var(--header-height)+2rem)] sm:pb-16 sm:pt-[calc(var(--header-height)+2.5rem)]">
+          <div className="mx-auto w-full max-w-[760px] text-center">
+            <p className="text-[0.66rem] font-black uppercase tracking-[0.22em] text-white/75 sm:text-[0.7rem]">
               Create with AI. Build with Experts.
             </p>
 
-            <h1 className="mt-4 max-w-[680px] text-[2.65rem] font-black leading-[0.98] tracking-[-0.045em] text-white drop-shadow-[0_8px_28px_rgba(0,0,0,0.28)] sm:mt-6 sm:text-[clamp(3.15rem,5.4vw,5.65rem)] sm:leading-[1.02] lg:text-[var(--text-primary)] lg:drop-shadow-none">
+            <h1 className="mt-4 text-[2.55rem] font-black leading-[0.98] tracking-[-0.05em] text-white drop-shadow-[0_8px_28px_rgba(0,0,0,0.34)] sm:mt-5 sm:text-[clamp(3rem,5vw,4.6rem)] sm:leading-[1.01]">
               <span className="block">Turn your idea</span>
               <span className="home-spectrum-text block">into finished work.</span>
             </h1>
 
-            <p className="mt-5 max-w-2xl text-base font-semibold leading-7 text-white/80 sm:mt-8 sm:text-lg sm:leading-8 lg:text-[var(--text-secondary)]">
+            <p className="mx-auto mt-4 max-w-[580px] text-[0.95rem] font-semibold leading-6 text-white/78 sm:mt-5 sm:text-base sm:leading-7">
               Play with ideas, shape what you love, and call in an expert when you are ready to finish it.
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-2.5 sm:mt-9 sm:gap-3">
-              <ButtonLink href="#create" size="lg" className="min-w-[154px]">
-                Start creating <ArrowRight size={16} />
+            <div className="mt-6 flex flex-wrap justify-center gap-2.5 sm:mt-7">
+              <ButtonLink
+                href="#create"
+                size="md"
+                className="hero-primary-cta group min-w-[142px] !border-white/15 !bg-white shadow-[0_12px_34px_rgba(0,0,0,.25)] transition-[background-color,border-color,box-shadow] hover:!border-[#8b5cf6] hover:!bg-[#8b5cf6] hover:shadow-[0_14px_36px_rgba(139,92,246,.30)]"
+              >
+                <span
+                  className="hero-primary-cta-label inline-flex items-center gap-2"
+                >
+                  Start creating <ArrowRight size={15} />
+                </span>
               </ButtonLink>
-              <ButtonLink href="#tools" variant="secondary" size="lg" className="min-w-[154px]">
+              <ButtonLink href="#tools" variant="secondary" size="md" className="min-w-[142px] !border-white/20 !bg-black/20 !text-white backdrop-blur-md hover:!border-white/35 hover:!bg-white/10 hover:!text-white">
                 Use a quick tool
               </ButtonLink>
             </div>
           </div>
-          </div>
-
         </PageContainer>
       </section>
 
-      <div className="home-content-field relative isolate overflow-hidden">
+      <div className="home-content-field relative isolate z-[60] -mt-[100svh] overflow-hidden">
       <section id="create" className="scroll-mt-[var(--header-height)] home-studios-section relative pb-4 pt-14 sm:pb-6 sm:pt-16 lg:pb-8 lg:pt-16">
         <PageContainer>
           <div className="mx-auto w-full max-w-[1320px]">
@@ -301,7 +304,7 @@ export default function HomePageClient() {
                     <p className="mt-0.5 text-[0.68rem] font-semibold text-white/65 sm:text-xs">Tell Heyy what you want to make.</p>
                   </div>
                   <div className="mt-3 shrink-0 sm:mt-0">
-                    <OpenAssistantButton className="hover:!border-white/80 hover:!bg-white hover:!text-[#2b0b56]" />
+                    <OpenAssistantButton className="home-workflow-ai-button !border-white/30 !bg-white shadow-sm hover:!border-[#7447e8] hover:!bg-[#7447e8] hover:shadow-[0_12px_30px_rgba(36,18,62,.24)]" />
                   </div>
                 </div>
               </div>
@@ -410,22 +413,45 @@ export default function HomePageClient() {
 
         .hero-image-overlay {
           background:
-            linear-gradient(
-              180deg,
-              rgba(8, 6, 20, 0.10) 0%,
-              rgba(8, 6, 20, 0.20) 34%,
-              rgba(8, 6, 20, 0.56) 66%,
-              rgba(8, 6, 20, 0.88) 100%
-            );
+            linear-gradient(rgba(15, 8, 28, 0.32), rgba(15, 8, 28, 0.32)),
+            radial-gradient(circle at 50% 44%, rgba(10, 7, 22, 0.06) 0%, rgba(10, 7, 22, 0.16) 44%, rgba(8, 6, 18, 0.42) 100%),
+            linear-gradient(180deg, rgba(7, 5, 16, 0.24) 0%, rgba(7, 5, 16, 0.12) 38%, rgba(7, 5, 16, 0.28) 68%, rgba(7, 5, 16, 0.62) 100%);
         }
 
-        .home-hero > video {
-          filter: brightness(0.84) saturate(0.96);
+        .home-hero video {
+          filter: brightness(0.76) saturate(0.98) contrast(1.03);
+        }
+
+        .home-hero .hero-primary-cta {
+          color: #17131f !important;
+        }
+
+        .home-hero .hero-primary-cta-label {
+          color: #17131f !important;
+          -webkit-text-fill-color: #17131f !important;
+          transition: color 180ms ease;
+        }
+
+        .home-hero .hero-primary-cta:hover .hero-primary-cta-label {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+        }
+
+        .home-workflow-ai-button,
+        .home-workflow-ai-button * {
+          color: #2b0b56 !important;
+          -webkit-text-fill-color: #2b0b56 !important;
+        }
+
+        .home-workflow-ai-button:hover,
+        .home-workflow-ai-button:hover * {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
         }
 
         .home-content-field {
           background:
-            radial-gradient(circle at 10% 8%, rgba(111, 45, 255, 0.12), transparent 24%),
+            radial-gradient(circle at 10% 8%, rgba(139, 92, 246, 0.12), transparent 24%),
             radial-gradient(circle at 90% 31%, rgba(239, 63, 180, 0.075), transparent 22%),
             radial-gradient(circle at 26% 69%, rgba(91, 140, 255, 0.075), transparent 27%),
             linear-gradient(180deg, color-mix(in srgb, var(--background) 84%, #eee6ff) 0%, color-mix(in srgb, var(--background) 90%, #f6efff) 46%, color-mix(in srgb, var(--background) 86%, #eee7ff) 100%);
@@ -601,7 +627,7 @@ export default function HomePageClient() {
           background:
             radial-gradient(circle at 92% 8%, rgba(255,255,255,.14), transparent 24%),
             radial-gradient(circle at 6% 100%, rgba(235,63,180,.32), transparent 35%),
-            linear-gradient(145deg, #2b0b56 0%, #5f22c7 52%, #8b2ee4 100%);
+            linear-gradient(145deg, #2b0b56 0%, #8b5cf6 52%, #8b5cf6 100%);
         }
 
         .home-workflow-intro::before {
@@ -696,37 +722,6 @@ export default function HomePageClient() {
           to { transform: translate3d(8vw, -5vh, 0) scale(1.08); }
         }
 
-        @media (min-width: 1024px) {
-          .hero-image-overlay {
-            background: linear-gradient(
-              90deg,
-              rgba(255, 255, 255, 0.97) 0%,
-              rgba(255, 255, 255, 0.88) 28%,
-              rgba(255, 255, 255, 0.48) 45%,
-              rgba(255, 255, 255, 0.08) 61%,
-              rgba(255, 255, 255, 0) 72%
-            );
-          }
-
-          .home-hero > video {
-            filter: none;
-          }
-
-          [data-theme="dark"] .hero-image-overlay {
-            background: linear-gradient(
-              90deg,
-              rgba(18, 16, 24, 0.96) 0%,
-              rgba(18, 16, 24, 0.84) 30%,
-              rgba(18, 16, 24, 0.42) 47%,
-              rgba(18, 16, 24, 0.05) 64%,
-              rgba(18, 16, 24, 0) 76%
-            );
-          }
-
-          [data-theme="dark"] .home-hero > video {
-            filter: brightness(0.72) saturate(0.9);
-          }
-        }
 
         .hero-static-wrap {
           display: grid;
@@ -780,7 +775,7 @@ export default function HomePageClient() {
           width: 72%;
           height: 62%;
           border-radius: 1.6rem;
-          background: linear-gradient(135deg, rgba(111,45,255,.88), rgba(239,63,180,.68));
+          background: linear-gradient(135deg, rgba(139,92,246,.88), rgba(239,63,180,.68));
           transform: rotate(-18deg);
         }
 
@@ -822,7 +817,7 @@ export default function HomePageClient() {
           border-radius: .85rem;
         }
 
-        .hero-static-block-violet { left: 10%; bottom: 13%; width: 27%; height: 39%; background: #7135f4; }
+        .hero-static-block-violet { left: 10%; bottom: 13%; width: 27%; height: 39%; background: #8b5cf6; }
         .hero-static-block-pink { left: 40%; bottom: 13%; width: 18%; height: 27%; background: #eb3eae; }
         .hero-static-block-blue { right: 10%; bottom: 13%; width: 25%; height: 52%; background: #4b8cf5; }
         .hero-static-block-orange { left: 40%; top: 29%; width: 18%; height: 12%; background: #f4a04b; }
@@ -833,7 +828,7 @@ export default function HomePageClient() {
           top: 8%;
           width: 29%;
           height: 29%;
-          border: 2px solid color-mix(in srgb, #7135f4 75%, var(--surface-strong));
+          border: 2px solid color-mix(in srgb, #8b5cf6 75%, var(--surface-strong));
           border-radius: 1.5rem;
           transform: rotate(8deg);
         }
@@ -858,7 +853,7 @@ export default function HomePageClient() {
           background: color-mix(in srgb, var(--text-primary) 11%, transparent);
         }
 
-        .hero-static-bar span:first-child { background: #7135f4; }
+        .hero-static-bar span:first-child { background: #8b5cf6; }
         .hero-static-bar span:nth-child(2) { background: #eb3eae; }
 
         .hero-static-caption {
@@ -930,7 +925,7 @@ export default function HomePageClient() {
         }
 
         .hero-orbit-two span {
-          background: linear-gradient(135deg, #22d3ee, #6f2dff);
+          background: linear-gradient(135deg, #22d3ee, #8b5cf6);
           box-shadow: 0 0 24px rgba(34, 211, 238, 0.45);
         }
 
@@ -998,9 +993,9 @@ export default function HomePageClient() {
           background:
             radial-gradient(circle at 34% 30%, rgba(255,255,255,.82), rgba(255,255,255,.16) 22%, transparent 42%),
             radial-gradient(circle at 70% 68%, rgba(34,211,238,.44), transparent 38%),
-            conic-gradient(from 210deg, rgba(111,45,255,.92), rgba(239,63,180,.82), rgba(255,176,74,.76), rgba(34,211,238,.84), rgba(111,45,255,.92));
+            conic-gradient(from 210deg, rgba(139,92,246,.92), rgba(239,63,180,.82), rgba(255,176,74,.76), rgba(34,211,238,.84), rgba(139,92,246,.92));
           color: white;
-          box-shadow: inset 0 0 42px rgba(255, 255, 255, 0.25), 0 0 70px rgba(111,45,255,.22);
+          box-shadow: inset 0 0 42px rgba(255, 255, 255, 0.25), 0 0 70px rgba(139,92,246,.22);
           animation: hero-hub-morph 8s ease-in-out infinite, hero-hue 18s linear infinite;
         }
 
@@ -1059,7 +1054,7 @@ export default function HomePageClient() {
           position: absolute;
           inset: 0;
           z-index: 1;
-          border: 1px solid rgba(111, 45, 255, 0.3);
+          border: 1px solid rgba(139, 92, 246, 0.3);
           border-radius: 999px;
           animation: hero-ai-pulse 3.2s ease-out infinite;
         }
@@ -1199,7 +1194,7 @@ export default function HomePageClient() {
           bottom: 5px;
           width: 12px;
           border-radius: 5px 5px 2px 2px;
-          background: linear-gradient(180deg, #ef3fb4, #7c3cff);
+          background: linear-gradient(180deg, #ef3fb4, #8b5cf6);
           transform-origin: bottom;
           animation: hero-strategy-bar 2.4s ease-in-out infinite;
         }
@@ -1305,7 +1300,7 @@ export default function HomePageClient() {
           z-index: 2;
           height: 1px;
           width: 165px;
-          background: linear-gradient(90deg, rgba(111, 45, 255, 0.5), transparent);
+          background: linear-gradient(90deg, rgba(139, 92, 246, 0.5), transparent);
           transform-origin: left center;
           animation: hero-signal-pulse 2.8s ease-in-out infinite;
         }
@@ -1505,7 +1500,7 @@ export default function HomePageClient() {
 
         @keyframes hero-signal-pulse {
           0%, 100% { opacity: 0.15; filter: blur(0); }
-          50% { opacity: 0.85; filter: drop-shadow(0 0 5px rgba(111, 45, 255, 0.45)); }
+          50% { opacity: 0.85; filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.45)); }
         }
 
         @keyframes studio-symbol-spin {

@@ -4,8 +4,8 @@ import StudioHero from "@/components/studio/common/StudioHero";
 import StudioModeToggle, { type StudioTone } from "@/components/ui/StudioModeToggle";
 
 const ACCENTS: Record<StudioTone, string> = {
-  platform: "#6f2dff",
-  brand: "#9f2ce0",
+  platform: "#8b5cf6",
+  brand: "#8b5cf6",
   architecture: "#2e7cf6",
   interior: "#d06b14",
   marketing: "#eb3d87",

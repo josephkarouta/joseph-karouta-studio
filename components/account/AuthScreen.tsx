@@ -243,7 +243,7 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--text-primary)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(239,63,180,.17),transparent_28rem),radial-gradient(circle_at_82%_14%,rgba(46,124,246,.18),transparent_30rem),radial-gradient(circle_at_54%_88%,rgba(111,45,255,.16),transparent_34rem)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(239,63,180,.17),transparent_28rem),radial-gradient(circle_at_82%_14%,rgba(46,124,246,.18),transparent_30rem),radial-gradient(circle_at_54%_88%,rgba(139,92,246,.16),transparent_34rem)]" />
 
       <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-8">
         <Link href="/">

@@ -152,7 +152,7 @@ export default function StudioRequestReviewPage() {
     return (
       <main
         className="flex min-h-screen items-center justify-center"
-        style={{ backgroundColor: "#f8f7fb", color: "#6c00ff" }}
+        style={{ backgroundColor: "#f8f7fb", color: "#8b5cf6" }}
       >
         Loading studio request...
       </main>
@@ -163,7 +163,7 @@ export default function StudioRequestReviewPage() {
     return (
       <main
         className="flex min-h-screen items-center justify-center"
-        style={{ backgroundColor: "#f8f7fb", color: "#6c00ff" }}
+        style={{ backgroundColor: "#f8f7fb", color: "#8b5cf6" }}
       >
         Studio request not found.
       </main>
@@ -234,7 +234,7 @@ export default function StudioRequestReviewPage() {
           cursor: pointer !important;
         }
 
-        .heyy-back-button:hover { color: #6c00ff !important; }
+        .heyy-back-button:hover { color: #8b5cf6 !important; }
 
         .heyy-refresh-request {
           border: 1px solid #17151f !important;
@@ -247,9 +247,9 @@ export default function StudioRequestReviewPage() {
 
         .heyy-refresh-request:hover {
           transform: translateY(-2px);
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
-          box-shadow: 0 12px 28px rgba(108,0,255,.25) !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
+          box-shadow: 0 12px 28px rgba(139,92,246,.25) !important;
         }
 
         .heyy-request-progress {
@@ -279,9 +279,9 @@ export default function StudioRequestReviewPage() {
         }
 
         .heyy-request-progress-step[data-state="active"] {
-          border-color: #8d4dff !important;
+          border-color: #8b5cf6 !important;
           background: #f4edff !important;
-          box-shadow: inset 0 0 0 1px rgba(108,0,255,.08) !important;
+          box-shadow: inset 0 0 0 1px rgba(139,92,246,.08) !important;
         }
 
         .heyy-request-progress-step strong {
@@ -325,16 +325,16 @@ export default function StudioRequestReviewPage() {
         }
 
         .heyy-request-tab:hover {
-          border-color: #9b63ff !important;
+          border-color: #8b5cf6 !important;
           background: #f2e9ff !important;
-          color: #5b00d6 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-request-tab[data-active="true"] {
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
-          box-shadow: 0 10px 24px rgba(108,0,255,.20) !important;
+          box-shadow: 0 10px 24px rgba(139,92,246,.20) !important;
         }
 
         .heyy-request-tab small {
@@ -396,8 +396,8 @@ export default function StudioRequestReviewPage() {
 
         .heyy-surface:hover {
           transform: translateY(-2px);
-          border-color: #8d4dff !important;
-          box-shadow: 0 16px 34px rgba(108,0,255,.11) !important;
+          border-color: #8b5cf6 !important;
+          box-shadow: 0 16px 34px rgba(139,92,246,.11) !important;
         }
 
         .heyy-summary-grid {
@@ -531,7 +531,7 @@ export default function StudioRequestReviewPage() {
 
         .heyy-technical-details summary {
           cursor: pointer !important;
-          color: #6c00ff !important;
+          color: #8b5cf6 !important;
           font-size: 11px !important;
           font-weight: 900 !important;
         }
@@ -581,8 +581,8 @@ export default function StudioRequestReviewPage() {
 
         .heyy-review-input:focus,
         .heyy-review-textarea:focus {
-          border-color: #7c2cff !important;
-          box-shadow: 0 0 0 4px rgba(124,44,255,.12) !important;
+          border-color: #8b5cf6 !important;
+          box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
         }
 
         .heyy-quote-details {
@@ -614,8 +614,8 @@ export default function StudioRequestReviewPage() {
         }
 
         .heyy-quote-detail-input:focus {
-          border-color: #7c2cff !important;
-          box-shadow: 0 0 0 3px rgba(124,44,255,.11) !important;
+          border-color: #8b5cf6 !important;
+          box-shadow: 0 0 0 3px rgba(139,92,246,.11) !important;
         }
 
         .heyy-quote-error {
@@ -643,9 +643,9 @@ export default function StudioRequestReviewPage() {
 
         .heyy-send-quote:hover {
           transform: translateY(-2px);
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
-          box-shadow: 0 13px 28px rgba(108,0,255,.26) !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
+          box-shadow: 0 13px 28px rgba(139,92,246,.26) !important;
         }
 
         .heyy-send-quote:disabled {
@@ -2759,7 +2759,7 @@ function EditableQuoteDetail({
 
 function StatusPill({ value }: { value: string }) {
   const normalized = String(value || "New").toLowerCase();
-  let style = { backgroundColor: "#ede2ff", color: "#6c00ff" };
+  let style = { backgroundColor: "#ede2ff", color: "#8b5cf6" };
 
   if (normalized.includes("converted")) {
     style = { backgroundColor: "#dcfce7", color: "#15803d" };

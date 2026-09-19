@@ -126,7 +126,7 @@ export const BRAND_JOURNEYS: BrandJourneyConfig[] = [
     requiresExistingLogo: false,
     allowLogoChoice: false,
     allowDirectionChoice: true,
-    accent: "#6c00ff",
+    accent: "#8b5cf6",
     icon: "✦",
   },
   {
@@ -231,7 +231,7 @@ export const BRAND_JOURNEYS: BrandJourneyConfig[] = [
     requiresExistingLogo: false,
     allowLogoChoice: true,
     allowDirectionChoice: true,
-    accent: "#5b21b6",
+    accent: "#8b5cf6",
     icon: "◎",
   },
   {
@@ -263,7 +263,7 @@ export const BRAND_JOURNEYS: BrandJourneyConfig[] = [
     requiresExistingLogo: false,
     allowLogoChoice: true,
     allowDirectionChoice: true,
-    accent: "#7c3aed",
+    accent: "#8b5cf6",
     icon: "+",
   },
 ];

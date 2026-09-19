@@ -342,7 +342,7 @@ const deliverablesStyles = `
     border-radius: 999px !important;
     background: #fff !important;
     padding: 0 13px !important;
-    color: #6413cd !important;
+    color: #8b5cf6 !important;
     font-size: 9px !important;
     font-weight: 950 !important;
   }
@@ -365,9 +365,9 @@ const deliverablesStyles = `
   }
 
   .heyy-send-revision {
-    border: 1px solid #7b2cff !important;
+    border: 1px solid #8b5cf6 !important;
     background: #fff !important;
-    color: #6c00ff !important;
+    color: #8b5cf6 !important;
   }
 
   .heyy-approve-delivery {
@@ -401,7 +401,7 @@ const deliverablesStyles = `
 
   .heyy-deliverables-eyebrow {
     margin: 0 !important;
-    color: #6b12d8 !important;
+    color: #8b5cf6 !important;
     font-size: 9px !important;
     font-weight: 950 !important;
     letter-spacing: .18em !important;
@@ -536,13 +536,13 @@ const deliverablesStyles = `
 
   .heyy-revision-badge {
     background: #eee3ff !important;
-    color: #6412ca !important;
+    color: #8b5cf6 !important;
   }
 
   .heyy-final-badge[data-review="true"] {
-    background: #6c00ff !important;
+    background: #8b5cf6 !important;
     color: #ffffff !important;
-    box-shadow: 0 7px 15px rgba(108,0,255,.18) !important;
+    box-shadow: 0 7px 15px rgba(139,92,246,.18) !important;
   }
 
   .heyy-complete-badge {
@@ -565,14 +565,14 @@ const deliverablesStyles = `
     gap: 8px !important;
     border: 0 !important;
     border-radius: 999px !important;
-    background: #6c00ff !important;
+    background: #8b5cf6 !important;
     color: #ffffff !important;
     padding: 0 17px !important;
     font-size: 9px !important;
     font-weight: 950 !important;
     letter-spacing: .12em !important;
     text-transform: uppercase !important;
-    box-shadow: 0 10px 22px rgba(108,0,255,.24) !important;
+    box-shadow: 0 10px 22px rgba(139,92,246,.24) !important;
     transition: all 180ms ease !important;
   }
 
@@ -602,7 +602,7 @@ const deliverablesStyles = `
     border: 1px solid #cfb8ff !important;
     border-radius: 999px !important;
     background: #f1eaff !important;
-    color: #6412c8 !important;
+    color: #8b5cf6 !important;
     padding: 0 13px !important;
     font-size: 9px !important;
     font-weight: 950 !important;
@@ -610,7 +610,7 @@ const deliverablesStyles = `
   }
 
   .heyy-history-toggle:hover {
-    border-color: #7a2cff !important;
+    border-color: #8b5cf6 !important;
     background: #e6d7ff !important;
   }
 
@@ -621,7 +621,7 @@ const deliverablesStyles = `
     align-items: center !important;
     justify-content: center !important;
     border-radius: 7px !important;
-    background: #6c00ff !important;
+    background: #8b5cf6 !important;
     color: #ffffff !important;
     font-size: 12px !important;
     font-weight: 950 !important;
@@ -695,7 +695,7 @@ const deliverablesStyles = `
     border: 1px solid #d0c2eb !important;
     border-radius: 999px !important;
     background: #ffffff !important;
-    color: #5d14bd !important;
+    color: #8b5cf6 !important;
     padding: 0 13px !important;
     font-size: 8px !important;
     font-weight: 950 !important;
@@ -705,7 +705,7 @@ const deliverablesStyles = `
   }
 
   .heyy-history-download:hover {
-    border-color: #7b2cff !important;
+    border-color: #8b5cf6 !important;
     background: #f1e9ff !important;
   }
 
@@ -727,7 +727,7 @@ const deliverablesStyles = `
     align-items: center !important;
     justify-content: center !important;
     border-radius: 12px !important;
-    background: #6c00ff !important;
+    background: #8b5cf6 !important;
     color: #ffffff !important;
   }
 
@@ -739,7 +739,7 @@ const deliverablesStyles = `
 
   .heyy-deliverables-empty-title {
     margin: 0 !important;
-    color: #5911be !important;
+    color: #8b5cf6 !important;
     font-size: 12px !important;
     font-weight: 950 !important;
   }

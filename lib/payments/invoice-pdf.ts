@@ -67,7 +67,7 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const width = doc.internal.pageSize.getWidth();
   const margin = 48;
-  const accent = [108, 0, 255] as const;
+  const accent = [139, 92, 246] as const;
   const dark = [23, 19, 31] as const;
   const muted = [103, 96, 114] as const;
   const subtotal = Math.max(0, data.amountTotal - data.taxAmount);

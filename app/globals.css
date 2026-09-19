@@ -11,14 +11,14 @@
   --text-muted: #898292;
   --surface: rgba(255, 255, 255, 0.72);
   --surface-strong: rgba(255, 255, 255, 0.94);
-  --surface-hover: rgba(111, 45, 255, 0.07);
+  --surface-hover: rgba(139, 92, 246, 0.07);
   --glass: rgba(255, 255, 255, 0.73);
   --border: rgba(72, 55, 94, 0.14);
   --border-strong: rgba(72, 55, 94, 0.23);
-  --accent: #6f2dff;
-  --accent-strong: #5a16dc;
-  --accent-soft: rgba(111, 45, 255, 0.09);
-  --accent-border: rgba(111, 45, 255, 0.28);
+  --accent: #8b5cf6;
+  --accent-strong: #8b5cf6;
+  --accent-soft: rgba(139, 92, 246, 0.10);
+  --accent-border: rgba(139, 92, 246, 0.30);
   --pink: #ef3fb4;
   --blue: #2e7cf6;
   --cyan: #00a9d6;
@@ -26,13 +26,13 @@
   --green: #14a673;
   --yellow: #f0b429;
   --button-primary: #17131f;
-  --button-primary-hover: #6f2dff;
+  --button-primary-hover: #8b5cf6;
   --button-primary-text: #ffffff;
-  --focus-ring: rgba(111, 45, 255, 0.2);
+  --focus-ring: rgba(139, 92, 246, 0.22);
   --shadow-card: 0 18px 55px rgba(47, 32, 67, 0.08);
   --shadow-card-hover: 0 25px 70px rgba(89, 40, 143, 0.14);
   --shadow-button: 0 10px 25px rgba(20, 15, 27, 0.15);
-  --shadow-button-hover: 0 14px 30px rgba(111, 45, 255, 0.28);
+  --shadow-button-hover: 0 14px 30px rgba(139, 92, 246, 0.28);
   --radius-card: 1.5rem;
   --header-height: 72px;
   --heyy-header-height: 72px;
@@ -47,14 +47,14 @@
   --text-muted: #898191;
   --surface: rgba(28, 24, 36, 0.76);
   --surface-strong: rgba(31, 27, 40, 0.96);
-  --surface-hover: rgba(161, 111, 255, 0.13);
+  --surface-hover: rgba(139, 92, 246, 0.14);
   --glass: rgba(24, 20, 32, 0.76);
   --border: rgba(255, 255, 255, 0.11);
   --border-strong: rgba(255, 255, 255, 0.18);
-  --accent: #a26cff;
-  --accent-strong: #c5a5ff;
-  --accent-soft: rgba(153, 96, 255, 0.13);
-  --accent-border: rgba(171, 126, 255, 0.34);
+  --accent: #8b5cf6;
+  --accent-strong: #8b5cf6;
+  --accent-soft: rgba(139, 92, 246, 0.15);
+  --accent-border: rgba(139, 92, 246, 0.38);
   --pink: #ff68c9;
   --blue: #67a0ff;
   --cyan: #41caee;
@@ -62,16 +62,39 @@
   --green: #56d3a6;
   --yellow: #ffd166;
   --button-primary: #f5f1fa;
-  --button-primary-hover: #b88cff;
+  --button-primary-hover: #8b5cf6;
   --button-primary-text: #141019;
-  --focus-ring: rgba(178, 134, 255, 0.25);
+  --focus-ring: rgba(139, 92, 246, 0.28);
   --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.24);
   --shadow-card-hover: 0 30px 90px rgba(0, 0, 0, 0.38);
   --shadow-button: 0 10px 28px rgba(0, 0, 0, 0.3);
-  --shadow-button-hover: 0 14px 34px rgba(100, 45, 190, 0.38);
+  --shadow-button-hover: 0 14px 34px rgba(139, 92, 246, 0.34);
 }
 
 @theme inline {
+  /* Heyy Studio purple system — centred on the logo purple. */
+  --color-violet-50: #f7f4ff;
+  --color-violet-100: #efe9ff;
+  --color-violet-200: #ddd2fe;
+  --color-violet-300: #c4b5fd;
+  --color-violet-400: #a78bfa;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #8b5cf6;
+  --color-violet-700: #8b5cf6;
+  --color-violet-800: #8b5cf6;
+  --color-violet-900: #4d2a96;
+  --color-violet-950: #2b1855;
+  --color-purple-50: #f7f4ff;
+  --color-purple-100: #efe9ff;
+  --color-purple-200: #ddd2fe;
+  --color-purple-300: #c4b5fd;
+  --color-purple-400: #a78bfa;
+  --color-purple-500: #8b5cf6;
+  --color-purple-600: #8b5cf6;
+  --color-purple-700: #8b5cf6;
+  --color-purple-800: #8b5cf6;
+  --color-purple-900: #4d2a96;
+  --color-purple-950: #2b1855;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-heyy);
@@ -101,7 +124,7 @@ body {
 }
 
 ::selection {
-  background: rgba(111, 45, 255, 0.24);
+  background: rgba(139, 92, 246, 0.24);
   color: var(--heyy-select-text, var(--text-primary));
 }
 
@@ -132,8 +155,8 @@ a {
 
 .heyy-page-grid {
   background-image:
-    linear-gradient(rgba(111, 45, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(111, 45, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(139, 92, 246, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.035) 1px, transparent 1px);
   background-size: 34px 34px;
 }
 
@@ -176,7 +199,7 @@ a {
 .heyy-status-info { background: rgba(46,124,246,.12); color: var(--blue); }
 
 .heyy-gradient-text {
-  background: linear-gradient(100deg, #6f2dff 0%, #e43cb8 45%, #2e7cf6 100%);
+  background: linear-gradient(100deg, #8b5cf6 0%, #e43cb8 45%, #2e7cf6 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -555,7 +578,7 @@ a {
   width: 100%;
 }
 .studio-mode-toggle[data-tone="brand"], .studio-loader[data-tone="brand"] {
-  --studio-ui-accent: #a13df0; --studio-ui-strong: #7d20c4;
+  --studio-ui-accent: #8b5cf6; --studio-ui-strong: #8b5cf6;
   --studio-ui-soft: rgba(161,61,240,.12); --studio-ui-border: rgba(161,61,240,.32);
 }
 .studio-mode-toggle[data-tone="architecture"], .studio-loader[data-tone="architecture"] {
@@ -701,14 +724,14 @@ a {
 /* Heyy Studio homepage motion and visual depth */
 .home-grid {
   background-image:
-    linear-gradient(rgba(111, 45, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(111, 45, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.72) 68%, transparent 100%);
 }
 
 .home-spectrum-text {
-  background: linear-gradient(100deg, #6f2dff 0%, #dc38c2 34%, #2e7cf6 68%, #e67826 100%);
+  background: linear-gradient(100deg, #8b5cf6 0%, #dc38c2 34%, #2e7cf6 68%, #e67826 100%);
   background-size: 180% 180%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -719,7 +742,7 @@ a {
 .home-final-cta {
   background:
     radial-gradient(circle at 12% 12%, rgba(255,255,255,.2), transparent 22rem),
-    linear-gradient(110deg, #6f2dff 0%, #d92cbe 46%, #2877ff 100%);
+    linear-gradient(110deg, #8b5cf6 0%, #d92cbe 46%, #2877ff 100%);
 }
 
 .home-studio-card::after {
@@ -862,7 +885,7 @@ a {
   --tw-gradient-to: rgba(124,58,237,0) var(--tw-gradient-to-position) !important;
 }
 :root[data-theme="dark"] .heyy-studio-project-page :is(.to-violet-50,[class*="to-violet-50"],.to-violet-100,[class*="to-violet-100"]) {
-  --tw-gradient-to: rgba(111,45,255,.12) var(--tw-gradient-to-position) !important;
+  --tw-gradient-to: rgba(139,92,246,.12) var(--tw-gradient-to-position) !important;
 }
 :root[data-theme="dark"] .heyy-studio-project-page :is(.from-blue-50,[class*="from-blue-50"],.from-blue-100,[class*="from-blue-100"]) {
   --tw-gradient-from: rgba(46,124,246,.20) var(--tw-gradient-from-position) !important;
@@ -947,9 +970,9 @@ a {
 }
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-foundation-panel {
   --panel-border: rgba(255,255,255,.15) !important;
-  --panel-soft: rgba(111,45,255,.13) !important;
+  --panel-soft: rgba(139,92,246,.13) !important;
   border-color: var(--brand-dark-border) !important;
-  background: linear-gradient(135deg,rgba(111,45,255,.15),#211a2a 72%) !important;
+  background: linear-gradient(135deg,rgba(139,92,246,.15),#211a2a 72%) !important;
 }
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-foundation-trigger,
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-foundation-trigger:hover {
@@ -967,7 +990,7 @@ a {
 }
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-foundation-chip {
   border-color: var(--brand-dark-border-strong) !important;
-  background: rgba(111,45,255,.15) !important;
+  background: rgba(139,92,246,.15) !important;
   color: #d9c5ff !important;
   -webkit-text-fill-color: #d9c5ff !important;
 }
@@ -1010,7 +1033,7 @@ a {
 }
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-ready-file:hover {
   border-color: var(--brand-dark-border-strong) !important;
-  background: rgba(111,45,255,.15) !important;
+  background: rgba(139,92,246,.15) !important;
 }
 
 /* Keep actual generated images and logo canvases visually neutral, not whole cards. */
@@ -1073,7 +1096,7 @@ a {
 }
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-production-panel .heyy-accordion-button:hover,
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-production-panel .heyy-accordion-button[data-open="true"] {
-  background: rgba(111,45,255,.18) !important;
+  background: rgba(139,92,246,.18) !important;
   color: #e5d8ff !important;
 }
 :root[data-theme="dark"] .heyy-studio-project-page .heyy-production-panel :is(
@@ -1157,7 +1180,7 @@ a {
 ) {
   border-color: var(--brand-dark-border) !important;
 }
-:root[data-theme="dark"] .heyy-studio-project-page .bg-violet-50 { background-color: rgba(111,45,255,.14) !important; }
+:root[data-theme="dark"] .heyy-studio-project-page .bg-violet-50 { background-color: rgba(139,92,246,.14) !important; }
 :root[data-theme="dark"] .heyy-studio-project-page .bg-blue-50 { background-color: rgba(37,99,235,.14) !important; }
 :root[data-theme="dark"] .heyy-studio-project-page .bg-emerald-50 { background-color: rgba(5,150,105,.14) !important; }
 :root[data-theme="dark"] .heyy-studio-project-page .bg-amber-50 { background-color: rgba(217,119,6,.14) !important; }

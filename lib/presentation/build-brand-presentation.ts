@@ -200,7 +200,7 @@ function paletteItems(brand: any): PresentationPaletteItem[] {
       typeof item === "string"
         ? item
         : item?.hex || item?.value || item?.color || item?.colour;
-    const hex = normaliseHex(rawHex, ["#6C00FF", "#17151F", "#F2E9FF", "#FFFFFF"][index % 4]);
+    const hex = normaliseHex(rawHex, ["#8B5CF6", "#17151F", "#F2E9FF", "#FFFFFF"][index % 4]);
 
     return {
       name:
@@ -352,7 +352,7 @@ export function buildBrandPresentation({
         palette.length > 0
           ? palette
           : [
-              { name: "Primary", hex: "#6C00FF", rgb: "108, 0, 255", cmyk: "58, 100, 0, 0" },
+              { name: "Primary", hex: "#8B5CF6", rgb: "139, 92, 246", cmyk: "44, 63, 0, 4" },
               { name: "Ink", hex: "#17151F", rgb: "23, 21, 31", cmyk: "26, 32, 0, 88" },
               { name: "Soft Purple", hex: "#F2E9FF", rgb: "242, 233, 255", cmyk: "5, 9, 0, 0" },
             ],
@@ -465,7 +465,7 @@ export function buildBrandPresentation({
     title: `${projectName} Brand Guidelines`,
     filenameBase: `${safeFilename(projectName)}-brand-guidelines`,
     studioLabel: "Brand Studio",
-    accentHex: "#6C00FF",
+    accentHex: "#8B5CF6",
     slides,
   };
 }

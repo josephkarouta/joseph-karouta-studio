@@ -57,18 +57,18 @@ export default function StudioStepper({
 
         .heyy-step:hover:not(:disabled):not([data-active="true"]) {
           transform: translateY(0);
-          border-color: #8c4dff !important;
+          border-color: #8b5cf6 !important;
           background: #eee2ff !important;
-          color: #4d00b5 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-step[data-active="true"],
         .heyy-step[data-active="true"]:hover {
           transform: translateY(0);
-          border-color: #5a00d2 !important;
-          background: linear-gradient(135deg,#5200c2,#7c18ff) !important;
+          border-color: #8b5cf6 !important;
+          background: linear-gradient(135deg,#8b5cf6,#8b5cf6) !important;
           color: #fff !important;
-          box-shadow: 0 11px 25px rgba(108,0,255,.25) !important;
+          box-shadow: 0 11px 25px rgba(139,92,246,.25) !important;
         }
 
         .heyy-step[data-active="true"] p,

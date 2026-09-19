@@ -151,7 +151,7 @@ export default function WorkspaceSidebar({
           onClick={onCloseMobile}
           className={cx("flex min-w-0 items-center gap-3 overflow-hidden", collapsed && "shrink-0")}
         >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(135deg,#6f2dff,#d83cb8)] text-white shadow-lg">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(135deg,#8b5cf6,#d83cb8)] text-white shadow-lg">
             <Sparkles size={18} />
           </span>
           {!collapsed && (

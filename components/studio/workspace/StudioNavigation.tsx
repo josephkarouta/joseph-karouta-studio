@@ -64,10 +64,10 @@ export default function StudioNavigation({
         }
 
         .heyy-nav-button[data-tone="next"] {
-          border: 1px solid #6c00ff;
-          background: #6c00ff;
+          border: 1px solid #8b5cf6;
+          background: #8b5cf6;
           color: #fff;
-          box-shadow: 0 10px 22px rgba(108,0,255,.20);
+          box-shadow: 0 10px 22px rgba(139,92,246,.20);
         }
 
         .heyy-nav-button:hover:not(:disabled) {
@@ -75,15 +75,15 @@ export default function StudioNavigation({
         }
 
         .heyy-nav-button[data-tone="back"]:hover:not(:disabled) {
-          border-color: #9b63ff;
+          border-color: #8b5cf6;
           background: #f2e9ff;
-          color: #5b00d6;
+          color: #8b5cf6;
         }
 
         .heyy-nav-button[data-tone="next"]:hover:not(:disabled) {
-          border-color: #4c00b4;
-          background: #4c00b4;
-          box-shadow: 0 13px 27px rgba(108,0,255,.27);
+          border-color: #8b5cf6;
+          background: #8b5cf6;
+          box-shadow: 0 13px 27px rgba(139,92,246,.27);
         }
 
         .heyy-nav-button:disabled {

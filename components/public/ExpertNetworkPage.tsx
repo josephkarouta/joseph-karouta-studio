@@ -22,7 +22,7 @@ export default function ExpertNetworkPage({
       {!isRolePage && (
         <>
           <section className="relative overflow-hidden border-b border-[var(--border)] pt-[var(--header-height)]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(111,45,255,.16),transparent_27rem),radial-gradient(circle_at_88%_4%,rgba(239,63,180,.12),transparent_30rem)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(139,92,246,.16),transparent_27rem),radial-gradient(circle_at_88%_4%,rgba(239,63,180,.12),transparent_30rem)]" />
             <PageContainer className="relative py-10 sm:py-24">
               <div className="max-w-4xl">
                 <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-[var(--accent-strong)] sm:text-[.66rem] sm:tracking-[.2em]">Heyy Studio Expert Network</p>

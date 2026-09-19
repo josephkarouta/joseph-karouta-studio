@@ -20,9 +20,9 @@ const palettes: Record<Tone, PanelPalette> = {
   purple: {
     border: "#d7c0ff",
     background: "linear-gradient(145deg,#f2e8ff 0%,#ffffff 74%)",
-    accent: "#6c00ff",
+    accent: "#8b5cf6",
     soft: "#efe4ff",
-    shadow: "rgba(108,0,255,.10)",
+    shadow: "rgba(139,92,246,.10)",
   },
   green: {
     border: "#b7e6cb",
@@ -530,13 +530,13 @@ export default function StudioSidebar() {
           border-radius: 15px;
           background: rgba(255,255,255,.9);
           padding: 10px;
-          box-shadow: 0 7px 17px rgba(108,0,255,.05);
+          box-shadow: 0 7px 17px rgba(139,92,246,.05);
           transition: transform 160ms ease, border-color 160ms ease;
         }
 
         .heyy-sidebar-asset:hover {
           transform: translateX(2px);
-          border-color: #a77aff;
+          border-color: #8b5cf6;
         }
 
         .heyy-sidebar-suggestion {

@@ -331,7 +331,7 @@ export default function ProductionWorkspace() {
           transition: color 180ms ease !important;
         }
 
-        .heyy-prod-back:hover { color: #6c00ff !important; }
+        .heyy-prod-back:hover { color: #8b5cf6 !important; }
 
         .heyy-prod-tabs-wrap {
           position: sticky;
@@ -367,16 +367,16 @@ export default function ProductionWorkspace() {
 
         .heyy-prod-tab:hover {
           transform: translateY(-2px);
-          border-color: #9b63ff !important;
+          border-color: #8b5cf6 !important;
           background: #f2e9ff !important;
-          color: #5b00d6 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-prod-tab[data-active="true"] {
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
-          box-shadow: 0 12px 28px rgba(108,0,255,.22) !important;
+          box-shadow: 0 12px 28px rgba(139,92,246,.22) !important;
         }
 
         .heyy-prod-layout {
@@ -431,8 +431,8 @@ export default function ProductionWorkspace() {
 
         .heyy-prod-card:hover {
           transform: translateY(-2px);
-          border-color: #8d4dff !important;
-          box-shadow: 0 17px 36px rgba(108,0,255,.11) !important;
+          border-color: #8b5cf6 !important;
+          box-shadow: 0 17px 36px rgba(139,92,246,.11) !important;
         }
 
         .heyy-prod-overview {
@@ -494,7 +494,7 @@ export default function ProductionWorkspace() {
         .heyy-revision-section {
           border-color: #b884ff !important;
           background: #fbf8ff !important;
-          box-shadow: 0 13px 30px rgba(108,0,255,.08) !important;
+          box-shadow: 0 13px 30px rgba(139,92,246,.08) !important;
         }
 
         .heyy-revision-section .heyy-prod-section-head {
@@ -542,7 +542,7 @@ export default function ProductionWorkspace() {
         }
 
         .heyy-revision-section .heyy-workflow-icon {
-          background: #6c00ff;
+          background: #8b5cf6;
           color: #fff;
         }
 
@@ -611,9 +611,9 @@ export default function ProductionWorkspace() {
 
         .heyy-prod-select:focus,
         .heyy-prod-textarea:focus {
-          border-color: #7c2cff !important;
+          border-color: #8b5cf6 !important;
           background: #fff !important;
-          box-shadow: 0 0 0 4px rgba(124,44,255,.12) !important;
+          box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
         }
 
         .heyy-priority-grid {
@@ -635,16 +635,16 @@ export default function ProductionWorkspace() {
         }
 
         .heyy-priority-button:hover {
-          border-color: #9b63ff !important;
+          border-color: #8b5cf6 !important;
           background: #f2e9ff !important;
-          color: #5b00d6 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-priority-button[data-active="true"] {
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
-          box-shadow: 0 9px 22px rgba(108,0,255,.21) !important;
+          box-shadow: 0 9px 22px rgba(139,92,246,.21) !important;
         }
 
         .heyy-prod-save {
@@ -663,9 +663,9 @@ export default function ProductionWorkspace() {
 
         .heyy-prod-save:hover {
           transform: translateY(-2px);
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
-          box-shadow: 0 12px 28px rgba(108,0,255,.25) !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
+          box-shadow: 0 12px 28px rgba(139,92,246,.25) !important;
         }
 
         .heyy-prod-save:disabled { cursor: wait !important; opacity: .55 !important; }
@@ -691,9 +691,9 @@ export default function ProductionWorkspace() {
         }
 
         .heyy-communication-toggle button[data-active="true"] {
-          background: #6c00ff !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
-          box-shadow: 0 8px 20px rgba(108,0,255,.20) !important;
+          box-shadow: 0 8px 20px rgba(139,92,246,.20) !important;
         }
 
         .heyy-timeline-item {
@@ -711,7 +711,7 @@ export default function ProductionWorkspace() {
           min-width: 10px;
           margin-top: 5px;
           border-radius: 999px;
-          background: #6c00ff;
+          background: #8b5cf6;
         }
 
         .heyy-context-grid {

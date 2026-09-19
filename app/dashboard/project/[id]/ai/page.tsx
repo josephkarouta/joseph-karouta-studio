@@ -382,7 +382,7 @@ async function generateImage(prompt: string) {
     return (
       <main
         className="flex min-h-screen items-center justify-center"
-        style={{ backgroundColor: "#f8f7fb", color: "#6c00ff" }}
+        style={{ backgroundColor: "#f8f7fb", color: "#8b5cf6" }}
       >
         Loading AI workspace...
       </main>
@@ -470,9 +470,9 @@ async function generateImage(prompt: string) {
 
         .heyy-ai-message[data-role="user"] {
           margin-left: auto;
-          background: linear-gradient(135deg,#5b00d6,#7c18ff);
+          background: linear-gradient(135deg,#8b5cf6,#8b5cf6);
           color: #fff;
-          box-shadow: 0 10px 22px rgba(108,0,255,.18);
+          box-shadow: 0 10px 22px rgba(139,92,246,.18);
         }
 
         .heyy-ai-message[data-role="assistant"] {
@@ -494,9 +494,9 @@ async function generateImage(prompt: string) {
 
         .heyy-ai-prompt:hover {
           transform: translateY(-1px);
-          border-color: #8f52ff;
+          border-color: #8b5cf6;
           background: #f2e9ff;
-          color: #5b00d6;
+          color: #8b5cf6;
         }
 
         .heyy-ai-input {
@@ -512,8 +512,8 @@ async function generateImage(prompt: string) {
         }
 
         .heyy-ai-input:focus {
-          border-color: #7c2cff;
-          box-shadow: 0 0 0 4px rgba(124,44,255,.12);
+          border-color: #8b5cf6;
+          box-shadow: 0 0 0 4px rgba(139,92,246,.12);
         }
 
         @media (max-width: 720px) {

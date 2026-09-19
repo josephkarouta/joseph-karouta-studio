@@ -63,7 +63,7 @@ const toolMenuIcons = {
   file_converter: Repeat2,
 } as const;
 
-export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean }) {
+export default function SiteHeader({ prelaunch = false, heroOverlay = false }: { prelaunch?: boolean; heroOverlay?: boolean }) {
   const pathname = usePathname();
   const { user, loading, plan, credits, signOut } = useAuth();
   const { resolvedTheme } = useTheme();
@@ -117,23 +117,29 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
   }
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-[var(--border)] bg-[color:var(--glass)] backdrop-blur-2xl">
+    <header
+      className={`fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color,backdrop-filter] duration-300 ${
+        heroOverlay
+          ? "border-transparent bg-transparent backdrop-blur-none"
+          : "border-[var(--border)] bg-[color:var(--glass)] backdrop-blur-2xl"
+      }`}
+    >
       <div className="mx-auto flex h-[var(--header-height)] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" onClick={handleLogoClick} className="shrink-0" aria-label="Heyy Studio home">
           <HeyyLogo
-            variant={resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
+            variant={heroOverlay || resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
             height={40}
           />
         </Link>
 
-        <nav className="hidden items-center gap-1 text-sm font-bold text-[var(--text-secondary)] lg:flex">
+        <nav className={`hidden items-center gap-1 text-sm font-bold lg:flex ${heroOverlay ? "text-white/80" : "text-[var(--text-secondary)]"}`}>
           {navItems.map(([label, href]) => (
             <Link
               key={label}
               href={prelaunch ? "#" : href}
               aria-disabled={prelaunch || undefined}
               tabIndex={prelaunch ? -1 : undefined}
-              className={`rounded-full px-4 py-2.5 transition ${prelaunch ? "pointer-events-none cursor-default opacity-40" : "hover:bg-[var(--surface-strong)] hover:text-[var(--text-primary)]"}`}
+              className={`rounded-full px-4 py-2.5 transition ${prelaunch ? "pointer-events-none cursor-default opacity-40" : heroOverlay ? "hover:bg-white/10 hover:text-white" : "hover:bg-[var(--surface-strong)] hover:text-[var(--text-primary)]"}`}
             >
               {label}
             </Link>
@@ -145,20 +151,14 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
             <Link
               href="/contact?topic=expert"
               aria-label="Contact an Expert"
-              className="group relative hidden h-[60px] w-[132px] shrink-0 cursor-pointer self-end items-end justify-center overflow-visible -mb-px lg:flex"
+              title="Contact an Expert"
+              className={`hidden h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-[background-color,border-color,color,box-shadow] lg:flex ${
+                heroOverlay
+                  ? "border-white/25 bg-black/15 text-white shadow-[0_8px_24px_rgba(0,0,0,.18)] hover:border-white/40 hover:bg-white/10"
+                  : "border-[var(--border)] bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-sm hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"
+              }`}
             >
-              <img
-                src="/expert-contact-bubble.png"
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute bottom-[3px] left-1/2 h-[56px] w-auto max-w-[98px] -translate-x-1/2 object-contain opacity-100 transition-opacity duration-200 ease-out group-hover:opacity-0"
-              />
-              <img
-                src="/expert-contact-desktop.png"
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 bottom-[3px] h-[60px] w-full object-contain opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
-              />
+              <BriefcaseBusiness size={17} strokeWidth={2.1} aria-hidden="true" />
             </Link>
           )}
 
@@ -227,7 +227,7 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
                   role="menu"
                   className="absolute right-0 mt-3 w-[304px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-strong)] p-2 shadow-[var(--shadow-card-hover)] backdrop-blur-2xl"
                 >
-                  <div className="rounded-2xl border border-white/15 bg-[linear-gradient(135deg,#6f2dff_0%,#9b2cff_52%,#e235c7_100%)] p-4 text-white shadow-[0_16px_38px_rgba(111,45,255,0.24)]">
+                  <div className="rounded-2xl border border-white/15 bg-[linear-gradient(135deg,#8b5cf6_0%,#8b5cf6_52%,#e235c7_100%)] p-4 text-white shadow-[0_16px_38px_rgba(139,92,246,0.24)]">
                     <p className="truncate text-sm font-black text-white">{displayName}</p>
                     <p className="mt-1 truncate text-xs font-semibold text-white/72">{user.email}</p>
                     <div className="mt-3 flex items-center justify-between rounded-xl border border-white/15 bg-white/12 px-3 py-2 backdrop-blur-sm">
@@ -261,14 +261,14 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
               <button
                 type="button"
                 onClick={() => setAuthMode("signin")}
-                className="min-h-8 cursor-pointer rounded-full px-3.5 text-xs font-black text-[var(--text-secondary)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                className="min-h-8 cursor-pointer rounded-full px-3.5 text-xs font-black text-[var(--text-secondary)] transition-[background-color,color] hover:bg-[#eee9ff] hover:text-[#6f46df]"
               >
                 Sign in
               </button>
               <button
                 type="button"
                 onClick={() => setAuthMode("signup")}
-                className="min-h-8 cursor-pointer rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 px-4 text-xs font-black text-white shadow-[0_6px_16px_rgba(109,40,217,.22)] transition-[filter,box-shadow,transform] hover:-translate-y-px hover:brightness-[1.08] hover:saturate-[1.08] hover:shadow-[0_8px_20px_rgba(109,40,217,.30)]"
+                className="min-h-8 cursor-pointer rounded-full bg-[#8b5cf6] px-4 text-xs font-black text-white shadow-[0_6px_16px_rgba(139,92,246,.24)] transition-[background-color,box-shadow] hover:bg-[#7447e8] hover:shadow-[0_8px_22px_rgba(116,71,232,.38)] active:bg-[#6840cf]"
               >
                 Sign up
               </button>
@@ -401,14 +401,12 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
                 aria-label="Contact an Expert"
                 aria-disabled={prelaunch || undefined}
                 tabIndex={prelaunch ? -1 : undefined}
-                className={`group relative flex min-h-[104px] items-end justify-center overflow-visible rounded-xl -mb-px ${prelaunch ? "pointer-events-none cursor-default opacity-35 grayscale" : ""}`}
+                className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-35 grayscale" : "hover:border-[#8b5cf6] hover:bg-[var(--surface-strong)]"}`}
               >
-                <img
-                  src="/expert-contact-mobile.png"
-                  alt=""
-                  aria-hidden="true"
-                  className="max-h-[118px] w-full object-contain object-bottom transition-transform duration-300 ease-out group-hover:scale-[1.035]"
-                />
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#8b5cf6] text-white" aria-hidden="true">
+                  <BriefcaseBusiness size={16} strokeWidth={2.1} />
+                </span>
+                <span>Contact an Expert</span>
               </Link>
             </div>
 
@@ -449,7 +447,7 @@ export default function SiteHeader({ prelaunch = false }: { prelaunch?: boolean 
                 </Button>
                 <Button
                   type="button"
-                  className="w-full"
+                  className="w-full !bg-[#8b5cf6] !text-white hover:!bg-[#7447e8] active:!bg-[#6840cf]"
                   onClick={() => { setMobileOpen(false); setAuthMode("signup"); }}
                 >
                   Sign up

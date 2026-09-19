@@ -29,7 +29,7 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
                 type="button"
                 onClick={() => setBillingInterval(interval)}
                 aria-pressed={active}
-                className={`min-w-[102px] rounded-full px-5 py-2.5 text-xs font-black transition-[background-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--focus-ring)] sm:min-w-[112px] ${
+                className={`min-w-[102px] cursor-pointer rounded-full px-5 py-2.5 text-xs font-black transition-[background-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--focus-ring)] sm:min-w-[112px] ${
                   active
                     ? "bg-[var(--text-primary)] text-[var(--surface)] shadow-[0_8px_18px_rgba(20,16,28,0.18)]"
                     : "text-[var(--text-secondary)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)]"

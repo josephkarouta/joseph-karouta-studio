@@ -106,7 +106,7 @@ const COMPLETE_JOB_STATUSES = new Set([
 ]);
 
 const TONE_STYLES = {
-  purple: { accent: "#6c00ff", soft: "#f4ecff", border: "#dcc8ff" },
+  purple: { accent: "#8b5cf6", soft: "#f4ecff", border: "#dcc8ff" },
   blue: { accent: "#1676e8", soft: "#eaf3ff", border: "#bdd8ff" },
   orange: { accent: "#d06b14", soft: "#fff2e6", border: "#ffd1a8" },
   pink: { accent: "#eb3d87", soft: "#fff0f7", border: "#ffc5df" },
@@ -1759,7 +1759,7 @@ const ADMIN_STYLES = `
   .heyy-admin-root {
     color: #17151f;
     background:
-      radial-gradient(circle at 8% 4%, rgba(108,0,255,.09), transparent 26%),
+      radial-gradient(circle at 8% 4%, rgba(139,92,246,.09), transparent 26%),
       radial-gradient(circle at 92% 8%, rgba(22,118,232,.08), transparent 24%),
       #f7f6fa;
     padding: 24px;
@@ -1784,7 +1784,7 @@ const ADMIN_STYLES = `
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #6c00ff;
+    color: #8b5cf6;
     font-size: 11px;
     font-weight: 950;
     letter-spacing: .17em;
@@ -1825,9 +1825,9 @@ const ADMIN_STYLES = `
     cursor: pointer;
   }
   .heyy-admin-button-secondary { border: 1px solid #d9d1e4; color: #28232f; background: #fff; }
-  .heyy-admin-button-secondary:hover { border-color: #8b4bff; color: #5a00d6; background: #f5edff; transform: translateY(-2px); }
+  .heyy-admin-button-secondary:hover { border-color: #8b5cf6; color: #8b5cf6; background: #f5edff; transform: translateY(-2px); }
   .heyy-admin-button-primary { border: 1px solid #17151f; color: #fff; background: #17151f; }
-  .heyy-admin-button-primary:hover { border-color: #6c00ff; background: #6c00ff; transform: translateY(-2px); box-shadow: 0 12px 28px rgba(108,0,255,.25); }
+  .heyy-admin-button-primary:hover { border-color: #8b5cf6; background: #8b5cf6; transform: translateY(-2px); box-shadow: 0 12px 28px rgba(139,92,246,.25); }
   .heyy-admin-button:disabled { opacity: .65; cursor: wait; transform: none; }
   .heyy-admin-tabs {
     max-width: 1540px;
@@ -1857,8 +1857,8 @@ const ADMIN_STYLES = `
     cursor: pointer;
     transition: .2s ease;
   }
-  .heyy-admin-tabs button:hover { color: #5c00d8; background: #f5efff; }
-  .heyy-admin-tabs button[data-active="true"] { color: #fff; background: #6c00ff; box-shadow: 0 10px 24px rgba(108,0,255,.24); }
+  .heyy-admin-tabs button:hover { color: #8b5cf6; background: #f5efff; }
+  .heyy-admin-tabs button[data-active="true"] { color: #fff; background: #8b5cf6; box-shadow: 0 10px 24px rgba(139,92,246,.24); }
   .heyy-admin-tabs b {
     min-width: 23px;
     height: 23px;
@@ -1866,8 +1866,8 @@ const ADMIN_STYLES = `
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    background: rgba(108,0,255,.10);
-    color: #6c00ff;
+    background: rgba(139,92,246,.10);
+    color: #8b5cf6;
     font-size: 10px;
   }
   .heyy-admin-tabs button[data-active="true"] b { background: rgba(255,255,255,.20); color: #fff; }
@@ -1884,7 +1884,7 @@ const ADMIN_STYLES = `
     box-shadow: 0 12px 34px rgba(42,25,64,.06);
     transition: .2s ease;
   }
-  .heyy-metric-card:hover { transform: translateY(-3px); border-color: #b78cff; box-shadow: 0 18px 42px rgba(108,0,255,.11); }
+  .heyy-metric-card:hover { transform: translateY(-3px); border-color: #b78cff; box-shadow: 0 18px 42px rgba(139,92,246,.11); }
   .heyy-metric-icon { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid; border-radius: 12px; }
   .heyy-metric-value { margin-top: 18px; font-size: 28px; line-height: 1; letter-spacing: -.04em; font-weight: 950; }
   .heyy-metric-card strong { display: block; margin-top: 9px; font-size: 13px; }
@@ -1899,11 +1899,11 @@ const ADMIN_STYLES = `
     overflow: hidden;
   }
   .heyy-panel-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
-  .heyy-panel-heading > div:first-child > span { color: #6c00ff; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
+  .heyy-panel-heading > div:first-child > span { color: #8b5cf6; font-size: 10px; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
   .heyy-panel-heading h2 { margin: 6px 0 0; font-size: 24px; letter-spacing: -.035em; font-weight: 950; }
   .heyy-panel-heading p { margin: 6px 0 0; color: #756e7d; font-size: 12px; line-height: 1.55; font-weight: 620; }
-  .heyy-panel-action a { display: inline-flex; align-items: center; gap: 6px; color: #6c00ff; font-size: 12px; font-weight: 900; }
-  .heyy-panel-action a:hover { color: #4700ad; }
+  .heyy-panel-action a { display: inline-flex; align-items: center; gap: 6px; color: #8b5cf6; font-size: 12px; font-weight: 900; }
+  .heyy-panel-action a:hover { color: #8b5cf6; }
   .heyy-attention-list, .heyy-compact-list, .heyy-submission-list, .heyy-production-list { display: grid; gap: 9px; }
   .heyy-attention-row {
     display: grid;
@@ -1917,23 +1917,23 @@ const ADMIN_STYLES = `
     background: #fff;
     transition: .2s ease;
   }
-  .heyy-attention-row:hover { transform: translateX(3px); border-color: #a66fff; background: #faf7ff; box-shadow: 0 10px 24px rgba(108,0,255,.08); }
+  .heyy-attention-row:hover { transform: translateX(3px); border-color: #8b5cf6; background: #faf7ff; box-shadow: 0 10px 24px rgba(139,92,246,.08); }
   .heyy-attention-icon { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid; border-radius: 13px; }
   .heyy-attention-eyebrow { display: flex; gap: 5px; color: #81778a; font-size: 9px; font-weight: 950; letter-spacing: .11em; text-transform: uppercase; }
   .heyy-attention-row strong { display: block; margin-top: 3px; font-size: 13px; }
   .heyy-attention-row p { margin: 3px 0 0; color: #756e7d; font-size: 11px; line-height: 1.45; }
-  .heyy-attention-action { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: #6c00ff; font-size: 10px; font-weight: 900; }
+  .heyy-attention-action { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: #8b5cf6; font-size: 10px; font-weight: 900; }
   .heyy-pipeline-list { display: grid; gap: 16px; }
   .heyy-pipeline-label { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; font-size: 12px; }
-  .heyy-pipeline-label > span { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; color: #6c00ff; background: #f2e9ff; }
+  .heyy-pipeline-label > span { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; color: #8b5cf6; background: #f2e9ff; }
   .heyy-pipeline-label b { font-size: 15px; }
   .heyy-pipeline-track { height: 7px; margin: 7px 0 0 39px; border-radius: 999px; background: #eee9f2; overflow: hidden; }
-  .heyy-pipeline-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#6c00ff,#1676e8); }
+  .heyy-pipeline-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#8b5cf6,#1676e8); }
   .heyy-admin-inline-actions { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 22px; }
   .heyy-admin-link-button { min-height: 39px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border-radius: 999px; color: #fff; background: #17151f; font-size: 11px; font-weight: 900; transition: .2s ease; }
-  .heyy-admin-link-button:hover { background: #6c00ff; transform: translateY(-2px); }
+  .heyy-admin-link-button:hover { background: #8b5cf6; transform: translateY(-2px); }
   .heyy-admin-link-button.muted { color: #4d4656; background: #f2eff5; }
-  .heyy-admin-link-button.muted:hover { color: #5b00d6; background: #eee3ff; }
+  .heyy-admin-link-button.muted:hover { color: #8b5cf6; background: #eee3ff; }
   .heyy-studio-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 11px; }
   .heyy-studio-workload { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 11px; align-items: center; min-height: 82px; padding: 14px; border: 1px solid var(--studio-border); border-radius: 18px; background: linear-gradient(135deg,var(--studio-soft),#fff); }
   .heyy-studio-workload strong { display: block; font-size: 12px; }
@@ -1942,15 +1942,15 @@ const ADMIN_STYLES = `
   .heyy-studio-count b { color: var(--studio-accent); font-size: 22px; line-height: 1; }
   .heyy-quick-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
   .heyy-quick-link { min-height: 72px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 12px; border: 1px solid #e4deea; border-radius: 16px; color: #211c28; background: #fff; transition: .2s ease; }
-  .heyy-quick-link:hover { border-color: #a66fff; background: #faf7ff; transform: translateY(-2px); }
-  .heyy-quick-link > span { width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; color: #6c00ff; background: #f2e9ff; }
+  .heyy-quick-link:hover { border-color: #8b5cf6; background: #faf7ff; transform: translateY(-2px); }
+  .heyy-quick-link > span { width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; color: #8b5cf6; background: #f2e9ff; }
   .heyy-quick-link strong { display: block; font-size: 11px; }
   .heyy-quick-link p { margin: 3px 0 0; color: #7b7482; font-size: 9px; }
   .heyy-admin-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
   .heyy-admin-search { flex: 1 1 300px; }
   .heyy-admin-filter { flex: 0 1 190px; min-width: 165px; }
   .heyy-admin-search { min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border: 1px solid #ded8e5; border-radius: 15px; background: #f9f8fb; }
-  .heyy-admin-search:focus-within { border-color: #8b4bff; box-shadow: 0 0 0 4px rgba(108,0,255,.10); background: #fff; }
+  .heyy-admin-search:focus-within { border-color: #8b5cf6; box-shadow: 0 0 0 4px rgba(139,92,246,.10); background: #fff; }
   .heyy-admin-search input { width: 100%; border: 0; outline: 0; color: #211c28; background: transparent; font-size: 12px; font-weight: 650; }
   .heyy-admin-search button { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; color: #6f6877; background: #eeeaf1; cursor: pointer; }
   .heyy-admin-filter > * { width: 100%; min-height: 48px; }
@@ -1976,20 +1976,20 @@ const ADMIN_STYLES = `
   .heyy-production-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; color: #8a828f; font-size: 9px; font-weight: 700; }
   .heyy-production-meta span { display: inline-flex; align-items: center; gap: 4px; }
   .heyy-production-alerts { display: flex; align-items: center; gap: 7px; color: var(--studio-accent); }
-  .heyy-alert-chip { min-height: 28px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; color: #6c00ff; background: #eee2ff; font-size: 9px; font-weight: 950; }
+  .heyy-alert-chip { min-height: 28px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; color: #8b5cf6; background: #eee2ff; font-size: 9px; font-weight: 950; }
   .heyy-alert-chip.amber { color: #a65300; background: #fff0d5; }
   .heyy-studio-glyph { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid; border-radius: 13px; flex: 0 0 auto; }
   .heyy-submission-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
   .heyy-submission-row { min-height: 72px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 12px; border: 1px solid #e5dfea; border-radius: 15px; color: #211c28; background: #fff; transition: .2s ease; }
-  .heyy-submission-row:hover { border-color: #a66fff; background: #faf7ff; transform: translateY(-2px); }
-  .heyy-submission-row > span { width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; color: #6c00ff; background: #f2e9ff; }
+  .heyy-submission-row:hover { border-color: #8b5cf6; background: #faf7ff; transform: translateY(-2px); }
+  .heyy-submission-row > span { width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; border-radius: 11px; color: #8b5cf6; background: #f2e9ff; }
   .heyy-submission-row strong { display: block; font-size: 11px; }
   .heyy-submission-row p { margin: 3px 0 0; color: #77707e; font-size: 9px; line-height: 1.4; }
   .heyy-submission-side { text-align: right; }
-  .heyy-submission-side b { display: block; color: #6c00ff; font-size: 9px; text-transform: uppercase; }
+  .heyy-submission-side b { display: block; color: #8b5cf6; font-size: 9px; text-transform: uppercase; }
   .heyy-submission-side small { display: block; margin-top: 4px; color: #99919e; font-size: 8px; }
   .heyy-empty-state { min-height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; border: 1px dashed #d9d1e0; border-radius: 18px; background: #faf9fb; }
-  .heyy-empty-state > span { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 14px; color: #6c00ff; background: #eee3ff; }
+  .heyy-empty-state > span { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 14px; color: #8b5cf6; background: #eee3ff; }
   .heyy-empty-state strong { margin-top: 11px; font-size: 13px; }
   .heyy-empty-state p { max-width: 360px; margin: 5px 0 0; color: #817989; font-size: 10px; line-height: 1.5; }
   .heyy-grid-empty { grid-column: 1 / -1; }

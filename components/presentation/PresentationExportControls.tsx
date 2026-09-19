@@ -173,10 +173,10 @@ const exportStyles = `
   box-shadow: 0 10px 22px rgba(11,143,77,.2);
 }
 .heyy-presentation-export-button.pptx {
-  border-color: #6c00ff;
-  background: #6c00ff;
+  border-color: #8b5cf6;
+  background: #8b5cf6;
   color: #fff;
-  box-shadow: 0 10px 22px rgba(108,0,255,.18);
+  box-shadow: 0 10px 22px rgba(139,92,246,.18);
 }
 .heyy-presentation-export-controls.compact .heyy-presentation-export-button {
   min-height: 42px;

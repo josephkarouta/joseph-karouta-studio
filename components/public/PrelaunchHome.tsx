@@ -12,9 +12,20 @@ const expertRoles = [
 export default function PrelaunchHome() {
   return (
     <main className={styles.page}>
-      <div className={`${styles.orb} ${styles.orbOne}`} aria-hidden="true" />
-      <div className={`${styles.orb} ${styles.orbTwo}`} aria-hidden="true" />
-      <div className={styles.grid} aria-hidden="true" />
+      <div className={styles.videoBackdrop} aria-hidden="true">
+        <video
+          className={styles.video}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          poster="/hero-video-poster.jpg"
+        >
+          <source src="/hero-video-web.mp4" type="video/mp4" />
+        </video>
+        <div className={styles.videoOverlay} />
+      </div>
 
       <section className={styles.content} aria-labelledby="prelaunch-heading">
         <Link className={styles.brand} href="/" aria-label="Heyy Studio home">

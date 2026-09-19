@@ -166,9 +166,9 @@ export default function StudioRequestsPage() {
 
         .heyy-refresh:hover {
           transform: translateY(-2px);
-          background: #6c00ff !important;
-          border-color: #6c00ff !important;
-          box-shadow: 0 14px 30px rgba(108,0,255,.26) !important;
+          background: #8b5cf6 !important;
+          border-color: #8b5cf6 !important;
+          box-shadow: 0 14px 30px rgba(139,92,246,.26) !important;
         }
 
         .heyy-stats-grid {
@@ -191,8 +191,8 @@ export default function StudioRequestsPage() {
 
         .heyy-stat-card:hover {
           transform: translateY(-3px);
-          border-color: #8d4dff !important;
-          box-shadow: 0 16px 34px rgba(108,0,255,.12) !important;
+          border-color: #8b5cf6 !important;
+          box-shadow: 0 16px 34px rgba(139,92,246,.12) !important;
         }
 
         .heyy-toolbar {
@@ -217,8 +217,8 @@ export default function StudioRequestsPage() {
         }
 
         .heyy-search:focus {
-          border-color: #7c2cff !important;
-          box-shadow: 0 0 0 4px rgba(124,44,255,.12) !important;
+          border-color: #8b5cf6 !important;
+          box-shadow: 0 0 0 4px rgba(139,92,246,.12) !important;
           background: #fff !important;
         }
 
@@ -242,16 +242,16 @@ export default function StudioRequestsPage() {
 
         .heyy-filter:hover {
           transform: translateY(-2px);
-          border-color: #9b63ff !important;
+          border-color: #8b5cf6 !important;
           background: #f3eaff !important;
-          color: #5b00d6 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-filter[data-active="true"] {
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
-          box-shadow: 0 9px 22px rgba(108,0,255,.23) !important;
+          box-shadow: 0 9px 22px rgba(139,92,246,.23) !important;
         }
 
         .heyy-requests-list {
@@ -285,9 +285,9 @@ export default function StudioRequestsPage() {
 
         .heyy-request-row:hover {
           transform: translateY(-3px);
-          border-color: #6c00ff !important;
+          border-color: #8b5cf6 !important;
           background: linear-gradient(135deg,#fff 0%,#f6efff 100%) !important;
-          box-shadow: 0 16px 34px rgba(108,0,255,.12) !important;
+          box-shadow: 0 16px 34px rgba(139,92,246,.12) !important;
         }
 
         .heyy-request-preview {
@@ -326,16 +326,16 @@ export default function StudioRequestsPage() {
         .heyy-request-row:hover .heyy-review-link,
         .heyy-review-link:hover {
           transform: translateX(2px);
-          border-color: #6c00ff !important;
-          background: #6c00ff !important;
-          box-shadow: 0 10px 24px rgba(108,0,255,.24) !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
+          box-shadow: 0 10px 24px rgba(139,92,246,.24) !important;
         }
 
         .heyy-empty {
           border: 1px dashed #b993ff !important;
           border-radius: 18px !important;
           background: #f5edff !important;
-          color: #6520d8 !important;
+          color: #8b5cf6 !important;
           padding: 28px !important;
           text-align: center !important;
           font-size: 14px !important;
@@ -580,7 +580,7 @@ function InfoBlock({
 
 function StatusPill({ value }: { value: string }) {
   const normalized = String(value || "New").toLowerCase();
-  let style = { backgroundColor: "#ede2ff", color: "#6c00ff" };
+  let style = { backgroundColor: "#ede2ff", color: "#8b5cf6" };
 
   if (normalized.includes("converted")) {
     style = { backgroundColor: "#dcfce7", color: "#15803d" };

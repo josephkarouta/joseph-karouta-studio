@@ -1104,7 +1104,7 @@ const workspaceStyles = `
   .heyy-production-complete-copy{display:flex;max-width:760px;align-items:flex-start;gap:13px}
   .heyy-production-complete-icon{display:grid;width:38px;height:38px;flex:0 0 38px;place-items:center;border-radius:13px;background:#0d9655;color:#fff;box-shadow:0 7px 16px rgba(13,150,85,.18)}
   .heyy-production-complete-eyebrow{margin:0;color:#087b45;font-size:8px;font-weight:950;letter-spacing:.16em;text-transform:uppercase}
-  .heyy-production-complete-pill{display:inline-flex;align-items:center;border-radius:999px;background:#efe7ff;padding:4px 8px;color:#6c00ff;font-size:8px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+  .heyy-production-complete-pill{display:inline-flex;align-items:center;border-radius:999px;background:#efe7ff;padding:4px 8px;color:#8b5cf6;font-size:8px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
   .heyy-production-complete-copy h5{margin:3px 0 0;color:#17131f;font-size:19px;font-weight:950;letter-spacing:-.035em}
   .heyy-production-complete-copy p{margin:4px 0 0;color:#6c6575;font-size:11px;font-weight:650;line-height:1.65}
   .heyy-production-complete-actions{display:flex;flex-wrap:wrap;gap:8px}
@@ -1279,12 +1279,12 @@ const workspaceStyles = `
   .heyy-client-review-tabs button:hover { background: #fff !important; }
   .heyy-client-review-tabs button[data-active="true"] {
     background: #fff !important;
-    color: #5b00d6 !important;
+    color: #8b5cf6 !important;
     box-shadow: 0 7px 18px rgba(57,35,84,.09);
   }
   .heyy-client-review-tabs span { display:block;font-size:11px;font-weight:950; }
   .heyy-client-review-tabs small { display:block;margin-top:3px;font-size:8px;font-weight:800;color:#81798a; }
-  .heyy-client-review-tabs button[data-active="true"] small { color:#7a51ad; }
+  .heyy-client-review-tabs button[data-active="true"] small { color:#8b5cf6; }
 
   @media (max-width: 650px) {
     .heyy-client-review-tabs { grid-template-columns: minmax(0,1fr); }

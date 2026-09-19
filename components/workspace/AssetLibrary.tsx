@@ -78,11 +78,11 @@ const STUDIO_LABELS: Record<Studio, string> = {
 };
 const STUDIO_ACCENT: Record<Studio, string> = {
   architecture: "#1676e8",
-  brand: "#9b38df",
+  brand: "#8b5cf6",
   interior: "#d06b14",
   marketing: "#eb3d87",
   production: "#11a36a",
-  tools: "#6f2dff",
+  tools: "#8b5cf6",
   other: "#7c7485",
 };
 
@@ -294,7 +294,7 @@ export default function AssetLibrary() {
   return (
     <main className="heyy-page heyy-page-grid py-8 sm:py-10">
       <PageContainer>
-        <section className="overflow-hidden rounded-[2rem] border border-[var(--accent-border)] bg-[linear-gradient(120deg,rgba(111,45,255,.13),rgba(239,63,180,.08),rgba(46,124,246,.09))] p-6 shadow-[var(--shadow-card)] sm:p-9">
+        <section className="overflow-hidden rounded-[2rem] border border-[var(--accent-border)] bg-[linear-gradient(120deg,rgba(139,92,246,.13),rgba(239,63,180,.08),rgba(46,124,246,.09))] p-6 shadow-[var(--shadow-card)] sm:p-9">
           <div className="grid gap-8 xl:grid-cols-[1fr_auto] xl:items-end">
             <div>
               <Eyebrow>Workspace · Assets Library</Eyebrow>

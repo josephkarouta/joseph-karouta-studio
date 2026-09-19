@@ -37,7 +37,7 @@ type StorageEntitlement = {
   canBrowse:boolean; canDownload:boolean; canManage:boolean; canSave:boolean; graceEndsAt:string|null; daysRemaining:number|null;
 };
 
-const STUDIO_ACCENTS:Record<string,string>={brand:"#8b2cff",architecture:"#087bf1",interior:"#f18b22",marketing:"#ef2b8d",production:"#10a36b",tools:"#6067f2",other:"#6b7280"};
+const STUDIO_ACCENTS:Record<string,string>={brand:"#8b5cf6",architecture:"#087bf1",interior:"#f18b22",marketing:"#ef2b8d",production:"#10a36b",tools:"#6067f2",other:"#6b7280"};
 
 function date(value:string){try{return new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(value));}catch{return value;}}
 function statusLabel(value:Status){return value.charAt(0).toUpperCase()+value.slice(1);}

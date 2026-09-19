@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import type { StudioTone } from "@/components/ui/StudioModeToggle";
 
 const TONES: Record<StudioTone, { accent: string; end: string; soft: string }> = {
-  platform: { accent: "#6f2dff", end: "#a000e8", soft: "rgba(111,45,255,.12)" },
-  brand: { accent: "#7424df", end: "#c000e8", soft: "rgba(159,44,224,.12)" },
+  platform: { accent: "#8b5cf6", end: "#a000e8", soft: "rgba(139,92,246,.12)" },
+  brand: { accent: "#8b5cf6", end: "#c000e8", soft: "rgba(159,44,224,.12)" },
   architecture: { accent: "#176fd8", end: "#2e8df6", soft: "rgba(46,124,246,.12)" },
   interior: { accent: "#b65408", end: "#ed7c22", soft: "rgba(208,107,20,.12)" },
   marketing: { accent: "#c82d72", end: "#ef3da0", soft: "rgba(235,61,135,.12)" },

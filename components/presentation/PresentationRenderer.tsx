@@ -10,7 +10,7 @@ import type {
 import { HEYY_LOGO_EXPORT_ASSETS } from "@/lib/brand/heyy-logo-assets";
 
 const toneColours: Record<PresentationTone, { soft: string; strong: string; ink: string }> = {
-  purple: { soft: "#F2E9FF", strong: "#6C00FF", ink: "#3E007F" },
+  purple: { soft: "#F2E9FF", strong: "#8B5CF6", ink: "#3E007F" },
   blue: { soft: "#EAF4FF", strong: "#1769D2", ink: "#0E447F" },
   green: { soft: "#E8F8EF", strong: "#0B8F4D", ink: "#075E34" },
   amber: { soft: "#FFF4D8", strong: "#B46A00", ink: "#744300" },
@@ -86,7 +86,7 @@ function ExportHeyyLogo({
       <span
         aria-hidden="true"
         style={{
-          color: light ? "#A78BFA" : "#7C3AED",
+          color: light ? "#A78BFA" : "#8B5CF6",
           fontFamily: "Inter, Arial, Helvetica, sans-serif",
           fontSize: Math.max(7, Math.round(height * 0.29)),
           fontWeight: 900,
@@ -576,7 +576,7 @@ const presentationStyles = `
   height: 900px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 92% 8%, rgba(108,0,255,.08), transparent 27%),
+    radial-gradient(circle at 92% 8%, rgba(139,92,246,.08), transparent 27%),
     #f8fafc;
   padding: 66px 74px 54px;
 }
@@ -929,7 +929,7 @@ const presentationStyles = `
   justify-content: center;
   padding: 22px;
   background:
-    radial-gradient(circle at 50% 40%, rgba(108,0,255,.08), transparent 48%),
+    radial-gradient(circle at 50% 40%, rgba(139,92,246,.08), transparent 48%),
     #f1f5f9;
 }
 .heyy-gallery-grid img,

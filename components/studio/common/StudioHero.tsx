@@ -5,8 +5,8 @@ import type { StudioTone } from "@/components/ui/StudioModeToggle";
 import { cx } from "@/components/ui/heyy";
 
 const TONES: Record<StudioTone, { accent: string; soft: string; border: string }> = {
-  platform: { accent: "#6f2dff", soft: "rgba(111,45,255,.12)", border: "rgba(111,45,255,.34)" },
-  brand: { accent: "#9f2ce0", soft: "rgba(159,44,224,.14)", border: "rgba(159,44,224,.34)" },
+  platform: { accent: "#8b5cf6", soft: "rgba(139,92,246,.12)", border: "rgba(139,92,246,.34)" },
+  brand: { accent: "#8b5cf6", soft: "rgba(159,44,224,.14)", border: "rgba(159,44,224,.34)" },
   architecture: { accent: "#2e7cf6", soft: "rgba(46,124,246,.14)", border: "rgba(46,124,246,.34)" },
   interior: { accent: "#d06b14", soft: "rgba(208,107,20,.14)", border: "rgba(208,107,20,.34)" },
   marketing: { accent: "#eb3d87", soft: "rgba(235,61,135,.14)", border: "rgba(235,61,135,.34)" },

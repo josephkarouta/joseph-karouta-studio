@@ -25,7 +25,7 @@ export default function AuthRequired({
   return (
     <main className="heyy-page heyy-page-grid flex min-h-[calc(100vh-var(--header-height))] items-center justify-center px-5 py-16">
       <GlassCard className="w-full max-w-2xl p-7 text-center sm:p-10">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[linear-gradient(135deg,#6f2dff,#d83cb8)] text-white shadow-[0_18px_40px_rgba(111,45,255,.28)]"><LockKeyhole size={23} /></span>
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[linear-gradient(135deg,#8b5cf6,#d83cb8)] text-white shadow-[0_18px_40px_rgba(139,92,246,.28)]"><LockKeyhole size={23} /></span>
         <p className="mt-6 text-[0.65rem] font-black uppercase tracking-[0.2em] text-[var(--accent-strong)]">Secure creative workspace</p>
         <h1 className="mx-auto mt-3 max-w-xl text-3xl font-black tracking-[-0.045em] text-[var(--text-primary)] sm:text-5xl">{title}</h1>
         <p className="mx-auto mt-4 max-w-lg text-sm font-semibold leading-7 text-[var(--text-secondary)]">{description}</p>

@@ -574,7 +574,7 @@ export default function ProductionDeliverables({
         }
 
         .heyy-latest-badge {
-          background: #6c00ff !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
         }
 
@@ -604,15 +604,15 @@ export default function ProductionDeliverables({
         }
 
         .heyy-version-button[data-tone="final"] {
-          border: 1px solid #6c00ff;
-          background: linear-gradient(135deg,#5b00d6,#7c18ff);
+          border: 1px solid #8b5cf6;
+          background: linear-gradient(135deg,#8b5cf6,#8b5cf6);
           color: #fff;
-          box-shadow: 0 8px 18px rgba(108,0,255,.22);
+          box-shadow: 0 8px 18px rgba(139,92,246,.22);
         }
 
         .heyy-version-button[data-tone="final"]:hover {
-          background: linear-gradient(135deg,#4700a8,#6810df);
-          box-shadow: 0 11px 22px rgba(108,0,255,.28);
+          background: linear-gradient(135deg,#8b5cf6,#8b5cf6);
+          box-shadow: 0 11px 22px rgba(139,92,246,.28);
         }
 
         .heyy-version-history {
@@ -1195,7 +1195,7 @@ function getFileVisual(extension: string): {
       label: extension.toUpperCase(),
       kind: "vector",
       background: extension === "svg" ? "#f3e8ff" : "#ffedd5",
-      foreground: extension === "svg" ? "#7e22ce" : "#c2410c",
+      foreground: extension === "svg" ? "#8b5cf6" : "#c2410c",
       border: extension === "svg" ? "#d8b4fe" : "#fdba74",
     };
   }
@@ -1224,7 +1224,7 @@ function getFileVisual(extension: string): {
     label: extension.toUpperCase() || "FILE",
     kind: "generic",
     background: "#ede9fe",
-    foreground: "#6d28d9",
+    foreground: "#8b5cf6",
     border: "#c4b5fd",
   };
 }

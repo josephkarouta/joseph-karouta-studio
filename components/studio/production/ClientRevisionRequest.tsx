@@ -316,7 +316,7 @@ export default function ClientRevisionRequest({
           font-weight: 750;
         }
 
-        .heyy-revision-policy strong { color: #6d28d9; }
+        .heyy-revision-policy strong { color: #8b5cf6; }
         .heyy-revision-policy[data-limit="true"] {
           border-color: #f1c9a2;
           background: #fff8ee;
@@ -329,7 +329,7 @@ export default function ClientRevisionRequest({
           border-radius: 18px !important;
           background: linear-gradient(135deg,#f5efff,#ffffff) !important;
           padding: 18px !important;
-          color: #6420d6 !important;
+          color: #8b5cf6 !important;
           font-size: 13px !important;
           font-weight: 800 !important;
         }
@@ -357,7 +357,7 @@ export default function ClientRevisionRequest({
 
         .heyy-revision-eyebrow {
           margin: 0 !important;
-          color: #6c00ff !important;
+          color: #8b5cf6 !important;
           font-size: 9px !important;
           font-weight: 950 !important;
           letter-spacing: .18em !important;
@@ -404,7 +404,7 @@ export default function ClientRevisionRequest({
         .heyy-revision-status[data-tone="requested"] {
           border: 1px solid #ccb4ff !important;
           background: #eee5ff !important;
-          color: #5c10c5 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-revision-status[data-tone="changes"] {
@@ -427,7 +427,7 @@ export default function ClientRevisionRequest({
         .heyy-revision-service {
           border: 1px solid #cab1ff !important;
           background: #ffffff !important;
-          color: #6313c8 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-revision-card-body {
@@ -482,9 +482,9 @@ export default function ClientRevisionRequest({
         }
 
         .heyy-revision-avatar[data-tone="studio"] {
-          background: #6c00ff !important;
+          background: #8b5cf6 !important;
           color: #ffffff !important;
-          box-shadow: 0 8px 18px rgba(108,0,255,.22) !important;
+          box-shadow: 0 8px 18px rgba(139,92,246,.22) !important;
         }
 
         .heyy-revision-block-label {
@@ -498,7 +498,7 @@ export default function ClientRevisionRequest({
         }
 
         .heyy-revision-block[data-kind="response"] .heyy-revision-block-label {
-          color: #6511cf !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-revision-message {
@@ -601,9 +601,9 @@ export default function ClientRevisionRequest({
         }
 
         .heyy-purple-action {
-          background: linear-gradient(135deg,#6c00ff,#9c28ff) !important;
+          background: linear-gradient(135deg,#8b5cf6,#8b5cf6) !important;
           color: #ffffff !important;
-          box-shadow: 0 9px 20px rgba(108,0,255,.22) !important;
+          box-shadow: 0 9px 20px rgba(139,92,246,.22) !important;
         }
 
         .heyy-purple-action:hover {
@@ -620,7 +620,7 @@ export default function ClientRevisionRequest({
         .heyy-secondary-action {
           border: 1px solid #c8afff !important;
           background: #ffffff !important;
-          color: #6413cd !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-revision-decision {
@@ -727,7 +727,7 @@ export default function ClientRevisionRequest({
 
         .heyy-revision-composer-title {
           margin: 0 !important;
-          color: #6513ce !important;
+          color: #8b5cf6 !important;
           font-size: 9px !important;
           font-weight: 950 !important;
           letter-spacing: .18em !important;
@@ -757,9 +757,9 @@ export default function ClientRevisionRequest({
         .heyy-revision-targets-head p { margin:3px 0 0 !important; color:#766d80 !important; font-size:9px !important; line-height:1.5 !important; }
         .heyy-revision-target-list { display:grid; gap:7px; margin-top:10px; }
         .heyy-revision-target { display:flex !important; width:100%; align-items:center; gap:10px; border:1px solid #ded6e8 !important; border-radius:12px !important; background:#fff !important; padding:9px 10px !important; text-align:left !important; }
-        .heyy-revision-target[data-selected="true"] { border-color:#9b63ff !important; background:#f4edff !important; }
+        .heyy-revision-target[data-selected="true"] { border-color:#8b5cf6 !important; background:#f4edff !important; }
         .heyy-revision-target-check { display:grid !important; width:24px; height:24px; flex:0 0 24px; place-items:center; border:1px solid #c8b6e6; border-radius:8px; color:#fff !important; font-size:11px; font-weight:950; }
-        .heyy-revision-target[data-selected="true"] .heyy-revision-target-check { border-color:#6c00ff; background:#6c00ff; }
+        .heyy-revision-target[data-selected="true"] .heyy-revision-target-check { border-color:#8b5cf6; background:#8b5cf6; }
         .heyy-revision-target strong { display:block; color:#241d2c !important; font-size:10px !important; }
         .heyy-revision-target small { display:block; margin-top:2px; color:#81788b !important; font-size:8px !important; }
 
@@ -783,7 +783,7 @@ export default function ClientRevisionRequest({
         }
 
         .heyy-revision-composer textarea:focus {
-          border-color: #7b2cff !important;
+          border-color: #8b5cf6 !important;
           background: #ffffff !important;
           box-shadow: 0 0 0 4px rgba(123,44,255,.10) !important;
         }

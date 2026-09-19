@@ -20,7 +20,7 @@ export default function BrandSocialExamples({
   brand: any;
 }) {
   const colours = getColours(brand);
-  const primary = colourValue(colours[0], "#7C3AED");
+  const primary = colourValue(colours[0], "#8B5CF6");
   const secondary = colourValue(colours[1], "#111111");
   const accent = colourValue(colours[2], "#F4F0F8");
 

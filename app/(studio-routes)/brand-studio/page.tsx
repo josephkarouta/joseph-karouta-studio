@@ -953,7 +953,7 @@ export default function BrandStudioPage() {
   const content = (
     <main className="heyy-page brand-studio-v13 min-h-screen py-8 sm:py-10">
       <style>{`
-        .brand-studio-v13 { --brand-accent:#a13df0; --brand-accent-strong:#c88cff; --brand-soft:rgba(190,89,235,.15); }
+        .brand-studio-v13 { --brand-accent:#8b5cf6; --brand-accent-strong:#c88cff; --brand-soft:rgba(190,89,235,.15); }
         .brand-studio-v13 .brand-choice[data-selected="true"] {
           border-color: var(--brand-accent) !important;
           background: linear-gradient(135deg,rgba(161,61,240,.18),var(--surface-strong)) !important;
@@ -1294,7 +1294,7 @@ export default function BrandStudioPage() {
                   {selectedApplications.map((application) => (
                     <section key={application.id} className="rounded-[22px] border border-[var(--border-strong)] bg-[var(--surface)] p-4 sm:p-5">
                       <div>
-                        <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[#a13df0]">{application.category}</p>
+                        <p className="text-[8px] font-black uppercase tracking-[0.16em] text-[#8b5cf6]">{application.category}</p>
                         <h3 className="mt-1 text-xl font-black text-[var(--text-primary)]">{application.label}</h3>
                         <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{application.description}</p>
                       </div>
@@ -1400,7 +1400,7 @@ export default function BrandStudioPage() {
 function Panel({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children: ReactNode }) {
   return (
     <section className="rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--glass)] p-5 shadow-[var(--shadow-card)] backdrop-blur-2xl sm:p-6">
-      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#a13df0]">{eyebrow}</p>
+      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#8b5cf6]">{eyebrow}</p>
       <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-[var(--text-primary)] sm:text-3xl">{title}</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">{description}</p>
       <div className="mt-5 space-y-5">{children}</div>
@@ -1413,7 +1413,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div>
       <label className="text-[9px] font-black uppercase tracking-[0.15em] text-[var(--text-muted)]">{label}</label>
       <div className="mt-2">{children}</div>
-      <style>{`.brand-input { width:100%; border:1px solid var(--border-strong); border-radius:16px; background:var(--surface-strong); padding:13px 14px; color:var(--text-primary); font-size:14px; outline:none; transition:border-color .18s ease, box-shadow .18s ease, background .18s ease; } .brand-input::placeholder { color:var(--text-muted); } .brand-input:focus { border-color:#a13df0; box-shadow:0 0 0 4px rgba(159,44,224,.13); }`}</style>
+      <style>{`.brand-input { width:100%; border:1px solid var(--border-strong); border-radius:16px; background:var(--surface-strong); padding:13px 14px; color:var(--text-primary); font-size:14px; outline:none; transition:border-color .18s ease, box-shadow .18s ease, background .18s ease; } .brand-input::placeholder { color:var(--text-muted); } .brand-input:focus { border-color:#8b5cf6; box-shadow:0 0 0 4px rgba(159,44,224,.13); }`}</style>
     </div>
   );
 }
@@ -1422,7 +1422,7 @@ function ChoicePills({ items, selected, onSelect }: { items: string[]; selected:
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
-        <button key={item} type="button" onClick={() => onSelect(item)} data-selected={selected === item ? "true" : "false"} className="brand-compact-choice min-h-10 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-4 text-xs font-black text-[var(--text-secondary)] transition hover:border-[#a13df0] hover:bg-[var(--accent-soft)] hover:text-[var(--text-primary)]">
+        <button key={item} type="button" onClick={() => onSelect(item)} data-selected={selected === item ? "true" : "false"} className="brand-compact-choice min-h-10 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-4 text-xs font-black text-[var(--text-secondary)] transition hover:border-[#8b5cf6] hover:bg-[var(--accent-soft)] hover:text-[var(--text-primary)]">
           <span>{item}</span>
         </button>
       ))}

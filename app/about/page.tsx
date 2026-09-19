@@ -29,7 +29,7 @@ export default function AboutPage() {
             </GlassCard>
           ))}
         </div>
-        <GlassCard className="mt-4 overflow-hidden bg-[linear-gradient(120deg,rgba(111,45,255,.12),rgba(239,63,180,.09),rgba(46,124,246,.1))] p-8 sm:p-10">
+        <GlassCard className="mt-4 overflow-hidden bg-[linear-gradient(120deg,rgba(139,92,246,.12),rgba(239,63,180,.09),rgba(46,124,246,.1))] p-8 sm:p-10">
           <h2 className="max-w-4xl text-4xl font-black tracking-[-.06em] sm:text-5xl">One place for brands, spaces, campaigns, visuals, files and presentations.</h2>
           <p className="mt-5 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)]">Built for founders, creators and teams who want to move from an idea to useful work without juggling a different platform for every step.</p>
           <ButtonLink href="/signup" className="mt-7">Start creating <ArrowRight size={15}/></ButtonLink>

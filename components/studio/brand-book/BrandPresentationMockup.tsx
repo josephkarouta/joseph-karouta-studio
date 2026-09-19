@@ -19,7 +19,7 @@ export default function BrandPresentationMockup({
 }) {
   const colours = getColours(brand);
 
-  const primary = colourValue(colours[0], "#7C3AED");
+  const primary = colourValue(colours[0], "#8B5CF6");
   const dark = colourValue(colours[1], "#101010");
   const soft = colourValue(colours[2], "#F5F5F5");
 

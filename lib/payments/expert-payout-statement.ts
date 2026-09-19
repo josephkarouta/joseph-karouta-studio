@@ -52,7 +52,7 @@ export async function buildExpertPayoutStatementPdf(data: ExpertPayoutStatementD
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const width = doc.internal.pageSize.getWidth();
   const margin = 48;
-  const accent = [108, 0, 255] as const;
+  const accent = [139, 92, 246] as const;
   const dark = [23, 19, 31] as const;
   const muted = [103, 96, 114] as const;
   const border = [230, 226, 235] as const;

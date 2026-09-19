@@ -32,7 +32,7 @@ type Project = {
 const PAGE_SIZE = 24;
 
 const studioConfig: Record<Project["studio"], { label: string; accent: string; icon: LucideIcon }> = {
-  brand: { label: "Brand", accent: "#a23ce0", icon: WandSparkles },
+  brand: { label: "Brand", accent: "#8b5cf6", icon: WandSparkles },
   marketing: { label: "Marketing", accent: "#eb3d87", icon: Megaphone },
   architecture: { label: "Architecture", accent: "#1676e8", icon: Building2 },
   interior: { label: "Interior", accent: "#d06b14", icon: Sofa },

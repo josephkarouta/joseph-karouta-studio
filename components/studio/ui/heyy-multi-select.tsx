@@ -40,14 +40,14 @@ type HeyyMultiSelectProps = {
 
 const TONES: Record<SelectTone, ToneConfig> = {
   default: {
-    accent: "#6f2dff",
-    strong: "#5a16dc",
-    soft: "rgba(111,45,255,.12)",
-    border: "rgba(111,45,255,.34)",
+    accent: "#8b5cf6",
+    strong: "#8b5cf6",
+    soft: "rgba(139,92,246,.12)",
+    border: "rgba(139,92,246,.34)",
   },
   brand: {
-    accent: "#9f2ce0",
-    strong: "#7e22b7",
+    accent: "#8b5cf6",
+    strong: "#8b5cf6",
     soft: "rgba(159,44,224,.14)",
     border: "rgba(159,44,224,.36)",
   },
@@ -70,10 +70,10 @@ const TONES: Record<SelectTone, ToneConfig> = {
     border: "rgba(235,61,135,.34)",
   },
   admin: {
-    accent: "#6f2dff",
-    strong: "#5a16dc",
-    soft: "rgba(111,45,255,.12)",
-    border: "rgba(111,45,255,.34)",
+    accent: "#8b5cf6",
+    strong: "#8b5cf6",
+    soft: "rgba(139,92,246,.12)",
+    border: "rgba(139,92,246,.34)",
     surface: "#ffffff",
     text: "#211c28",
     muted: "#746d7c",

@@ -26,8 +26,8 @@ type BaseEmailProps = {
 };
 
 const studioThemes: Record<string, { accent: string; accentDark: string; soft: string; label: string }> = {
-  brand_studio: { accent: "#9f2ce0", accentDark: "#6f2dff", soft: "#f7eaff", label: "Brand Studio" },
-  brand: { accent: "#9f2ce0", accentDark: "#6f2dff", soft: "#f7eaff", label: "Brand Studio" },
+  brand_studio: { accent: "#8b5cf6", accentDark: "#8b5cf6", soft: "#f7eaff", label: "Brand Studio" },
+  brand: { accent: "#8b5cf6", accentDark: "#8b5cf6", soft: "#f7eaff", label: "Brand Studio" },
   marketing_studio: { accent: "#eb3d87", accentDark: "#b71f62", soft: "#ffeaf4", label: "Marketing Studio" },
   marketing: { accent: "#eb3d87", accentDark: "#b71f62", soft: "#ffeaf4", label: "Marketing Studio" },
   architecture_studio: { accent: "#1676e8", accentDark: "#0f55a8", soft: "#eaf3ff", label: "Architecture Studio" },
@@ -58,8 +58,8 @@ export function baseEmail({
   const siteUrl = getSiteUrl();
   const emailLogoUrl = logoUrl || getEmailLogoUrl(siteUrl);
   const theme = studioThemes[normaliseStudio(studio)] || {
-    accent: "#7c3aed",
-    accentDark: "#5721b8",
+    accent: "#8b5cf6",
+    accentDark: "#8b5cf6",
     soft: "#f2ebff",
     label: "Heyy Studio",
   };

@@ -215,7 +215,7 @@ async function createBrandProjectSummaryPdfBlob({ project, brand }: { project: a
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 44;
   const contentWidth = pageWidth - margin * 2;
-  const accent = [108, 0, 255] as const;
+  const accent = [139, 92, 246] as const;
   const dark = [23, 19, 31] as const;
   const muted = [100, 92, 111] as const;
   const border = [228, 222, 235] as const;
@@ -561,7 +561,7 @@ export default function BrandExport({
 
 function Metric({ title, value, tone }: { title: string; value: string; tone: "purple" | "blue" | "amber" | "green" }) {
   const colours = {
-    purple: ["#f1e8ff", "#6c00ff"],
+    purple: ["#f1e8ff", "#8b5cf6"],
     blue: ["#e7f4ff", "#1766c2"],
     amber: ["#fff3d8", "#a45c00"],
     green: ["#e4faed", "#0b8f4d"],

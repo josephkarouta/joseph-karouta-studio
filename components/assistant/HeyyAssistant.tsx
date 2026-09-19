@@ -187,7 +187,7 @@ export default function HeyyAssistant() {
         type="button"
         onClick={() => setOpen(true)}
         className={cx(
-          "fixed bottom-5 right-5 z-[70] flex h-14 items-center gap-2 rounded-full border border-white/20 bg-[linear-gradient(135deg,#6f2dff,#d83cb8)] px-4 font-black text-white shadow-[0_22px_55px_rgba(93,37,183,.35)] transition hover:-translate-y-1 hover:shadow-[0_28px_65px_rgba(93,37,183,.46)]",
+          "fixed bottom-5 right-5 z-[70] flex h-14 cursor-pointer items-center gap-2 rounded-full border border-white/20 bg-[#8b5cf6] px-4 font-black text-white shadow-[0_22px_55px_rgba(139,92,246,.30)] transition-[background-color,border-color,box-shadow] hover:border-white/35 hover:bg-[#7447e8] hover:shadow-[0_28px_65px_rgba(116,71,232,.42)] active:bg-[#6840cf]",
           open && "pointer-events-none scale-90 opacity-0",
         )}
         aria-label="Open Heyy AI"
@@ -202,7 +202,7 @@ export default function HeyyAssistant() {
           aria-label="Heyy AI assistant"
           className="fixed inset-x-3 bottom-3 z-[80] flex max-h-[min(720px,calc(100vh-24px))] flex-col overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-[0_35px_110px_rgba(25,12,45,.32)] backdrop-blur-3xl sm:left-auto sm:right-5 sm:w-[430px]"
         >
-          <header className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#2d1152_0%,#6f2dff_50%,#d83cb8_100%)] p-5 text-white">
+          <header className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#2d1152_0%,#8b5cf6_50%,#d83cb8_100%)] p-5 text-white">
             <div className="absolute -right-10 -top-14 h-36 w-36 rounded-full border-[22px] border-white/10" />
             <div className="relative flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">

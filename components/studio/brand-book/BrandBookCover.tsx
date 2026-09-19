@@ -12,7 +12,7 @@ export default function BrandBookCover({
   return (
     <section className="relative overflow-hidden rounded-[26px] border border-violet-200 bg-white shadow-[0_16px_36px_rgba(55,30,83,.08)]">
       <div className="grid min-h-[430px] lg:grid-cols-[minmax(0,1.15fr)_360px]">
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#1d1030] via-[#40206b] to-[#7a2cff] p-7 text-white sm:p-9">
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#1d1030] via-[#40206b] to-[#8b5cf6] p-7 text-white sm:p-9">
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-fuchsia-400/25 blur-3xl" />
           <div className="absolute -bottom-24 -left-20 h-72 w-72 rounded-full bg-violet-300/20 blur-3xl" />
 

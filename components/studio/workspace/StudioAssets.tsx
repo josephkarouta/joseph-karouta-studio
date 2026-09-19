@@ -274,9 +274,9 @@ export default function StudioAssets() {
           align-items: center !important;
           justify-content: center !important;
           border-radius: 15px !important;
-          background: linear-gradient(135deg,#5b00d6,#8128ff) !important;
+          background: linear-gradient(135deg,#8b5cf6,#8b5cf6) !important;
           color: #fff !important;
-          box-shadow: 0 11px 23px rgba(108,0,255,.22) !important;
+          box-shadow: 0 11px 23px rgba(139,92,246,.22) !important;
         }
 
         .heyy-assets-header-icon svg {
@@ -296,10 +296,10 @@ export default function StudioAssets() {
         }
 
         .heyy-asset-filter[data-active="true"] {
-          border: 1px solid #6c00ff !important;
-          background: #6c00ff !important;
+          border: 1px solid #8b5cf6 !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
-          box-shadow: 0 8px 18px rgba(108,0,255,.18) !important;
+          box-shadow: 0 8px 18px rgba(139,92,246,.18) !important;
         }
 
         .heyy-asset-filter[data-active="false"] {
@@ -310,9 +310,9 @@ export default function StudioAssets() {
 
         .heyy-asset-filter[data-active="false"]:hover {
           transform: translateY(-1px);
-          border-color: #8c4dff !important;
+          border-color: #8b5cf6 !important;
           background: #f1e8ff !important;
-          color: #5b00d6 !important;
+          color: #8b5cf6 !important;
         }
 
         .heyy-assets-page-next {
@@ -320,9 +320,9 @@ export default function StudioAssets() {
           min-height: 38px !important;
           align-items: center !important;
           justify-content: center !important;
-          border: 1px solid #6c00ff !important;
+          border: 1px solid #8b5cf6 !important;
           border-radius: 999px !important;
-          background: #6c00ff !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
           padding: 0 16px !important;
           font-size: 11px !important;
@@ -330,8 +330,8 @@ export default function StudioAssets() {
         }
 
         .heyy-assets-page-next:hover:not(:disabled) {
-          border-color: #4c00b4 !important;
-          background: #4c00b4 !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
         }
 
@@ -341,19 +341,19 @@ export default function StudioAssets() {
           width: 100% !important;
           align-items: center !important;
           justify-content: center !important;
-          border: 1px solid #6c00ff !important;
+          border: 1px solid #8b5cf6 !important;
           border-radius: 999px !important;
-          background: #6c00ff !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
           padding: 0 16px !important;
           font-size: 13px !important;
           font-weight: 900 !important;
-          box-shadow: 0 10px 22px rgba(108,0,255,.20) !important;
+          box-shadow: 0 10px 22px rgba(139,92,246,.20) !important;
         }
 
         .heyy-asset-download:hover {
-          border-color: #4c00b4 !important;
-          background: #4c00b4 !important;
+          border-color: #8b5cf6 !important;
+          background: #8b5cf6 !important;
           color: #fff !important;
         }
       `}</style>
@@ -407,7 +407,7 @@ export default function StudioAssets() {
                   key={asset.id}
                   type="button"
                   onClick={() => openAsset(asset)}
-                  className="group min-w-0 overflow-hidden rounded-[19px] border border-slate-200 bg-white text-left transition hover:-translate-y-1 hover:border-violet-500 hover:shadow-[0_16px_32px_rgba(108,0,255,.12)]"
+                  className="group min-w-0 overflow-hidden rounded-[19px] border border-slate-200 bg-white text-left transition hover:-translate-y-1 hover:border-violet-500 hover:shadow-[0_16px_32px_rgba(139,92,246,.12)]"
                 >
                   <div className="relative overflow-hidden bg-slate-100">
                     {previewUrl ? (

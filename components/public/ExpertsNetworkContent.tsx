@@ -176,7 +176,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
       <div className="grid gap-5 sm:gap-7 xl:grid-cols-[minmax(0,1.04fr)_minmax(480px,.96fr)] xl:items-start">
         <div className="min-w-0 grid gap-5">
           <GlassCard className="overflow-hidden">
-            <div className="bg-[linear-gradient(135deg,#17131f,#6f2dff_78%,#dc36c8)] p-5 text-white sm:p-9">
+            <div className="bg-[linear-gradient(135deg,#17131f,#8b5cf6_78%,#dc36c8)] p-5 text-white sm:p-9">
               <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-white/70 sm:text-[.62rem] sm:tracking-[.18em]">{expertStudioLabel(selected)} · Expert Network</p>
               <h2 className="mt-3 text-3xl font-black leading-[.98] tracking-[-.055em] sm:mt-4 sm:text-5xl">{selected.title}</h2>
               <div className="mt-4 flex flex-wrap gap-2 text-[.68rem] font-black sm:mt-5 sm:text-xs"><span className="rounded-full bg-white/12 px-3 py-2">{selected.employment_type || "Freelance / Project-based"}</span><span className="rounded-full bg-white/12 px-3 py-2">{selected.location || "Remote / Worldwide"}</span></div>

@@ -27,7 +27,7 @@ export default function BrandBusinessCardShowcase({
 }) {
   const colours = getColours(brand);
 
-  const primary = colourValue(colours[0], "#7C3AED");
+  const primary = colourValue(colours[0], "#8B5CF6");
   const dark = colourValue(colours[1], "#111111");
 
   const name = project?.project_name || "Brand";

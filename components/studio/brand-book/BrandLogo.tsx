@@ -22,11 +22,11 @@ function getLogoUrl(logo: any) {
 
 const panelPalette = {
   concept: { Icon: Sparkles, accent: "#c51f7c", soft: "#fff0f8", border: "#f2bfdc" },
-  specs: { Icon: ClipboardCheck, accent: "#6c00ff", soft: "#f3eaff", border: "#d8c2fb" },
+  specs: { Icon: ClipboardCheck, accent: "#8b5cf6", soft: "#f3eaff", border: "#d8c2fb" },
   roadmap: { Icon: Compass, accent: "#1766c2", soft: "#edf6ff", border: "#bdd9ff" },
   preview: { Icon: LayoutTemplate, accent: "#087e9d", soft: "#ebfbff", border: "#b8e5ee" },
   spacing: { Icon: Move, accent: "#a45c00", soft: "#fff7df", border: "#efd395" },
-  size: { Icon: ScanLine, accent: "#7b44c8", soft: "#f5efff", border: "#dac8f5" },
+  size: { Icon: ScanLine, accent: "#8b5cf6", soft: "#f5efff", border: "#dac8f5" },
   guidance: {
     Icon: ShieldCheck,
     accent: "#0b8f4d",
@@ -124,7 +124,7 @@ export default function BrandLogo({ logo }: { logo?: any }) {
               icon="▧"
               title="Source"
               value="Generated image"
-              accent="#6c00ff"
+              accent="#8b5cf6"
             />
             <Spec
               icon="○"
@@ -137,7 +137,7 @@ export default function BrandLogo({ logo }: { logo?: any }) {
 
         <LogoPanel title="Production Roadmap" label="Next step" tone="roadmap">
           <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-br from-violet-700 via-violet-600 to-fuchsia-600 p-5 text-white shadow-[0_18px_38px_rgba(108,0,255,.22)]">
+            <div className="relative overflow-hidden rounded-[20px] bg-gradient-to-br from-violet-700 via-violet-600 to-fuchsia-600 p-5 text-white shadow-[0_18px_38px_rgba(139,92,246,.22)]">
               <span className="absolute -right-8 -top-14 text-[180px] font-black leading-none text-white/[0.07]">
                 /
               </span>
@@ -253,7 +253,7 @@ export default function BrandLogo({ logo }: { logo?: any }) {
               title="Presentation"
               value="64px+"
               body="Deck covers, proposal pages and supporting layouts."
-              accent="#6c00ff"
+              accent="#8b5cf6"
             />
             <SizeCard
               icon="◇"
@@ -306,7 +306,7 @@ export default function BrandLogo({ logo }: { logo?: any }) {
             />
             <InfoCard
               icon="↓"
-              accent="#6c00ff"
+              accent="#8b5cf6"
               title="What the user receives"
               body="A professional logo package with vector artwork, transparent assets, usage rules and launch-ready files."
             />
@@ -367,7 +367,7 @@ function LogoPanel({
         <div className="flex items-center gap-3">
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] text-sm font-black text-white shadow-md"
-            style={{ background: "#6c00ff", boxShadow: "0 8px 18px rgba(108,0,255,.18)" }}
+            style={{ background: "#8b5cf6", boxShadow: "0 8px 18px rgba(139,92,246,.18)" }}
           >
             <Icon size={18} strokeWidth={2.1} />
           </span>

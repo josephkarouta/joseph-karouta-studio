@@ -92,7 +92,7 @@ export default function ToolFrame({
                 </div>
               </section>
             ) : (
-              <section className="relative overflow-hidden rounded-[2rem] border p-6 shadow-[var(--shadow-card)] sm:p-9" style={{ borderColor: `${accent}45`, background: `linear-gradient(118deg,${soft},var(--surface-strong),rgba(111,45,255,.08))` }}>
+              <section className="relative overflow-hidden rounded-[2rem] border p-6 shadow-[var(--shadow-card)] sm:p-9" style={{ borderColor: `${accent}45`, background: `linear-gradient(118deg,${soft},var(--surface-strong),rgba(139,92,246,.08))` }}>
                 <div className="absolute -right-14 -top-20 h-56 w-56 rounded-full border-[34px] border-white/20" />
                 <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
                   <div className="flex max-w-4xl items-start gap-4">

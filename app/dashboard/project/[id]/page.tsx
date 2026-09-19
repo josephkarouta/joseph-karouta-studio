@@ -122,7 +122,7 @@ export default function ProjectDetailPage({
     return (
       <main
         className="flex min-h-screen items-center justify-center"
-        style={{ backgroundColor: "#f8f7fb", color: "#6c00ff" }}
+        style={{ backgroundColor: "#f8f7fb", color: "#8b5cf6" }}
       >
         Loading project...
       </main>
@@ -203,8 +203,8 @@ export default function ProjectDetailPage({
 
         .heyy-project-input:focus,
         .heyy-project-textarea:focus {
-          border-color: #7c2cff;
-          box-shadow: 0 0 0 4px rgba(124,44,255,.12);
+          border-color: #8b5cf6;
+          box-shadow: 0 0 0 4px rgba(139,92,246,.12);
         }
 
         .heyy-project-textarea {

@@ -74,12 +74,12 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
           border: 1px solid #d8c4fb;
           border-radius: 22px;
           background: #fff;
-          box-shadow: 0 12px 28px rgba(108,0,255,.07);
+          box-shadow: 0 12px 28px rgba(139,92,246,.07);
         }
 
         .heyy-revision-card[data-current="true"] {
-          border-color: #9d63ff;
-          box-shadow: 0 15px 34px rgba(108,0,255,.12);
+          border-color: #8b5cf6;
+          box-shadow: 0 15px 34px rgba(139,92,246,.12);
         }
 
         .heyy-revision-card-head {
@@ -88,7 +88,7 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
           justify-content: space-between;
           gap: 14px;
           flex-wrap: wrap;
-          background: linear-gradient(135deg,#5b00d6 0%,#7c16ff 55%,#9a48ff 100%);
+          background: linear-gradient(135deg,#8b5cf6 0%,#8b5cf6 55%,#8b5cf6 100%);
           color: #fff;
           padding: 16px 18px;
           box-shadow: inset 0 -1px 0 rgba(255,255,255,.16);
@@ -104,7 +104,7 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
         .heyy-service-pill {
           border: 1px solid rgba(255,255,255,.9) !important;
           background: #ffffff !important;
-          color: #5b00d6 !important;
+          color: #8b5cf6 !important;
           box-shadow: 0 7px 18px rgba(37,0,88,.18) !important;
         }
 
@@ -144,7 +144,7 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
         }
 
         .heyy-message[data-side="studio"] .heyy-message-avatar {
-          background: #6c00ff;
+          background: #8b5cf6;
           color: #fff;
         }
 
@@ -232,7 +232,7 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
         }
 
         .heyy-revision-upload:hover {
-          border-color: #6c00ff;
+          border-color: #8b5cf6;
           background: #f6efff;
         }
 
@@ -255,8 +255,8 @@ export default function ProductionRevisions({ job }: ProductionRevisionsProps) {
         .heyy-revision-button:hover { transform: translateY(-1px); }
 
         .heyy-revision-button[data-tone="primary"] {
-          border: 1px solid #6c00ff;
-          background: #6c00ff;
+          border: 1px solid #8b5cf6;
+          background: #8b5cf6;
           color: #fff;
         }
 
@@ -1059,7 +1059,7 @@ function getFileVisual(extension: string): {
       label: extension.toUpperCase(),
       kind: "vector",
       background: extension === "svg" ? "#f3e8ff" : "#ffedd5",
-      foreground: extension === "svg" ? "#7e22ce" : "#c2410c",
+      foreground: extension === "svg" ? "#8b5cf6" : "#c2410c",
       border: extension === "svg" ? "#d8b4fe" : "#fdba74",
     };
   }
@@ -1088,7 +1088,7 @@ function getFileVisual(extension: string): {
     label: extension.toUpperCase() || "FILE",
     kind: "generic",
     background: "#ede9fe",
-    foreground: "#6d28d9",
+    foreground: "#8b5cf6",
     border: "#c4b5fd",
   };
 }

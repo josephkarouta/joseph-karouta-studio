@@ -112,7 +112,7 @@ async function buildSummaryPdf(args: ExportArgs & { projectName: string }) {
   const muted: RGB = [113, 113, 122];
   const line: RGB = [228, 228, 231];
   const surface: RGB = [248, 248, 250];
-  const purple: RGB = [111, 45, 255];
+  const purple: RGB = [139, 92, 246];
   const purpleSoft: RGB = [246, 242, 255];
   const purpleLine: RGB = [222, 210, 255];
 

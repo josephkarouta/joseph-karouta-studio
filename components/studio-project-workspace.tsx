@@ -213,7 +213,7 @@ export default function StudioProjectWorkspace({
 
           [data-theme="dark"] .heyy-studio-project-page .heyy-step:hover:not(:disabled):not([data-active="true"]) {
             border-color: var(--accent-border) !important;
-            background: rgba(111,45,255,.17) !important;
+            background: rgba(139,92,246,.17) !important;
             color: #dccbff !important;
           }
 
@@ -261,8 +261,8 @@ export default function StudioProjectWorkspace({
           }
 
           [data-theme="dark"] .heyy-studio-project-page .from-violet-50 {
-            --tw-gradient-from: rgba(111,45,255,.17) var(--tw-gradient-from-position) !important;
-            --tw-gradient-to: rgba(111,45,255,0) var(--tw-gradient-to-position) !important;
+            --tw-gradient-from: rgba(139,92,246,.17) var(--tw-gradient-from-position) !important;
+            --tw-gradient-to: rgba(139,92,246,0) var(--tw-gradient-to-position) !important;
           }
 
           [data-theme="dark"] .heyy-studio-project-page .via-white {
@@ -292,7 +292,7 @@ export default function StudioProjectWorkspace({
           [data-theme="dark"] .heyy-studio-project-page .brand-production-workspace > section > header,
           [data-theme="dark"] .heyy-studio-project-page .heyy-assets-shell > section > header {
             border-color: var(--border) !important;
-            background: linear-gradient(135deg,rgba(111,45,255,.16),rgba(31,27,40,.98) 55%,rgba(20,17,27,.98)) !important;
+            background: linear-gradient(135deg,rgba(139,92,246,.16),rgba(31,27,40,.98) 55%,rgba(20,17,27,.98)) !important;
           }
 
           [data-theme="dark"] .heyy-studio-project-page .brand-production-workspace > section,

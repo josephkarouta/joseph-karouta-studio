@@ -12,7 +12,7 @@ export default function BrandPackagingMockup({
     colours[0]?.hex ||
     colours[0]?.value ||
     colours[0] ||
-    "#7C3AED";
+    "#8B5CF6";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">

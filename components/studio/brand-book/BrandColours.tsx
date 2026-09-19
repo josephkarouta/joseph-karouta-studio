@@ -54,11 +54,11 @@ function getColourName(colour: any, index: number) {
 }
 
 const panelMeta = {
-  primary: { Icon: Palette, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  support: { Icon: SwatchBook, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  usage: { Icon: ChartPie, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  pairings: { Icon: LayoutTemplate, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  guidance: { Icon: BadgeCheck, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  primary: { Icon: Palette, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  support: { Icon: SwatchBook, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  usage: { Icon: ChartPie, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  pairings: { Icon: LayoutTemplate, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  guidance: { Icon: BadgeCheck, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
 };
 
 type PanelTone = keyof typeof panelMeta;
@@ -169,7 +169,7 @@ export default function BrandColours({ brand }: { brand: any }) {
                 title="Headlines"
                 value="25%"
                 body="Use strong contrast for headings and important messages."
-                accent="#6c00ff"
+                accent="#8b5cf6"
               />
               <UsageCard
                 Icon={Sparkles}

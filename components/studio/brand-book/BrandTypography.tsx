@@ -50,17 +50,17 @@ function roleLabel(role: string) {
 }
 
 const rolePalette = [
-  { accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  { accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  { accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  { accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  { accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  { accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
 ];
 
 const panelPalette = {
-  family: { Icon: Type, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  scale: { Icon: Maximize2, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  preview: { Icon: LayoutTemplate, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  usage: { Icon: Type, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
-  rules: { Icon: BadgeCheck, accent: "#6c00ff", soft: "#faf8fd", border: "#e2dcea" },
+  family: { Icon: Type, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  scale: { Icon: Maximize2, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  preview: { Icon: LayoutTemplate, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  usage: { Icon: Type, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
+  rules: { Icon: BadgeCheck, accent: "#8b5cf6", soft: "#faf8fd", border: "#e2dcea" },
 };
 
 type PanelTone = keyof typeof panelPalette;
@@ -197,7 +197,7 @@ export default function BrandTypography({ brand }: { brand: any }) {
                             rel="noreferrer"
                             className="inline-flex h-11 shrink-0 items-center justify-center rounded-full px-5 text-xs font-black text-white shadow-lg transition hover:-translate-y-0.5"
                             style={{
-                              background: `linear-gradient(135deg,${palette.accent},#6c00ff)`,
+                              background: `linear-gradient(135deg,${palette.accent},#8b5cf6)`,
                               boxShadow: `0 10px 22px ${palette.accent}30`,
                             }}
                           >
@@ -219,13 +219,13 @@ export default function BrandTypography({ brand }: { brand: any }) {
               label="Hero"
               size="64 / 72"
               sample="Design with confidence."
-              accent="#6c00ff"
+              accent="#8b5cf6"
             />
             <ScaleRow
               label="H1"
               size="48 / 56"
               sample="Brand Guidelines"
-              accent="#7d2ae8"
+              accent="#8b5cf6"
             />
             <ScaleRow
               label="H2"
@@ -300,7 +300,7 @@ export default function BrandTypography({ brand }: { brand: any }) {
               icon="▤"
               title="Presentation"
               body="Use strong headings, short body text and generous spacing for slide clarity."
-              accent="#6c00ff"
+              accent="#8b5cf6"
             />
             <UsageCard
               icon="✦"

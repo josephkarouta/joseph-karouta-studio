@@ -39,7 +39,7 @@ export function firstAsset(assets: any[], types: string[]) {
   return assets.find((asset) => types.includes(asset?.asset_type));
 }
 
-export function normaliseHex(value: unknown, fallback = "#6C00FF") {
+export function normaliseHex(value: unknown, fallback = "#8B5CF6") {
   const text = cleanText(value);
   if (/^#[0-9a-f]{6}$/i.test(text)) return text.toUpperCase();
   if (/^[0-9a-f]{6}$/i.test(text)) return `#${text.toUpperCase()}`;
