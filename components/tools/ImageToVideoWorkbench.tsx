@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/components/auth-provider";
-import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
+import { Button, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 
 type VideoMode = "fast" | "quality";
@@ -263,7 +263,6 @@ export default function ImageToVideoWorkbench() {
               Upload one still image, describe the movement you want, then choose the rendering mode and resolution.
             </p>
           </div>
-          <CreditPill credits={cost} />
         </div>
 
         <input
@@ -356,9 +355,8 @@ export default function ImageToVideoWorkbench() {
           />
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] px-4 py-3">
+        <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] px-4 py-3">
           <p className="text-xs font-bold text-[var(--text-secondary)]">8-second video · native audio included</p>
-          <CreditPill credits={cost} />
         </div>
 
         {error && (

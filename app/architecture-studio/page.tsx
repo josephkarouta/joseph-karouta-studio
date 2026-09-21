@@ -6,9 +6,8 @@ import SiteHeader from "@/components/site-header";
 import SiteFooter from "@/components/site-footer";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import StudioAccessGate from "@/components/studio-access-gate";
-import { CreditPill, Eyebrow, PageContainer } from "@/components/ui/heyy";
+import { Eyebrow, PageContainer } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
-import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
 import StudioHero from "@/components/studio/common/StudioHero";
 import StudioCreationSummary from "@/components/studio/common/StudioCreationSummary";
@@ -160,7 +159,7 @@ export default function ArchitectureStudioPage() {
   const [user, setUser] = useState<User | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [mode, setMode] = useState<Mode>("build");
-  const [workingMode, setWorkingMode] = useState<WorkingMode>("guided");
+  const workingMode: WorkingMode = "guided";
   const [step, setStep] = useState(1);
   const [landStart, setLandStart] = useState<LandStart>("owned");
   const [projectType, setProjectType] = useState("");
@@ -637,28 +636,18 @@ export default function ArchitectureStudioPage() {
               tone="architecture"
               eyebrow="Site planning & architecture direction"
               title="Architecture Studio"
-              description={ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
-                ? "Start a new design or develop a sketch, plan, drawing, photo or model you already have. Guided and Professional modes share one connected project workspace."
-                : "Start a new design or develop a sketch, plan, drawing, photo or model you already have. Heyy Studio guides you through one connected concept-development workspace."}
+              description="Develop a new concept or build from an existing plan, sketch, drawing or model."
               imageSrc="/studio-heroes/architecture-studio-hero.webp"
               imagePosition="center 58%"
-              controls={(
-                <>
-                  {ARCHITECTURE_PROFESSIONAL_MODE_ENABLED ? (
-                    <StudioModeToggle value={workingMode} onChange={setWorkingMode} tone="architecture" compact />
-                  ) : null}
-                  <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                    <span className="text-xs font-bold text-[var(--text-secondary)]">
-                      {ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
-                        ? (workingMode === "guided" ? "Simple language and smart recommendations" : "Areas, structure, schedules and technical controls")
-                        : "Concept-first guidance from brief to design package"}
-                    </span>
-                    <CreditPill credits={CREDIT_COSTS.architectureConcept} />
-                  </div>
-                </>
-              )}
             />
 
+            <ArchitectureOnboardingNavigation
+              mode={mode}
+              step={step}
+              totalSteps={totalSteps}
+              onChange={setStep}
+              disabled={creating}
+            />
 
             <div ref={builderSectionRef} className="builder-grid scroll-mt-28">
               <section className="builder-panel">
@@ -682,19 +671,13 @@ export default function ArchitectureStudioPage() {
                   </div>
                 </div>
 
-                <div className="mt-7 flex flex-wrap items-start justify-between gap-4 border-t border-[var(--border)] pt-6">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">
-                      {modeLabel(mode)}
-                    </p>
-                    <h3 className="mt-2 text-2xl font-black tracking-[-0.035em]">
-                      {stepTitle(mode, step)}
-                    </h3>
-                  </div>
-
-                  <span className="rounded-full bg-blue-100 px-3 py-2 text-[9px] font-black uppercase tracking-[0.13em] text-blue-700">
-                    Step {step} of {totalSteps}
-                  </span>
+                <div className="mt-7 border-t border-[var(--border)] pt-6">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">
+                    {modeLabel(mode)}
+                  </p>
+                  <h3 className="mt-2 text-2xl font-black tracking-[-0.035em]">
+                    {stepTitle(mode, step)}
+                  </h3>
                 </div>
 
                 <div className="progress-wrap">
@@ -792,16 +775,11 @@ export default function ArchitectureStudioPage() {
                 <StudioCreationSummary
                   tone="architecture"
                   eyebrow="Project summary"
-                  title={form.projectName || "New Architecture Project"}
-                  subtitle={ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
-                    ? (workingMode === "professional" ? "Professional architecture workspace" : "Guided architecture workspace")
-                    : "Architecture concept workspace"}
+                  title={form.projectName || "Untitled project"}
+                  subtitle="Architecture concept workspace"
                   progress={progress}
                   rows={[
                     { label: "Workflow", value: modeLabel(mode) },
-                    ...(ARCHITECTURE_PROFESSIONAL_MODE_ENABLED
-                      ? [{ label: "Working mode", value: workingMode === "professional" ? "Professional Mode" : "Guided Mode" }]
-                      : []),
                     { label: "Project type", value: projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected" },
                     { label: "Scope", value: scope || "Not selected" },
                     { label: "Location", value: [form.city, form.country].filter(Boolean).join(", ") || "Not added" },
@@ -832,14 +810,12 @@ export default function ArchitectureStudioPage() {
 function ProfessionalFields({ form, updateField }: { form: BuilderForm; updateField: (name: keyof BuilderForm, value: string) => void }) {
   return (
     <div className="professional-fields">
-      <div className="professional-fields-head"><strong>Professional Controls</strong><span>Exact area, occupancy, budget, structure and consultant constraints are available only in Professional Mode.</span></div>
-      <div className="grid gap-4 md:grid-cols-3">
-        <Field label="Exact Target Gross Area m²" value={form.targetGrossArea} onChange={(value) => updateField("targetGrossArea", value)} inputMode="decimal" />
+      <div className="professional-fields-head"><strong>Additional project details</strong><span>Optional: add any known area, occupancy, budget, structure or consultant constraints for a more specific result.</span></div>
+      <div className="grid gap-4 md:grid-cols-2">
         <SelectField label="Budget Level" value={form.budgetLevel} options={["", "Controlled", "Mid-range", "Premium", "Signature"]} onChange={(value) => updateField("budgetLevel", value)} />
         <SelectField label="Structural Preference" value={form.structuralPreference} options={["", "Open for recommendation", "Reinforced concrete", "Steel frame", "Timber / hybrid", "Masonry"]} onChange={(value) => updateField("structuralPreference", value)} />
       </div>
-      <Field label="Capacity / Occupancy" value={form.userCapacity} onChange={(value) => updateField("userCapacity", value)} placeholder="Exact staff, guests, students, beds, units or peak occupancy" />
-      <div className="field"><label className="field-label">Professional Notes</label><textarea className="textarea" value={form.professionalNotes} onChange={(event) => updateField("professionalNotes", event.target.value)} placeholder="Grid, spans, façade performance, output scales, consultant constraints or design-development priorities." /></div>
+      <div className="field"><label className="field-label">Additional Notes</label><textarea className="textarea" value={form.professionalNotes} onChange={(event) => updateField("professionalNotes", event.target.value)} placeholder="Grid, spans, façade performance, output scales, consultant constraints or design-development priorities." /></div>
     </div>
   );
 }
@@ -869,25 +845,25 @@ function BuildWorkflow({
   </>;
 
   if (step === 2) return <>
-    <div className={`info-panel ${workingMode === "professional" ? "blue" : ""}`}><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">{workingMode === "professional" ? "Professional Site Setup" : "Guided Size Setup"}</p><h3 className="mt-2 text-2xl font-black text-slate-950">{workingMode === "professional" ? "Enter known dimensions and technical project controls." : "Approximate size is enough. Unknown information can stay empty."}</h3><p className="mt-3 text-sm leading-7 text-slate-600">{workingMode === "professional" ? "Survey information, exact width and depth, occupancy, structure and planning documents will feed the professional workspace." : "Students, homeowners and early-stage users only need an estimated property area, building area, location and number of floors."}</p></div>
+    <div className="info-panel blue"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Site & project details</p><h3 className="mt-2 text-2xl font-black text-slate-950">Add what you know. Leave anything unknown blank.</h3><p className="mt-3 text-sm leading-7 text-slate-600">More site, dimension and planning detail improves coordination, while an early brief can stay approximate.</p></div>
     <div className="field"><p className="field-label">How are you starting?</p><div className="choice-grid">
-      <ChoiceCard active={landStart === "owned"} onClick={() => setLandStart("owned")} title="I have land" body={workingMode === "professional" ? "Add survey and site information. The Professional workspace will unlock the Planning Guide." : "Add only the approximate property size and location. Technical planning remains hidden in Guided Mode."} />
+      <ChoiceCard active={landStart === "owned"} onClick={() => setLandStart("owned")} title="I have land" body="Add the site information you have. Survey and planning details are optional at this stage." />
       <ChoiceCard active={landStart === "looking"} onClick={() => setLandStart("looking")} title="Looking for land" body="Define the project without pretending a site is confirmed." />
       <ChoiceCard active={landStart === "exploring"} onClick={() => setLandStart("exploring")} title="Just exploring" body="Perfect for students and early concept projects." />
     </div></div>
     <div className="grid gap-4 md:grid-cols-3"><Field label="Country" value={form.country} onChange={(value) => updateField("country", value)} /><Field label="State / Region" value={form.region} onChange={(value) => updateField("region", value)} /><Field label="City / Municipality" value={form.city} onChange={(value) => updateField("city", value)} /></div>
     <div className="grid gap-4 md:grid-cols-3">
-      <Field label={workingMode === "professional" ? "Target Gross Area m²" : "Approximate Building Area m²"} value={form.targetGrossArea} onChange={(value) => updateField("targetGrossArea", value)} inputMode="decimal" placeholder={workingMode === "professional" ? "Exact target" : "Leave blank if unknown"} />
+      <Field label="Target Building Area m²" value={form.targetGrossArea} onChange={(value) => updateField("targetGrossArea", value)} inputMode="decimal" placeholder="Leave blank if unknown" />
       <Field label="Desired Floors" value={form.floors} onChange={(value) => updateField("floors", value)} inputMode="numeric" placeholder="Leave blank if unknown" />
       <Field label={template.simpleCapacityLabel} value={form.userCapacity} onChange={(value) => updateField("userCapacity", value)} placeholder={template.simpleCapacityPlaceholder} />
     </div>
     {landStart === "owned" && <>
-      <Field label="Address or Lot Number" value={form.address} onChange={(value) => updateField("address", value)} placeholder="Optional in Guided Mode" />
-      <div className="grid gap-4 md:grid-cols-3"><Field label="Property / Plot Area m²" value={form.plotArea} onChange={(value) => updateField("plotArea", value)} inputMode="decimal" placeholder="Approximate is fine" />{workingMode === "professional" && <><Field label="Exact Width m" value={form.width} onChange={(value) => updateField("width", value)} inputMode="decimal" /><Field label="Exact Depth m" value={form.depth} onChange={(value) => updateField("depth", value)} inputMode="decimal" /></>}</div>
-      {workingMode === "professional" && <div className="grid gap-4 md:grid-cols-2"><SelectField label="Terrain" value={form.terrain} options={["Flat", "Gentle Slope", "Steep Slope", "Unknown"]} onChange={(value) => updateField("terrain", value)} /><SelectField label="Corner Lot" value={form.cornerLot} options={["No", "Yes", "Unknown"]} onChange={(value) => updateField("cornerLot", value)} /></div>}
-      {workingMode === "professional" && <FilePicker category="planning" title="Upload professional planning and site documents" body="Add surveys, zoning documents, site plans, title information or authority records." files={planningFiles} onFiles={addFiles} onRemove={removeFile} accept="application/pdf,image/*,.dwg" />}
+      <Field label="Address or Lot Number" value={form.address} onChange={(value) => updateField("address", value)} placeholder="Optional" />
+      <div className="grid gap-4 md:grid-cols-3"><Field label="Property / Plot Area m²" value={form.plotArea} onChange={(value) => updateField("plotArea", value)} inputMode="decimal" placeholder="Approximate is fine" /><Field label="Width m" value={form.width} onChange={(value) => updateField("width", value)} inputMode="decimal" placeholder="Optional" /><Field label="Depth m" value={form.depth} onChange={(value) => updateField("depth", value)} inputMode="decimal" placeholder="Optional" /></div>
+      <div className="grid gap-4 md:grid-cols-2"><SelectField label="Terrain" value={form.terrain} options={["", "Flat", "Gentle Slope", "Steep Slope", "Unknown"]} onChange={(value) => updateField("terrain", value)} /><SelectField label="Corner Lot" value={form.cornerLot} options={["", "No", "Yes", "Unknown"]} onChange={(value) => updateField("cornerLot", value)} /></div>
+      <FilePicker category="planning" title="Add planning or site documents" body="Optional: surveys, zoning documents, site plans, title information or authority records." files={planningFiles} onFiles={addFiles} onRemove={removeFile} accept="application/pdf,image/*,.dwg" />
     </>}
-    {workingMode === "professional" && <ProfessionalFields form={form} updateField={updateField} />}
+    <ProfessionalFields form={form} updateField={updateField} />
   </>;
 
   if (step === 3) return <>
@@ -905,7 +881,7 @@ function BuildWorkflow({
 
   return <>
     <div className="info-panel blue"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Ready to Create</p><h3 className="mt-2 text-2xl font-black text-slate-950">Your project will open as an editable Architecture workspace.</h3><p className="mt-3 text-sm leading-7 text-slate-600">Materials, colours, planning details, Space Program and all generated content remain editable after creation.</p></div>
-    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"} />{ARCHITECTURE_PROFESSIONAL_MODE_ENABLED && <SummaryRow label="Working Mode" value={workingMode === "professional" ? "Professional" : "Guided"} />}<SummaryRow label="Site" value={landStart === "owned" ? "Confirmed land" : landStart === "looking" ? "Looking for land" : "Exploring without land"} /><SummaryRow label="Spaces" value={selectedSpaces.join(", ") || "Smart suggestions later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
+    <div className="grid gap-4 md:grid-cols-2"><SummaryRow label="Project" value={form.projectName || "Not added"} /><SummaryRow label="Project Type" value={projectType === otherProjectType ? customProjectType.trim() || otherProjectType : projectType || "Not selected"} /><SummaryRow label="Site" value={landStart === "owned" ? "Confirmed land" : landStart === "looking" ? "Looking for land" : "Exploring without land"} /><SummaryRow label="Spaces" value={selectedSpaces.join(", ") || "Smart suggestions later"} /><SummaryRow label="Style" value={selectedStyle === "Other / Custom" ? customStyle || "Custom" : selectedStyle || "Not selected"} /></div>
   </>;
 }
 
@@ -937,7 +913,7 @@ function UploadWorkflow({
     <SelectField label="Current Source Status" value={sourceBrief.sourceStatus} options={["", "Early idea", "Concept drawing", "Measured drawing", "Planning drawing", "Existing condition", "Developed design", "Unknown"]} onChange={(value) => updateSourceBrief("sourceStatus", value)} />
     <div className="grid gap-4 md:grid-cols-3"><Field label="Desired Floors" value={form.floors} onChange={(value) => updateField("floors", value)} inputMode="numeric" /><Field label={template.simpleCapacityLabel} value={form.userCapacity} onChange={(value) => updateField("userCapacity", value)} placeholder={template.simpleCapacityPlaceholder} /><Field label="Approx. Area m²" value={form.targetGrossArea} onChange={(value) => updateField("targetGrossArea", value)} inputMode="decimal" /></div>
     <div className="field"><p className="field-label">{template.label} Spaces & Features</p><div className="chip-wrap">{template.spaces.map((space) => <button key={space} type="button" className="chip" data-active={selectedSpaces.includes(space)} onClick={() => toggleSpace(space)}>{space}</button>)}</div></div>
-    {workingMode === "professional" && <ProfessionalFields form={form} updateField={updateField} />}
+    <ProfessionalFields form={form} updateField={updateField} />
   </>;
   if (step === 3) return <>
     <SelectField label="What should the source become?" value={sourceBrief.renderTarget} options={["", "Photoreal visuals from existing plans", "Realistic architecture interpretation", "Exterior façade study", "Renovation transformation", "Full building massing", "Interior and exterior concept", "Complete multi-view render set", "Architecture concept development"]} onChange={(value) => updateSourceBrief("renderTarget", value)} />
@@ -1100,6 +1076,73 @@ function modeLabel(mode: Mode) {
   return mode === "upload" ? "Existing Design" : "New Design";
 }
 
+function ArchitectureOnboardingNavigation({
+  mode,
+  step,
+  totalSteps,
+  onChange,
+  disabled,
+}: {
+  mode: Mode;
+  step: number;
+  totalSteps: number;
+  onChange: (step: number) => void;
+  disabled: boolean;
+}) {
+  const labels = Array.from({ length: totalSteps }, (_, index) => stepTitle(mode, index + 1));
+  const currentLabel = labels[Math.max(0, Math.min(step - 1, labels.length - 1))];
+
+  return (
+    <div className="mt-5 rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-3 shadow-[var(--shadow-card)] sm:p-4">
+      <div className="sm:hidden">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-blue-600">Step {step} of {totalSteps}</p>
+            <p className="mt-1 truncate text-sm font-black text-[var(--text-primary)]">{currentLabel}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5" aria-label="Architecture project progress">
+            {labels.map((title, index) => {
+              const stepNumber = index + 1;
+              return (
+                <button
+                  key={`architecture-mobile-${title}-${index}`}
+                  type="button"
+                  disabled={disabled || stepNumber > step}
+                  onClick={() => onChange(stepNumber)}
+                  className={`h-2.5 rounded-full transition-[width,background-color] ${stepNumber === step ? "w-7 bg-blue-500" : stepNumber < step ? "w-2.5 bg-blue-400/70" : "w-2.5 bg-[var(--surface-hover)]"}`}
+                  aria-label={title}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden gap-2 sm:grid" style={{ gridTemplateColumns: `repeat(${totalSteps}, minmax(0,1fr))` }}>
+        {labels.map((title, index) => {
+          const stepNumber = index + 1;
+          const active = stepNumber === step;
+          const complete = stepNumber < step;
+          return (
+            <button
+              key={`architecture-${title}-${index}`}
+              type="button"
+              disabled={disabled || stepNumber > step}
+              onClick={() => onChange(stepNumber)}
+              className={`flex min-h-14 items-center gap-3 rounded-2xl border px-3 text-left transition ${active ? "border-blue-400/60 bg-blue-500/10 shadow-[0_0_0_3px_rgba(46,124,246,.10)]" : "border-transparent hover:border-blue-400/35 hover:bg-blue-500/10"} ${stepNumber > step ? "cursor-default opacity-55" : ""}`}
+            >
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black ${complete || active ? "bg-blue-500 text-white" : "bg-[var(--surface-hover)] text-[var(--text-muted)]"}`}>
+                {complete ? "✓" : stepNumber}
+              </span>
+              <span className="hidden min-w-0 text-xs font-black lg:block">{title}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function stepTitle(mode: Mode, step: number) {
   if (mode === "upload") {
     return ["Project & source files", "Describe the existing design", "Choose what to develop", "Choose the design character", "Review & create"][step - 1];
@@ -1145,6 +1188,7 @@ function formatBytes(bytes: number) {
 const architectureStyles = `
   .architecture-studio-page, .architecture-studio-page * { box-sizing:border-box; }
   .architecture-studio-page { min-height:100vh; background:var(--background); color:var(--text-primary); padding:32px 0 72px; }
+  @media (min-width:640px) { .architecture-studio-page { padding-top:40px; } }
   .architecture-wrap { width:100%; }
   .architecture-creating-overlay { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; background:rgba(8,10,18,.72); padding:20px; backdrop-filter:blur(12px); }
   .architecture-creating-card { width:min(440px,100%); border:1px solid var(--border); border-radius:26px; background:var(--surface-strong); color:var(--text-primary); padding:30px; text-align:center; box-shadow:var(--shadow-card-hover); }

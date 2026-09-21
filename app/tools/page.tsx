@@ -13,7 +13,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import SiteHeader from "@/components/site-header";
 import SiteFooter from "@/components/site-footer";
-import { CreditPill, Eyebrow, PageContainer } from "@/components/ui/heyy";
+import { Eyebrow, PageContainer } from "@/components/ui/heyy";
 import { PLATFORM_TOOLS } from "@/lib/platform/platform-registry";
 
 export const metadata = { title: "Tools" };
@@ -43,7 +43,7 @@ export default function ToolsPage() {
             <p className="mt-6 text-base font-semibold leading-8 text-[var(--text-secondary)]">Generate, adapt, improve, convert and prepare files without starting a full Studio project.</p>
           </section>
 
-          <ToolSection title="AI Tools" description="Focused generation and production utilities." tools={aiTools} />
+          <ToolSection title="Creative Tools" description="Focused generation and production utilities." tools={aiTools} />
           <ToolSection title="File Utilities" description="Fast document and conversion tools with no persistent source-file storage." tools={utilities} />
         </PageContainer>
       </div>
@@ -64,8 +64,7 @@ function ToolSection({ title, description, tools }: { title: string; description
               <span className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: tool.soft, color: tool.accent }}><Icon size={20}/></span>
               <h2 className="mt-6 text-2xl font-black tracking-[-.045em]">{tool.label}</h2>
               <p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">{tool.description}</p>
-              <div className="mt-auto flex items-center justify-between gap-3 pt-7">
-                <CreditPill credits={tool.creditLabel} label="" />
+              <div className="mt-auto flex items-center justify-end pt-7">
                 <ArrowRight size={17} style={{ color: tool.accent }} className="transition group-hover:translate-x-1"/>
               </div>
             </Link>

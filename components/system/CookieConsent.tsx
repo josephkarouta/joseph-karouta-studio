@@ -23,7 +23,7 @@ function persistConsent(analytics: boolean) {
   window.dispatchEvent(new CustomEvent("heyy:cookie-consent", { detail: value }));
 }
 
-export default function CookieConsent() {
+export default function CookieConsent({ offsetForMobileNav = false }: { offsetForMobileNav?: boolean }) {
   const [visible, setVisible] = useState(false);
   const [preferences, setPreferences] = useState(false);
   const [analytics, setAnalytics] = useState(false);
@@ -56,7 +56,7 @@ export default function CookieConsent() {
 
   return (
     <aside
-      className="fixed bottom-3 left-4 z-[70] w-[calc(100%-2rem)] max-w-[390px] rounded-[1.6rem] border border-white/10 bg-[#15131b]/95 p-4 text-white shadow-[0_24px_70px_rgba(0,0,0,.38)] backdrop-blur-2xl sm:bottom-5 sm:left-5 sm:p-5"
+      className={`fixed left-4 z-[70] w-[calc(100%-2rem)] max-w-[390px] rounded-[1.6rem] border border-white/10 bg-[#15131b]/95 p-4 text-white shadow-[0_24px_70px_rgba(0,0,0,.38)] backdrop-blur-2xl sm:bottom-5 sm:left-5 sm:p-5 ${offsetForMobileNav ? "bottom-[calc(5.6rem+env(safe-area-inset-bottom))]" : "bottom-3"}`}
       aria-label="Cookie notice"
     >
       <div className="flex items-center justify-between gap-3">

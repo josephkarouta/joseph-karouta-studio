@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronLeft, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Paperclip, Presentation, Sparkles, WandSparkles, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/components/auth-provider";
-import { Button, CreditPill, Eyebrow, GlassCard } from "@/components/ui/heyy";
+import { Button, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { getPowerPointCreditCost, POWERPOINT_INCLUDED_SLIDES } from "@/lib/credits/config";
 import { generationFetch } from "@/lib/client/generation-request";
@@ -407,7 +407,7 @@ export default function PowerPointWorkbench() {
         </div>
 
         <div className="mt-5 rounded-2xl border border-[var(--accent)] bg-[var(--accent-soft)] p-4 shadow-[var(--shadow-soft)]">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
             <div>
               <p className="text-xs font-black">Best quality</p>
               <p className="mt-1 text-[.66rem] font-black text-[var(--accent-strong)]">
@@ -416,7 +416,6 @@ export default function PowerPointWorkbench() {
                   : `${slides - POWERPOINT_INCLUDED_SLIDES} additional slide${slides - POWERPOINT_INCLUDED_SLIDES === 1 ? "" : "s"}`}
               </p>
             </div>
-            <CreditPill credits={cost} />
           </div>
           <p className="mt-3 text-[.68rem] font-semibold leading-5 text-[var(--text-secondary)]">
             One quality-first workflow researches when requested, develops the narrative and creates presentation visuals before building the editable deck.
@@ -454,7 +453,6 @@ export default function PowerPointWorkbench() {
               {result?.theme ? `${capitalize(result.theme)} theme · ` : ""}editable PowerPoint output
             </p>
           </div>
-          <CreditPill credits={result?.creditsUsed || cost} />
         </div>
 
         {loading ? (

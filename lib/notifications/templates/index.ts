@@ -53,7 +53,7 @@ export function buildPlainTextEmail(options: BuildEmailOptions) {
     "",
     `${options.ctaLabel || "Open Heyy Studio"}: ${options.ctaUrl || getSiteUrl()}`,
     "",
-    "Create with AI. Build with Experts.",
+    "Create with Heyy. Build with Experts.",
     "Heyy Studio",
   ].filter((line, index, array) => line || array[index - 1] !== "").join("\n").trim();
 }

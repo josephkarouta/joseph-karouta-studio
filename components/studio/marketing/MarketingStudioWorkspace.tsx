@@ -39,7 +39,6 @@ import { GUIDED_STUDIOS, type StudioField } from "@/lib/studio/generic-config";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import {
   Button,
-  CreditPill,
   Eyebrow,
   GlassCard,
   PageContainer,
@@ -47,7 +46,6 @@ import {
   cx,
 } from "@/components/ui/heyy";
 import HeyySelect, { type HeyySelectOption } from "@/components/ui/heyy-select";
-import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
 import StudioWorkspaceNavigation from "@/components/studio/common/StudioWorkspaceNavigation";
 import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
@@ -293,13 +291,15 @@ function MarketingExperience() {
   const [error, setError] = useState("");
   const [resolvingProject, setResolvingProject] = useState(true);
 
-  const workMode: WorkMode = form.workMode === "professional" ? "professional" : "guided";
+  const workMode: WorkMode = "guided";
   const activeSteps = useMemo(
-    () => workMode === "professional" && config.professionalSteps?.length ? config.professionalSteps : config.steps,
-    [workMode],
+    () => (config.professionalSteps?.length ? config.professionalSteps : config.steps).map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => ({ ...field, required: false })),
+    })),
+    [],
   );
   const allFields = useMemo(() => activeSteps.flatMap((item) => item.fields), [activeSteps]);
-  const requiredMissing = activeSteps[step]?.fields.filter((field) => field.required && isEmpty(form[field.id])) || [];
   const completedInputs = allFields.filter((field) => !isEmpty(form[field.id])).length;
   const progress = result
     ? Math.max(76, Math.min(100, Number(project?.progress || 76)))
@@ -366,8 +366,10 @@ function MarketingExperience() {
 
     const record = data as ProjectRecord;
     const savedForm = { ...initialState(), ...((record.input || {}) as FormState) };
-    const savedMode: WorkMode = savedForm.workMode === "professional" ? "professional" : "guided";
-    const savedSteps = savedMode === "professional" && config.professionalSteps?.length ? config.professionalSteps : config.steps;
+    const savedSteps = (config.professionalSteps?.length ? config.professionalSteps : config.steps).map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => ({ ...field, required: false })),
+    }));
     const savedResult = (record.output || null) as ResultData | null;
     setProject(record);
     setForm(savedForm);
@@ -392,22 +394,7 @@ function MarketingExperience() {
     setError("");
   }
 
-  function changeWorkMode(nextMode: WorkMode) {
-    if (generatingConcept) return;
-    setForm((current) => ({ ...current, workMode: nextMode }));
-    setStep(0);
-    setError("");
-  }
-
   function nextStep() {
-    if (form.objective === "Other" && !String(form.objectiveOther || "").trim()) {
-      setError("Describe the other primary objective before continuing.");
-      return;
-    }
-    if (requiredMissing.length) {
-      setError(`Complete ${requiredMissing.map((field) => field.label.toLowerCase()).join(", ")} before continuing.`);
-      return;
-    }
     if (step === 0 && form.brandSource === "Use an existing Heyy Studio brand" && !String(form.brandProjectId || "")) {
       setError("Choose the saved Brand System you want this campaign to use.");
       return;
@@ -416,18 +403,6 @@ function MarketingExperience() {
   }
 
   async function generateConcept() {
-    if (form.objective === "Other" && !String(form.objectiveOther || "").trim()) {
-      setError("Describe the other primary objective before generating.");
-      setStep(0);
-      return;
-    }
-    const missing = allFields.filter((field) => field.required && isEmpty(form[field.id]));
-    if (missing.length) {
-      setError(`Complete ${missing.map((field) => field.label.toLowerCase()).join(", ")} before generating.`);
-      const missingStep = activeSteps.findIndex((section) => section.fields.some((field) => missing.some((item) => item.id === field.id)));
-      setStep(Math.max(0, missingStep));
-      return;
-    }
     if (form.brandSource === "Use an existing Heyy Studio brand" && !String(form.brandProjectId || "")) {
       setError("Choose the saved Brand System you want this campaign to use.");
       setStep(0);
@@ -708,30 +683,19 @@ async function approveAsset(asset: ProjectAsset) {
           <StudioProjectHero
             tone="marketing"
             eyebrow="Marketing project"
-            title={String(project?.project_name || form.campaignName || "Untitled campaign")}
+            title={String(project?.project_name || form.campaignName || "Untitled project")}
             description={[String(form.business || ""), marketingObjective(form)].filter(Boolean).join(" · ") || "Marketing campaign"}
             progress={progress}
             statusLabel="Strategy, messaging, channels, content, visuals and launch assets stay connected in one workspace."
-            mode={workMode}
-            onModeChange={(mode) => void changeWorkMode(mode)}
           />
         ) : (
           <StudioHero
             tone="marketing"
             eyebrow={config.eyebrow}
             title={config.title}
-            description={config.description}
+            description="Plan the campaign, channels, content and creative direction in one place."
             imageSrc="/studio-heroes/marketing-studio-hero.webp"
             imagePosition="center 58%"
-            controls={(
-              <>
-                <StudioModeToggle value={workMode} onChange={(mode) => void changeWorkMode(mode)} tone="marketing" compact />
-                <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                  <span className="text-xs font-bold text-[var(--text-secondary)]">{workMode === "guided" ? "Simple campaign questions and a complete direction" : "Integrated strategy, media, testing and launch system"}</span>
-                  <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.marketingCreativePack : config.creditCost} />
-                </div>
-              </>
-            )}
           />
         )}
 
@@ -813,10 +777,35 @@ async function approveAsset(asset: ProjectAsset) {
 }
 
 function OnboardingNavigation({ step, steps, onChange, disabled }: { step: number; steps: Array<{ title: string }>; onChange: (step: number) => void; disabled: boolean }) {
+  const labels = [...steps.map((item) => item.title), "Campaign system"];
+  const currentLabel = labels[Math.min(step, labels.length - 1)];
   return (
     <GlassCard className="mt-5 p-3 sm:p-4">
-      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${steps.length + 1}, minmax(0,1fr))` }}>
-        {[...steps.map((item) => item.title), "Campaign system"].map((title, index) => {
+      <div className="sm:hidden">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)]">Step {Math.min(step + 1, steps.length)} of {steps.length}</p>
+            <p className="mt-1 truncate text-sm font-black text-[var(--text-primary)]">{currentLabel}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5" aria-label="Campaign progress">
+            {labels.map((title, index) => (
+              <button
+                key={`mobile-${title}-${index}`}
+                type="button"
+                disabled={disabled || index > step || index >= steps.length}
+                onClick={() => onChange(index)}
+                className={cx(
+                  "h-2.5 rounded-full transition-[width,background-color]",
+                  index === step ? "w-7 bg-[var(--accent)]" : index < step ? "w-2.5 bg-[var(--accent)]/55" : "w-2.5 bg-[var(--surface-hover)]",
+                )}
+                aria-label={title}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="hidden gap-2 sm:grid" style={{ gridTemplateColumns: `repeat(${steps.length + 1}, minmax(0,1fr))` }}>
+        {labels.map((title, index) => {
           const active = index === step;
           const complete = index < step;
           return (
@@ -899,7 +888,7 @@ function OnboardingWorkspace({
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-5">
           <Button type="button" variant="secondary" disabled={step === 0 || generating} onClick={onBack}><ArrowLeft size={15} /> Back</Button>
           {step === steps.length - 1 ? (
-            <Button type="button" disabled={generating} onClick={onGenerate}><Sparkles size={15} /> Generate {workMode === "professional" ? "professional campaign" : "campaign system"} · {workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.marketingCreativePack : config.creditCost} credits</Button>
+            <Button type="button" disabled={generating} onClick={onGenerate}><Sparkles size={15} /> Generate campaign · {config.creditCost} credits</Button>
           ) : (
             <Button type="button" disabled={generating} onClick={onContinue}>Continue <ArrowRight size={15} /></Button>
           )}
@@ -909,12 +898,11 @@ function OnboardingWorkspace({
       <aside className="xl:sticky xl:top-[calc(var(--header-height)+20px)] xl:self-start">
         <StudioCreationSummary
           tone="marketing"
-          eyebrow="Campaign summary"
-          title={String(form.campaignName || "Untitled campaign")}
-          subtitle={workMode === "professional" ? "Professional integrated campaign" : "Guided campaign system"}
+          eyebrow="Project summary"
+          title={String(form.campaignName || "Untitled project")}
+          subtitle="Marketing campaign"
           progress={progress}
           rows={[
-            { label: "Mode", value: workMode === "professional" ? "Professional" : "Guided" },
             { label: "Objective", value: marketingObjective(form) || "Not selected" },
             { label: "Business", value: String(form.business || "Not added") },
             { label: "Channels", value: Array.isArray(form.channels) && form.channels.length ? `${form.channels.length} selected` : "Not selected" },
@@ -933,16 +921,17 @@ function BrandConnection({ form, brands, onChange }: { form: FormState; brands: 
     label: `${brand.business_name || brand.project_name || brand.name || "Untitled brand"}${brand.industry ? ` · ${brand.industry}` : ""}`,
   }));
   return (
-    <div className="mt-7 rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-4 sm:p-5">
-      <div className="flex items-start gap-3">
+    <div className="mt-6 overflow-hidden rounded-2xl border border-[var(--accent-border)] bg-[var(--accent-soft)] p-3.5 sm:mt-7 sm:p-5">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--surface-strong)] text-[var(--accent-strong)]"><Palette size={18} /></span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 w-full flex-1">
           <p className="text-sm font-black text-[var(--text-primary)]">Connect the campaign to the right brand</p>
           <p className="mt-1 text-xs font-semibold leading-5 text-[var(--text-secondary)]">A connected Brand System gives the campaign its saved voice, positioning and visual language.</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-2 md:gap-4">
             <HeyySelect
               value={String(form.brandSource || "Start without a saved brand")}
               tone="marketing"
+              className="min-w-0"
               ariaLabel="Brand source"
               options={["Use an existing Heyy Studio brand", "Start without a saved brand", "Upload brand assets later"]}
               onChange={(value: string) => {
@@ -954,6 +943,7 @@ function BrandConnection({ form, brands, onChange }: { form: FormState; brands: 
               <HeyySelect
                 value={String(form.brandProjectId || "")}
                 tone="marketing"
+                className="min-w-0"
                 ariaLabel="Saved Brand System"
                 placeholder={brands.length ? "Choose a saved Brand System" : "No saved brands found"}
                 options={options}
@@ -1347,7 +1337,7 @@ function VisualsSection({
   const [tweaks, setTweaks] = useState<Partial<Record<MarketingVisualType, string>>>({});
   return (
     <GlassCard className="p-6 sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><Eyebrow>Creative visuals</Eyebrow><h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate the campaign creative without leaving Marketing Studio</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Start with the Campaign Key Visual. Other formats use it as a consistency reference when it is available.</p></div><CreditPill credits={CREDIT_COSTS.marketingProfessionalFinal} label="per visual" /></div>
+      <div><Eyebrow>Creative visuals</Eyebrow><h2 className="mt-3 text-3xl font-black tracking-[-.05em]">Generate the campaign creative without leaving Marketing Studio</h2><p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)]">Start with the Campaign Key Visual. Other formats use it as a consistency reference when it is available.</p></div>
       <div className="mt-7 grid gap-5 lg:grid-cols-2">
         {VISUALS.map((definition) => {
           const stage: GenerationStage = "final";
@@ -1444,7 +1434,6 @@ function CampaignPackSection({
         </Button>
       </div>
       <div className="mt-7 grid gap-4 md:grid-cols-4">
-        <MetricCard icon={<FileText size={18} />} label="Mode" value={workMode === "professional" ? "Professional" : "Guided"} />
         <MetricCard icon={<CalendarDays size={18} />} label="Calendar items" value={Array.isArray(result.calendar) ? result.calendar.length : 0} />
         <MetricCard icon={<ImageIcon size={18} />} label="Generated visuals" value={generated} />
         <MetricCard icon={<CheckCircle2 size={18} />} label="Approved visuals" value={approved} />

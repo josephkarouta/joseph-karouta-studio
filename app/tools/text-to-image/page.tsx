@@ -9,7 +9,7 @@ export default function TextToImagePage() {
     <ToolFrame
       path="/tools/text-to-image"
       title="Text to Image"
-      eyebrow="AI image generation"
+      eyebrow="Image generation"
       description="Create a high-quality visual from a clear prompt, save it as a project asset and see the credit cost before generation."
       iconName="image"
       accent="#8b5cf6"

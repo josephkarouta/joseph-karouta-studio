@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const next = safeNext(requestUrl.searchParams.get("next"));
   const code = requestUrl.searchParams.get("code");
+  const marketingConsent = requestUrl.searchParams.get("marketing_consent") === "1";
   const providerError =
     requestUrl.searchParams.get("error_description") ||
     requestUrl.searchParams.get("error");
@@ -81,7 +82,21 @@ export async function GET(request: NextRequest) {
     const user = data.user;
     if (user) {
       const ageMs = Date.now() - new Date(user.created_at).getTime();
-      if (ageMs >= 0 && ageMs <= 10 * 60 * 1000) {
+      const isNewUser = ageMs >= 0 && ageMs <= 10 * 60 * 1000;
+
+      if (isNewUser && marketingConsent) {
+        await supabase.auth.updateUser({
+          data: {
+            ...user.user_metadata,
+            marketing_consent: true,
+            marketing_consent_at: new Date().toISOString(),
+            marketing_consent_source: "signup_oauth",
+            marketing_consent_version: "2026-09-21",
+          },
+        });
+      }
+
+      if (isNewUser) {
         await sendWelcomeEmail(user);
       }
     }

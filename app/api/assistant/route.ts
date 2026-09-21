@@ -56,7 +56,7 @@ const platformRoutes: PlatformRoute[] = [
     requiresSignIn: true,
   },
   {
-    label: "AI Upscaler",
+    label: "Image Upscaler",
     href: "/tools/ai-upscaler",
     description: "Increase image resolution and recover detail.",
     requiresSignIn: true,
@@ -82,7 +82,7 @@ const platformRoutes: PlatformRoute[] = [
   {
     label: "All Tools",
     href: "/tools",
-    description: "Browse all current Heyy Studio AI and utility tools.",
+    description: "Browse all current Heyy Studio creative and utility tools.",
     requiresSignIn: false,
   },
   {
@@ -204,7 +204,7 @@ function pageContext(path: string) {
     return "Digital Adaptations — adapt one creative into coordinated digital sizes and aspect families.";
   }
   if (path.startsWith("/tools/ai-upscaler")) {
-    return "AI Upscaler — improve resolution and recover image detail.";
+    return "Image Upscaler — improve resolution and recover image detail.";
   }
   if (path.startsWith("/tools/powerpoint-generator")) {
     return "PowerPoint Generator — turn content into an editable presentation.";
@@ -216,7 +216,7 @@ function pageContext(path: string) {
     return "File Converter — convert between supported PDF and image formats.";
   }
   if (path.startsWith("/tools")) {
-    return "Tools — focused AI and file utilities for one task at a time.";
+    return "Tools — focused creative and file utilities for one task at a time.";
   }
   if (path.startsWith("/pricing")) {
     return "Plans & Credits — compare Heyy Studio plans and credit options.";
@@ -269,16 +269,16 @@ export async function POST(request: Request) {
         : [...history, { role: "user" as const, content: message.slice(0, 1800) }];
 
     if (!message) {
-      return NextResponse.json({ error: "Tell Heyy AI how it can help." }, { status: 400 });
+      return NextResponse.json({ error: "Tell Heyy how it can help." }, { status: 400 });
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "Heyy AI is not configured yet." }, { status: 503 });
+      return NextResponse.json({ error: "Heyy is not configured yet." }, { status: 503 });
     }
 
     const prompt = `
-You are Heyy AI, the in-product assistant for Heyy Studio.
-Heyy Studio is a connected creative operating system: Create with AI. Build with Experts.
+You are Heyy, the in-product assistant for Heyy Studio.
+Heyy Studio is a connected creative operating system: Create with Heyy. Build with Experts.
 
 YOUR ROLE
 - Help users understand Heyy Studio, not just route them around it.
@@ -308,12 +308,12 @@ CURRENT PRODUCT KNOWLEDGE
 - Marketing Studio: campaign strategy, audience and messaging, content, creative directions, visuals and expert production.
 - Architecture Studio: project/site brief, directions, materials, plans, concept visuals and estimates. Outputs remain concept guidance unless professionally validated.
 - Interior Design Studio: interior brief, materials, furniture/layout thinking, visuals and expert production.
-- Visible tools: Text to Image, Image to Video, Digital Adaptations, AI Upscaler, PowerPoint Generator, PDF Tools and File Converter.
+- Visible tools: Text to Image, Image to Video, Digital Adaptations, Image Upscaler, PowerPoint Generator, PDF Tools and File Converter.
 - Expert production is separately quoted before payment and is the path from approved concept to professional final assets.
-- AI generation uses Heyy credits.
+- Generation uses Heyy credits.
 - Subscription credits refresh every month and are used before purchased credits, even when the subscription is billed yearly.
 - Purchased credits do not expire.
-- There is no unlimited AI-generation plan.
+- There is no unlimited generation plan.
 - PDF Tools and File Converter each have a free daily allowance for Free users; after the allowance, successful operations use credits. Active paid plans include these utilities subject to fair use. Failed utility operations do not consume the daily allowance or credits.
 - Pricing and the Credit Guide are the source of truth for current plan amounts, pack amounts and action costs; do not invent numeric prices or credit costs when they were not supplied in the conversation.
 - Free accounts do not get the same saved cloud-workspace benefits as active paid plans. Avoid promising cloud storage unless the relevant plan includes it.
@@ -401,7 +401,7 @@ Return ONLY valid JSON:
 
     if (!response.ok) {
       console.error("Heyy assistant provider error:", data);
-      return NextResponse.json({ error: "Heyy AI is temporarily unavailable." }, { status: 502 });
+      return NextResponse.json({ error: "Heyy is temporarily unavailable." }, { status: 502 });
     }
 
     const parsed = safeJson(extractOutputText(data));

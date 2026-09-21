@@ -52,7 +52,7 @@ export default function StudioHero({
     return (
       <section
         className={cx(
-          "studio-shared-hero relative isolate min-h-[390px] overflow-hidden rounded-[2rem] border border-white/10 bg-[#080512] shadow-[0_28px_80px_rgba(12,7,30,.24)] sm:min-h-[410px] lg:min-h-[330px]",
+          "studio-shared-hero relative isolate h-[300px] overflow-hidden rounded-[1.65rem] border border-white/10 bg-[#080512] shadow-[0_24px_64px_rgba(12,7,30,.22)] sm:h-[330px] sm:rounded-[2rem]",
           className,
         )}
       >
@@ -62,7 +62,15 @@ export default function StudioHero({
           aria-hidden="true"
         />
         <div
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute inset-0 sm:hidden"
+          style={{
+            background:
+              "linear-gradient(180deg,rgba(7,4,20,.06) 0%,rgba(7,4,20,.12) 32%,rgba(7,4,20,.54) 58%,rgba(7,4,20,.94) 100%)",
+          }}
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute inset-0 hidden sm:block"
           style={{
             background:
               "linear-gradient(90deg,rgba(7,4,20,.96) 0%,rgba(7,4,20,.88) 27%,rgba(7,4,20,.55) 43%,rgba(7,4,20,.12) 66%,rgba(7,4,20,.40) 100%),linear-gradient(180deg,rgba(7,4,20,.10) 0%,rgba(7,4,20,.05) 54%,rgba(7,4,20,.56) 100%)",
@@ -70,30 +78,30 @@ export default function StudioHero({
           aria-hidden="true"
         />
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
-          style={{ background: "linear-gradient(180deg,transparent,rgba(7,4,20,.38))" }}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-36"
+          style={{ background: "linear-gradient(180deg,transparent,rgba(7,4,20,.56))" }}
           aria-hidden="true"
         />
 
-        <div className="relative z-10 flex min-h-[390px] flex-col justify-between gap-8 p-6 sm:min-h-[410px] sm:p-8 lg:min-h-[330px] lg:flex-row lg:items-center lg:gap-10 lg:p-10 xl:p-12">
-          <div className="min-w-0 max-w-[680px] lg:max-w-[48%]">
-            <p className="text-[.62rem] font-black uppercase tracking-[.24em] text-white/72">
+        <div className="relative z-10 flex h-full flex-col justify-end gap-4 p-5 pb-6 sm:justify-center sm:gap-6 sm:p-8 lg:flex-row lg:items-center lg:justify-start lg:gap-10 lg:p-10 xl:p-12">
+          <div className="min-w-0 max-w-[680px] lg:max-w-[72%]">
+            <p className="text-[.56rem] font-black uppercase tracking-[.22em] text-white/70 sm:text-[.62rem] sm:tracking-[.24em]">
               {eyebrow}
             </p>
-            <h1 className="mt-4 text-4xl font-black leading-[.92] tracking-[-.06em] text-white sm:text-6xl lg:text-[4rem]">
+            <h1 className="mt-2 text-[1.95rem] font-black leading-[.96] tracking-[-.055em] text-white sm:mt-4 sm:text-6xl lg:text-[4rem]">
               {title}
             </h1>
             {description ? (
-              <p className="mt-4 max-w-xl text-sm font-semibold leading-7 text-white/78 sm:text-base">
+              <p className="mt-2 max-w-[92%] text-[.78rem] font-semibold leading-5 text-white/80 sm:mt-4 sm:max-w-xl sm:text-base sm:leading-7 lg:max-w-none lg:whitespace-nowrap lg:text-sm xl:text-base">
                 {description}
               </p>
             ) : null}
-            {meta ? <div className="mt-5 text-white">{meta}</div> : null}
+            {meta ? <div className="mt-4 text-white sm:mt-5">{meta}</div> : null}
           </div>
 
           {controls ? (
             <div
-              className="w-full max-w-[430px] self-stretch rounded-[22px] border border-white/60 bg-white/[.93] p-3 shadow-[0_20px_60px_rgba(10,5,28,.32)] backdrop-blur-2xl sm:self-auto lg:ml-auto"
+              className="hidden w-full max-w-[430px] self-stretch rounded-[18px] border border-white/60 bg-white/[.93] p-2.5 shadow-[0_18px_50px_rgba(10,5,28,.28)] backdrop-blur-2xl sm:block sm:self-auto sm:rounded-[22px] sm:p-3 lg:ml-auto"
               style={lightControlVars}
             >
               {controls}

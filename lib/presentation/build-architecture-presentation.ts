@@ -373,7 +373,7 @@ export function buildArchitecturePresentation({
       "Before any design, pricing, approval or construction decision, the project must be reviewed and developed by appropriately registered local architects, planners, engineers, surveyors and other required consultants.",
       "Expert production can develop verified drawings, professional visualisation, coordination and project-specific deliverables under an approved quote.",
     ],
-    footer: "Create with AI. Build with Experts.",
+    footer: "Create with Heyy. Build with Experts.",
     tone: "blue",
   });
 

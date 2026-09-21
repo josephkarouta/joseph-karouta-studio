@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/components/auth-provider";
-import { Button, CreditPill, Eyebrow, GlassCard } from "@/components/ui/heyy";
+import { Button, Eyebrow, GlassCard } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import { generationFetch } from "@/lib/client/generation-request";
@@ -257,7 +257,7 @@ export default function TextToImageWorkbench() {
         </GlassCard>
 
         <GlassCard className="flex min-h-[620px] flex-col p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-4 px-1 pb-4"><div><Eyebrow>Generated asset</Eyebrow><p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Your latest result appears here.</p></div>{result && <CreditPill credits={result.creditsUsed}/>}</div>
+          <div className="px-1 pb-4"><div><Eyebrow>Generated asset</Eyebrow><p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Your latest result appears here.</p></div></div>
           <div className="grid flex-1 place-items-center overflow-hidden rounded-[1.4rem] border border-dashed border-[var(--border-strong)] bg-[linear-gradient(135deg,var(--surface-hover),rgba(46,124,246,.08))]">
             {loading ? <div className="text-center"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] shadow-lg"><Loader2 size={25} className="animate-spin text-[var(--accent-strong)]"/></span><p className="mt-4 text-sm font-black">Building your image</p><p className="mt-1 text-xs font-semibold text-[var(--text-muted)]">You can keep this page open while the image finishes in the background.</p></div> : result ? (
               <button type="button" onClick={() => setPreviewOpen(true)} className="group relative h-full max-h-[720px] w-full" aria-label="Preview generated image">

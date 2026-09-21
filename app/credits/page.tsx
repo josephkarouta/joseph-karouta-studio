@@ -60,8 +60,8 @@ function formatCreditAction(action: string, metadata?: Record<string, unknown>) 
     imagetovideohigh: "Image to Video",
     imagetovideopreview: "Image to Video",
     digitaladaptationfamily: "Digital adaptation",
-    aiupscale2x: "AI Upscaler · 2×",
-    aiupscale4x: "AI Upscaler · 4×",
+    aiupscale2x: "Image Upscaler · 2×",
+    aiupscale4x: "Image Upscaler · 4×",
     pdfutility: "PDF Tools",
     fileconversion: "File Converter",
   };

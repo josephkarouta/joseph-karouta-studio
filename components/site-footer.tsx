@@ -86,11 +86,11 @@ export default function SiteFooter({ prelaunch = false }: { prelaunch?: boolean 
       <div className="relative mx-auto max-w-[1500px]">
         <div className="grid gap-8 lg:grid-cols-[1.35fr_repeat(4,1fr)] lg:gap-10">
           <div>
-            <HeyyLogo variant="full-colour-light" height={38} />
+            <HeyyLogo variant="full-colour-light" showStudio={false} height={38} />
             <p className="mt-4 max-w-xs text-sm leading-6 text-white/58">
-              Create with AI. Build with Experts. From first idea to finished work.
+              Creative tools, focused workflows and expert support when you need it.
             </p>
-            <div className="mt-4 flex items-center gap-2 text-xs font-bold text-white/65">
+            <div className="mt-4 flex items-center gap-2 text-sm font-normal leading-6 text-white/58">
               <span aria-hidden="true" className="text-sm">🇦🇺</span>
               <span>Melbourne, Australia</span>
             </div>
@@ -149,9 +149,8 @@ export default function SiteFooter({ prelaunch = false }: { prelaunch?: boolean 
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-2 border-t border-white/10 pt-5 text-[0.7rem] text-white/38 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pt-6 sm:text-xs">
+        <div className="mt-8 border-t border-white/10 pt-5 text-[0.7rem] text-white/38 sm:mt-10 sm:pt-6 sm:text-xs">
           <p>© 2026 Heyy Studio. All rights reserved.</p>
-          <p>US English · USD · Built for creators worldwide</p>
         </div>
       </div>
     </footer>

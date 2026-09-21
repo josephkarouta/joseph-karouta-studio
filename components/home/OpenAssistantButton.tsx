@@ -12,7 +12,7 @@ export default function OpenAssistantButton({ className }: { className?: string 
       className={`cursor-pointer ${className || ""}`}
       onClick={() => window.dispatchEvent(new CustomEvent("heyy-assistant-open"))}
     >
-      <Sparkles size={16} /> Ask Heyy AI
+      <Sparkles size={16} /> Ask Heyy
     </Button>
   );
 }

@@ -74,7 +74,7 @@ const STUDIO_LABELS: Record<Studio, string> = {
   marketing: "Marketing",
   other: "Other",
   production: "Production",
-  tools: "AI Tools",
+  tools: "Creative Tools",
 };
 const STUDIO_ACCENT: Record<Studio, string> = {
   architecture: "#1676e8",

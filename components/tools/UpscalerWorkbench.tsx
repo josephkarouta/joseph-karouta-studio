@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { AlertCircle, Download, Images, Loader2, Sparkles, Upload } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/components/auth-provider";
-import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
+import { Button, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import { generationFetch } from "@/lib/client/generation-request";
@@ -210,7 +210,6 @@ export default function UpscalerWorkbench() {
             <Eyebrow>Enhanced result</Eyebrow>
             <p className="mt-1 text-sm font-bold text-[var(--text-secondary)]">Download your enhanced result here. Starter and Pro also keep completed outputs in Assets.</p>
           </div>
-          <CreditPill credits={cost} />
         </div>
         <div className="grid flex-1 place-items-center overflow-hidden rounded-[1.4rem] border border-dashed border-[var(--border-strong)] bg-[linear-gradient(135deg,var(--surface-hover),rgba(2,132,199,.08))]">
           {loading ? (

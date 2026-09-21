@@ -15,13 +15,29 @@ import {
 export default function PlanCards({ compactMobile = false }: { compactMobile?: boolean }) {
   const { plan, user } = useAuth();
   const currentPlan = normalizePlan(plan);
-  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("year");
+
+  const orderedPlans = [...PLANS].sort((a, b) => {
+    if (user && currentPlan !== "free") {
+      if (a.id === currentPlan) return -1;
+      if (b.id === currentPlan) return 1;
+    }
+
+    const rank = { starter: 0, pro: 1, free: 2 } as const;
+    return rank[a.id] - rank[b.id];
+  });
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-center sm:mb-5">
+      <div className="mb-4 flex flex-col items-center justify-center gap-2.5 sm:mb-5">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#8b5cf6] px-3.5 py-2 text-[0.64rem] font-black uppercase tracking-[0.13em] text-white shadow-[0_9px_22px_rgba(139,92,246,.24)]">
+            <Percent size={12} strokeWidth={2.7} aria-hidden="true" /> 2 months free
+          </span>
+          <span className="text-[0.62rem] font-black uppercase tracking-[0.12em] text-[var(--accent-strong)]">Save 17% yearly</span>
+        </div>
         <div className="inline-grid grid-cols-2 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-strong)_88%,transparent)] p-1 shadow-[0_10px_28px_rgba(54,35,82,0.09)] backdrop-blur-xl">
-          {(["month", "year"] as BillingInterval[]).map((interval) => {
+          {(["year", "month"] as BillingInterval[]).map((interval) => {
             const active = billingInterval === interval;
             return (
               <button
@@ -47,7 +63,6 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
             );
           })}
         </div>
-
       </div>
 
       <div
@@ -57,7 +72,7 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
             : "grid gap-3.5 md:grid-cols-3 md:items-stretch md:gap-4"
         }
       >
-        {PLANS.map((item) => {
+        {orderedPlans.map((item) => {
         const featured = Boolean(item.highlighted);
         const isCurrent = Boolean(user) && currentPlan === item.id;
         const visibleFeatures = item.features.filter(

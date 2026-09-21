@@ -9,7 +9,7 @@ export const metadata = {
   description: "See how Heyy Studio credits are used across tools and Studios, including Architecture and Interior.",
 };
 
-const CATEGORIES = ["Brand Studio", "Marketing Studio", "Architecture Studio", "Interior Studio", "AI Tools", "Utilities"] as const;
+const CATEGORIES = ["Brand Studio", "Marketing Studio", "Architecture Studio", "Interior Studio", "Creative Tools", "Utilities"] as const;
 
 export default function CreditGuidePage() {
   return (
@@ -96,13 +96,13 @@ export default function CreditGuidePage() {
             <h2 className="text-2xl font-black tracking-[-.04em]">A few important rules</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-                <span className="font-black text-[var(--text-primary)]">Regenerating uses credits again.</span> Every AI generation creates a new result and can vary from the previous one.
+                <span className="font-black text-[var(--text-primary)]">Regenerating uses credits again.</span> Every generation creates a new result and can vary from the previous one.
               </p>
               <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-                <span className="font-black text-[var(--text-primary)]">Expert production is separate.</span> Professional production requests are quoted before payment and do not use the self-service AI credit catalog.
+                <span className="font-black text-[var(--text-primary)]">Expert production is separate.</span> Professional production requests are quoted before payment and do not use the self-service credit catalog.
               </p>
               <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)]">
-                <span className="font-black text-[var(--text-primary)]">Some actions are variable.</span> Social Media Systems charge per selected generated format, Digital Adaptations charge per distinct AI composition, and longer PowerPoint decks use simple slide-count tiers.
+                <span className="font-black text-[var(--text-primary)]">Some actions are variable.</span> Social Media Systems charge per selected generated format, Digital Adaptations charge per distinct generated composition, and longer PowerPoint decks use simple slide-count tiers.
               </p>
               <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)]">
                 <span className="font-black text-[var(--text-primary)]">Your balance is always visible.</span> The Credits page shows your subscription balance, purchased balance and usage history.

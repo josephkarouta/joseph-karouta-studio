@@ -99,7 +99,7 @@ function jobLabel(tool: unknown) {
     digital_adaptations: "Digital Adaptations",
     text_to_image: "Text to Image",
     image_to_video: "Image to Video",
-    ai_upscaler: "AI Upscaler",
+    ai_upscaler: "Image Upscaler",
     powerpoint_generator: "PowerPoint Generator",
     brand_system: "Brand Studio",
     brand_logo: "Brand logo",

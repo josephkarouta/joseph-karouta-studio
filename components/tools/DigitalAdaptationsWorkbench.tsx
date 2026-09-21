@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import { Button, CreditPill, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
+import { Button, Eyebrow, GlassCard, cx } from "@/components/ui/heyy";
 import {
   DIGITAL_ADAPTATION_PRESETS,
   familyForDimensions,
@@ -418,8 +418,8 @@ export default function DigitalAdaptationsWorkbench() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <Eyebrow>02 · Art direction</Eyebrow>
-              <h2 className="mt-3 text-2xl font-black tracking-[-.045em]">Guide the AI recomposition</h2>
-              <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">AI automatically repositions and extends the approved key visual directly for every selected aspect ratio.</p>
+              <h2 className="mt-3 text-2xl font-black tracking-[-.045em]">Guide the creative recomposition</h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">The generator automatically repositions and extends the approved key visual for every selected aspect ratio.</p>
             </div>
             <Sparkles className="shrink-0 text-[var(--accent-strong)]" size={24} />
           </div>
@@ -490,7 +490,7 @@ export default function DigitalAdaptationsWorkbench() {
       <GlassCard className="min-h-[780px] p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4 px-1 pb-4">
           <div><Eyebrow>Adaptation output</Eyebrow><h2 className="mt-2 text-2xl font-black tracking-[-.045em]">Digital campaign pack</h2><p className="mt-1 text-sm font-semibold text-[var(--text-secondary)]">Every result is saved as an individual project asset.</p></div>
-          {result && <div className="flex items-center gap-2"><CreditPill credits={result.creditsUsed}/><Button variant="ghost" onClick={() => void downloadAll()} disabled={downloadingAll}>{downloadingAll ? <Loader2 size={15} className="animate-spin"/> : <Download size={15}/>} Download all</Button></div>}
+          {result && <Button variant="ghost" onClick={() => void downloadAll()} disabled={downloadingAll}>{downloadingAll ? <Loader2 size={15} className="animate-spin"/> : <Download size={15}/>} Download all</Button>}
         </div>
 
         {loading ? (
@@ -514,7 +514,7 @@ export default function DigitalAdaptationsWorkbench() {
           </div>
         ) : (
           <div className="grid min-h-[680px] place-items-center rounded-[1.5rem] border border-dashed border-[var(--border-strong)] bg-[linear-gradient(135deg,var(--surface-hover),rgba(124,58,237,.08))] p-8 text-center">
-            <div className="max-w-sm"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-sm"><LayoutGrid size={25}/></span><h3 className="mt-4 text-xl font-black">Your complete size pack appears here</h3><p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Upload the approved KV, add any art-direction notes and choose the digital sizes. AI will intelligently recompose the artwork directly for each required aspect ratio.</p><div className="mt-5 flex items-center justify-center gap-2 text-xs font-black text-[var(--text-muted)]"><Maximize2 size={15}/> Exact pixel exports</div></div>
+            <div className="max-w-sm"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-sm"><LayoutGrid size={25}/></span><h3 className="mt-4 text-xl font-black">Your complete size pack appears here</h3><p className="mt-2 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Upload the approved KV, add any art-direction notes and choose the digital sizes. The generator will intelligently recompose the artwork for each required aspect ratio.</p><div className="mt-5 flex items-center justify-center gap-2 text-xs font-black text-[var(--text-muted)]"><Maximize2 size={15}/> Exact pixel exports</div></div>
           </div>
         )}
       </GlassCard>

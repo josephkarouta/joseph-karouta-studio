@@ -21,19 +21,28 @@ export default function ExpertNetworkPage({
 
       {!isRolePage && (
         <>
-          <section className="relative overflow-hidden border-b border-[var(--border)] pt-[var(--header-height)]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_8%,rgba(139,92,246,.16),transparent_27rem),radial-gradient(circle_at_88%_4%,rgba(239,63,180,.12),transparent_30rem)]" />
-            <PageContainer className="relative py-10 sm:py-24">
+          <section
+            className="relative overflow-hidden border-b border-[var(--border)] pt-[var(--header-height)]"
+            style={{
+              background: "linear-gradient(135deg,rgba(139,92,246,.22) 0%,rgba(216,60,184,.10) 48%,var(--surface-strong) 100%)",
+            }}
+          >
+            <div className="pointer-events-none absolute -left-20 top-12 h-64 w-64 rounded-full bg-[#8b5cf6]/20 blur-3xl" />
+            <div className="pointer-events-none absolute -right-24 bottom-0 h-60 w-60 rounded-full bg-fuchsia-400/10 blur-3xl" />
+            <PageContainer className="relative py-7 sm:py-24">
               <div className="max-w-4xl">
-                <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-[var(--accent-strong)] sm:text-[.66rem] sm:tracking-[.2em]">Heyy Studio Expert Network</p>
-                <h1 className="mt-4 text-4xl font-black leading-[.94] tracking-[-.06em] sm:mt-5 sm:text-7xl">Great AI concepts still need great people.</h1>
-                <p className="mt-4 max-w-3xl text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-6 sm:text-lg sm:leading-8">
-                  Join a curated global network of freelance creatives and design professionals. Heyy Studio contacts selected experts when a project matches their skills, availability and experience.
+                <p className="text-[.58rem] font-black uppercase tracking-[.18em] text-[var(--accent-strong)] sm:text-[.66rem] sm:tracking-[.2em]">Heyy Expert Network</p>
+                <h1 className="mt-2 text-[2.2rem] font-black leading-[.94] tracking-[-.055em] sm:mt-5 sm:text-7xl">
+                  <span className="sm:hidden">Create with us.</span>
+                  <span className="hidden sm:inline">Great creative work needs great people.</span>
+                </h1>
+                <p className="mt-3 max-w-3xl text-[.86rem] font-semibold leading-5 text-[var(--text-secondary)] sm:mt-6 sm:text-lg sm:leading-8">
+                  <span className="sm:hidden">Freelance creative and design projects matched to your skills.</span>
+                  <span className="hidden sm:inline">Join a curated network of freelance creatives and design professionals. We contact selected experts when the right project matches their skills and availability.</span>
                 </p>
-                <div className="mt-5 flex flex-wrap gap-2 text-[.68rem] font-black sm:mt-7 sm:text-xs">
-                  <span className="rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 py-2 text-[var(--accent-strong)]">Freelance / project-based</span>
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2">Remote / worldwide</span>
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2">Paid per approved project</span>
+                <div className="mt-4 flex flex-wrap gap-2 text-[.66rem] font-black sm:mt-7 sm:text-xs">
+                  <span className="rounded-full border border-[var(--accent-border)] bg-white/55 px-3 py-2 text-[var(--accent-strong)] backdrop-blur-sm dark:bg-white/10">Project-based · Remote</span>
+                  <span className="hidden rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 sm:inline-flex">Paid per approved project</span>
                 </div>
               </div>
             </PageContainer>

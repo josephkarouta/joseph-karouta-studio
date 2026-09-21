@@ -84,7 +84,7 @@ function studioLabel(studio: string) {
       : studio === "interior" ? "Interior Studio"
         : studio === "marketing" ? "Marketing Studio"
           : studio === "production" ? "Production"
-            : studio === "tools" ? "AI Tools"
+            : studio === "tools" ? "Creative Tools"
               : "Workspace";
 }
 

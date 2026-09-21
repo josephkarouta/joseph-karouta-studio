@@ -36,7 +36,7 @@ export default function StudioCreationSummary({
   const normalizedProgress = progress == null ? null : Math.max(0, Math.min(100, Math.round(progress)));
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface-strong)] shadow-[var(--shadow-card)]">
+    <section className="hidden overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface-strong)] shadow-[var(--shadow-card)] xl:block">
       <header className="p-5 text-white" style={{ background: `linear-gradient(135deg,${colors.accent},${colors.end})` }}>
         <p className="text-[.6rem] font-black uppercase tracking-[.18em] text-white/70">{eyebrow}</p>
         <h2 className="mt-2 text-2xl font-black tracking-[-.04em]">{title}</h2>

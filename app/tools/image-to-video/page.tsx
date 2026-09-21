@@ -9,7 +9,7 @@ export default function ImageToVideoPage() {
     <ToolFrame
       path="/tools/image-to-video"
       title="Image to Video"
-      eyebrow="AI video generation"
+      eyebrow="Video generation"
       description="Animate a still image into an 8-second video with controlled subject motion, camera movement and timing."
       iconName="video"
       accent="#db2777"

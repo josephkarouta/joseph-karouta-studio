@@ -99,6 +99,20 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
   }, [prelaunch]);
 
   useEffect(() => {
+    if (!mobileOpen) return;
+
+    const bodyOverflow = document.body.style.overflow;
+    const htmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = htmlOverflow;
+    };
+  }, [mobileOpen]);
+
+  useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
       if (!accountRef.current?.contains(event.target as Node)) setMenuOpen(false);
     }
@@ -123,20 +137,23 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color,backdrop-filter] duration-300 ${
-        heroOverlay
-          ? "border-transparent bg-transparent backdrop-blur-none"
-          : "border-[var(--border)] bg-[color:var(--glass)] backdrop-blur-2xl"
+        mobileOpen
+          ? "border-[var(--border)] bg-white backdrop-blur-none dark:bg-[#120c1f]"
+          : heroOverlay
+            ? "border-transparent bg-transparent backdrop-blur-none"
+            : "border-[var(--border)] bg-[color:var(--glass)] backdrop-blur-2xl"
       }`}
     >
-      <div className="mx-auto flex h-[var(--header-height)] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex h-[var(--header-height)] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" onClick={handleLogoClick} className="shrink-0" aria-label="Heyy Studio home">
           <HeyyLogo
-            variant={heroOverlay || resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
+            variant={(!mobileOpen && heroOverlay) || resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
+            showStudio={false}
             height={40}
           />
         </Link>
 
-        <nav className={`hidden items-center gap-1 text-sm font-bold lg:flex ${heroOverlay ? "text-white/80" : "text-[var(--text-secondary)]"}`}>
+        <nav className={`absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 text-sm font-bold lg:flex ${heroOverlay ? "text-white/80" : "text-[var(--text-secondary)]"}`}>
           {navItems.map(([label, href]) => (
             <Link
               key={label}
@@ -166,7 +183,17 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
             </Link>
           )}
 
-          <ThemeToggle compact />
+          <ThemeToggle compact overlay={heroOverlay && !mobileOpen} />
+
+          {!prelaunch && !loading && !user ? (
+            <button
+              type="button"
+              onClick={() => setAuthMode("signup")}
+              className="min-h-9 cursor-pointer rounded-full bg-[#8b5cf6] px-3.5 text-xs font-black text-white shadow-[0_7px_18px_rgba(139,92,246,.24)] transition-[background-color,box-shadow] hover:bg-[#7447e8] hover:shadow-[0_10px_24px_rgba(116,71,232,.32)] active:bg-[#6840cf] sm:hidden"
+            >
+              Sign up
+            </button>
+          ) : null}
 
           {!prelaunch && !loading && user && (
             <NotificationBell
@@ -286,9 +313,11 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
             }}
             disabled={prelaunch}
             aria-disabled={prelaunch || undefined}
-            className={`grid h-10 w-10 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-primary)] lg:hidden ${
-              prelaunch ? "cursor-default opacity-35" : "cursor-pointer"
-            }`}
+            className={`grid h-10 w-10 place-items-center rounded-full border shadow-sm backdrop-blur-2xl transition lg:hidden ${
+              !mobileOpen && heroOverlay
+                ? "border-white/25 bg-black/20 text-white hover:border-white/40 hover:bg-white/10"
+                : "border-[var(--border)] bg-white/45 text-[var(--text-primary)] hover:border-[var(--accent-border)] hover:bg-white/65 dark:bg-white/10"
+            } ${prelaunch ? "cursor-default opacity-35" : "cursor-pointer"}`}
             aria-label={prelaunch ? "Navigation unavailable during pre-launch" : "Toggle navigation"}
           >
             {mobileOpen ? <X size={18} /> : <Menu size={18} />}
@@ -297,20 +326,13 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
       </div>
 
       {!prelaunch && mobileOpen && (
-        <div className="max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-t border-[var(--border)] bg-[var(--surface-strong)] shadow-xl lg:hidden">
+        <div
+          className="absolute inset-x-0 top-full h-[calc(100dvh-var(--header-height))] overflow-y-auto overscroll-contain border-t border-[var(--border)] bg-white shadow-[0_28px_70px_rgba(20,12,34,.18)] dark:bg-[#120c1f] lg:hidden"
+        >
           <div className="px-4 py-5">
             <section>
-              <div className="mb-2 flex items-center justify-between px-1">
+              <div className="mb-2 flex items-center px-1">
                 <p className="text-[0.62rem] font-black uppercase tracking-[0.18em] text-[var(--accent-strong)]">Studios</p>
-                <Link
-                  href={prelaunch ? "#" : "/#create"}
-                  onClick={() => setMobileOpen(false)}
-                  aria-disabled={prelaunch || undefined}
-                  tabIndex={prelaunch ? -1 : undefined}
-                  className={`text-[0.68rem] font-extrabold text-[var(--text-muted)] ${prelaunch ? "pointer-events-none cursor-default opacity-40" : ""}`}
-                >
-                  Explore all
-                </Link>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {VISIBLE_STUDIOS.map((studio) => {
@@ -322,11 +344,17 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
                       onClick={() => setMobileOpen(false)}
                       aria-disabled={prelaunch || undefined}
                       tabIndex={prelaunch ? -1 : undefined}
-                      className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"}`}
+                      className={`flex min-h-12 items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] shadow-[0_8px_22px_rgba(30,18,55,.04)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:-translate-y-px hover:shadow-[0_12px_26px_rgba(30,18,55,.10)]"}`}
+                      style={{
+                        background: resolvedTheme === "dark"
+                          ? `linear-gradient(135deg,${studio.accent}28,rgba(255,255,255,.035))`
+                          : `linear-gradient(135deg,${studio.accent}26,${studio.accent}0f)`,
+                        borderColor: `${studio.accent}42`,
+                      }}
                     >
                       <span
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
-                        style={{ background: studio.soft, color: studio.accent }}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border"
+                        style={{ background: `${studio.accent}18`, borderColor: `${studio.accent}2e`, color: studio.accent }}
                         aria-hidden="true"
                       >
                         <Icon size={16} strokeWidth={2.1} />
@@ -339,17 +367,8 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
             </section>
 
             <section className="mt-5">
-              <div className="mb-2 flex items-center justify-between px-1">
+              <div className="mb-2 flex items-center px-1">
                 <p className="text-[0.62rem] font-black uppercase tracking-[0.18em] text-[var(--accent-strong)]">Tools</p>
-                <Link
-                  href={prelaunch ? "#" : "/#tools"}
-                  onClick={() => setMobileOpen(false)}
-                  aria-disabled={prelaunch || undefined}
-                  tabIndex={prelaunch ? -1 : undefined}
-                  className={`text-[0.68rem] font-extrabold text-[var(--text-muted)] ${prelaunch ? "pointer-events-none cursor-default opacity-40" : ""}`}
-                >
-                  Explore all
-                </Link>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {PLATFORM_TOOLS.map((tool) => {
@@ -361,11 +380,17 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
                       onClick={() => setMobileOpen(false)}
                       aria-disabled={prelaunch || undefined}
                       tabIndex={prelaunch ? -1 : undefined}
-                      className={`flex min-h-11 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[0.76rem] font-extrabold leading-4 text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"}`}
+                      className={`flex min-h-11 items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-[0.76rem] font-extrabold leading-4 text-[var(--text-primary)] shadow-[0_8px_22px_rgba(30,18,55,.04)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:-translate-y-px hover:shadow-[0_12px_26px_rgba(30,18,55,.10)]"}`}
+                      style={{
+                        background: resolvedTheme === "dark"
+                          ? `linear-gradient(135deg,${tool.accent}28,rgba(255,255,255,.035))`
+                          : `linear-gradient(135deg,${tool.accent}24,${tool.accent}0d)`,
+                        borderColor: `${tool.accent}40`,
+                      }}
                     >
                       <span
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
-                        style={{ background: tool.soft, color: tool.accent }}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border"
+                        style={{ background: `${tool.accent}18`, borderColor: `${tool.accent}2e`, color: tool.accent }}
                         aria-hidden="true"
                       >
                         <Icon size={15} strokeWidth={2.1} />
@@ -377,14 +402,14 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
               </div>
             </section>
 
-            <div className="mt-5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 border-y border-[var(--border)] pt-4">
+            <div className="mt-5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 pt-1">
               <nav className="grid gap-2">
                 <Link
                   href={prelaunch ? "#" : "/#how-it-works"}
                   onClick={() => setMobileOpen(false)}
                   aria-disabled={prelaunch || undefined}
                   tabIndex={prelaunch ? -1 : undefined}
-                  className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"}`}
+                  className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--accent-border)] bg-[color-mix(in_srgb,var(--accent-soft)_72%,transparent)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:bg-[var(--accent-soft)]"}`}
                 >
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]" aria-hidden="true">
                     <Workflow size={16} strokeWidth={2.1} />
@@ -396,7 +421,7 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
                   onClick={() => setMobileOpen(false)}
                   aria-disabled={prelaunch || undefined}
                   tabIndex={prelaunch ? -1 : undefined}
-                  className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]"}`}
+                  className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--accent-border)] bg-[color-mix(in_srgb,var(--accent-soft)_72%,transparent)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-40 saturate-50" : "hover:bg-[var(--accent-soft)]"}`}
                 >
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]" aria-hidden="true">
                     <BadgePercent size={16} strokeWidth={2.1} />
@@ -411,7 +436,7 @@ export default function SiteHeader({ prelaunch = false, heroOverlay = false }: {
                 aria-label="Contact an Expert"
                 aria-disabled={prelaunch || undefined}
                 tabIndex={prelaunch ? -1 : undefined}
-                className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-35 grayscale" : "hover:border-[#8b5cf6] hover:bg-[var(--surface-strong)]"}`}
+                className={`flex min-h-12 items-center gap-2.5 rounded-xl border border-[var(--accent-border)] bg-[color-mix(in_srgb,var(--accent-soft)_82%,transparent)] px-3 py-2.5 text-sm font-extrabold text-[var(--text-primary)] transition ${prelaunch ? "pointer-events-none cursor-default opacity-35 grayscale" : "hover:border-[#8b5cf6] hover:bg-[var(--accent-soft)]"}`}
               >
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#8b5cf6] text-white" aria-hidden="true">
                   <BriefcaseBusiness size={16} strokeWidth={2.1} />

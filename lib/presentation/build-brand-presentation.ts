@@ -448,7 +448,7 @@ export function buildBrandPresentation({
         "Before final production, confirm logo artwork, licensed fonts, colour profiles, accessibility, print specifications and supplier requirements.",
         "Expert production can develop final master artwork, application files and detailed technical specifications.",
       ],
-      footer: "Create with AI. Build with Experts.",
+      footer: "Create with Heyy. Build with Experts.",
       tone: "purple",
     },
   ];

@@ -28,7 +28,7 @@ import {
   getArchitecturePaintApplications,
 } from "@/lib/architecture/project-templates";
 
-const ARCHITECTURE_AI_CONCEPT_NOTICE = "AI-generated plans and visuals are intended for concept exploration and early design direction only. They are not construction-ready or professionally verified documents. For accurate plans, technical drawings or production-ready design, continue with Heyy Studio Expert Development. Create with AI. Build with Experts.";
+const ARCHITECTURE_AI_CONCEPT_NOTICE = "AI-generated plans and visuals are intended for concept exploration and early design direction only. They are not construction-ready or professionally verified documents. For accurate plans, technical drawings or production-ready design, continue with Heyy Studio Expert Development. Create with Heyy. Build with Experts.";
 
 type SourceBrief = {
   workflow_mode?: string | null;
@@ -5684,7 +5684,7 @@ function DesignPackTab({
             Before any design, pricing, approval or construction decision, the project must be reviewed and developed by appropriately
             registered local architects, planners, engineers, surveyors and other required consultants.
           </p>
-          <p>Create with AI. Build with Experts.</p>
+          <p>Create with Heyy. Build with Experts.</p>
           <div className="pack-logo final">HEYY<span>STUDIO</span></div>
         </section>
       </article>

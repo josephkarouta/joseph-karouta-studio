@@ -454,7 +454,7 @@ async function buildSummaryPdf(args: ExportArgs & { projectName: string }) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   setTextColor(ink);
-  doc.text("Create with AI. Build with Experts.", margin, pageHeight - 17);
+  doc.text("Create with Heyy. Build with Experts.", margin, pageHeight - 17);
 
   // Project overview
   addContentPage("Project Overview", "A concise summary of the project brief, concept and chosen design direction.");
@@ -610,7 +610,7 @@ async function buildSummaryPdf(args: ExportArgs & { projectName: string }) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.8);
       setTextColor(muted);
-      doc.text("Heyy Studio - Create with AI. Build with Experts.", margin, pageHeight - 8.5);
+      doc.text("Heyy Studio - Create with Heyy. Build with Experts.", margin, pageHeight - 8.5);
       doc.text(`${page} / ${totalPages}`, pageWidth - margin, pageHeight - 8.5, { align: "right" });
     }
   }

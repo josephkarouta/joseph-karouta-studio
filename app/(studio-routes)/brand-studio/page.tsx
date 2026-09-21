@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import {
+  ArrowLeft,
+  ArrowRight,
   BadgeCheck,
   BookOpenCheck,
   Boxes,
@@ -24,11 +26,10 @@ import {
 import SiteHeader from "@/components/site-header";
 import SiteFooter from "@/components/site-footer";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
-import { CreditPill, Eyebrow, PageContainer } from "@/components/ui/heyy";
+import { Eyebrow, PageContainer } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import HeyyMultiSelect from "@/components/ui/heyy-multi-select";
 import StudioLoader from "@/components/ui/StudioLoader";
-import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioHero from "@/components/studio/common/StudioHero";
 import StudioCreationSummary from "@/components/studio/common/StudioCreationSummary";
 import AuthModal from "@/app/AuthModal";
@@ -72,6 +73,13 @@ const FOCUSED_LOADING_STEPS = [
   "Creating only the required workspace sections",
   "Saving the Brand Studio workspace",
 ];
+
+const BRAND_ONBOARDING_STEPS = [
+  "Project goal",
+  "Brand context",
+  "Identity & scope",
+  "Review & create",
+] as const;
 
 type BrandPrimaryGoalId = "new-brand" | "rebrand" | "existing-logo" | "focused";
 
@@ -436,7 +444,9 @@ export default function BrandStudioPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState("");
-  const [workMode, setWorkMode] = useState<"guided" | "professional">("guided");
+  const [brandStep, setBrandStep] = useState(0);
+  const workMode: "guided" | "professional" = "guided";
+  const showExtendedBrief = true;
 
   const [journeyId, setJourneyId] = useState<BrandJourneyId>("new-brand");
   const [businessName, setBusinessName] = useState("");
@@ -491,8 +501,7 @@ export default function BrandStudioPage() {
   );
   const selectedScopeNeedsLogo = selectedApplications.some((item) => item.requiresLogo);
   const showCurrentIdentity = needsExistingLogo || journey.allowLogoChoice;
-  const scopeStepNumber = showCurrentIdentity ? "04" : "03";
-  const applicationStepNumber = showCurrentIdentity ? "05" : "04";
+  const brandProgress = Math.round((brandStep / Math.max(1, BRAND_ONBOARDING_STEPS.length - 1)) * 100);
   const draftJourney = buildBrandJourneySnapshot({
     journeyId,
     selectedDeliverables,
@@ -756,6 +765,41 @@ export default function BrandStudioPage() {
     };
   }
 
+  function goBackBrandStep() {
+    setError("");
+    setBrandStep((current) => Math.max(0, current - 1));
+  }
+
+  function goNextBrandStep() {
+    setError("");
+
+    if (brandStep === 1 && (!businessName.trim() || !finalIndustry.trim() || !finalAudience.trim() || !finalStyle.trim())) {
+      setError("Complete the business name, industry, audience and style direction before continuing.");
+      return;
+    }
+
+    if (brandStep === 2) {
+      if (!selectedDeliverables.length && journeyId !== "custom") {
+        setError("Select at least one item for this Brand Studio project.");
+        return;
+      }
+      if (journeyId === "custom" && !customScope.trim()) {
+        setError("Describe the custom scope before continuing.");
+        return;
+      }
+      if (selectedScopeNeedsLogo && logoAction === "none") {
+        setError("The selected application needs a logo. Upload the current logo or choose Create a new logo.");
+        return;
+      }
+      if ((needsExistingLogo || selectedScopeNeedsLogo || journey.allowLogoChoice) && (logoAction === "keep" || logoAction === "refine") && !existingLogoFile) {
+        setError("Upload the current logo, or choose Create a new logo.");
+        return;
+      }
+    }
+
+    setBrandStep((current) => Math.min(BRAND_ONBOARDING_STEPS.length - 1, current + 1));
+  }
+
   async function handleBuildBrand() {
     setError("");
 
@@ -782,17 +826,6 @@ export default function BrandStudioPage() {
     if ((needsExistingLogo || selectedScopeNeedsLogo || journey.allowLogoChoice) && (logoAction === "keep" || logoAction === "refine") && !existingLogoFile) {
       setError("Upload the current logo, or choose Create a new logo.");
       return;
-    }
-
-    if (workMode === "professional") {
-      for (const application of selectedApplications) {
-        const requiredFields = (BRAND_APPLICATION_FIELDS[application.id] || []).filter((field) => field.required);
-        const missing = requiredFields.find((field) => !applicationBriefs[application.id]?.[field.id]?.trim());
-        if (missing) {
-          setError(`Complete ${application.label}: ${missing.label}.`);
-          return;
-        }
-      }
     }
 
     if (!user?.id) {
@@ -1013,23 +1046,17 @@ export default function BrandStudioPage() {
           tone="brand"
           eyebrow="Strategy, identity & brand applications"
           title="Brand Studio"
-          description="Build a complete brand system or one focused deliverable inside a clear, connected workspace."
+          description="Shape the brand direction, identity and applications in one connected project."
           imageSrc="/studio-heroes/brand-studio-hero.webp"
           imagePosition="center 58%"
-          controls={(
-            <>
-              <StudioModeToggle value={workMode} onChange={setWorkMode} tone="brand" compact />
-              <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                <span className="text-xs font-bold leading-5 text-[var(--text-secondary)]">{workMode === "guided" ? "Simple brand questions and a complete starting direction" : "Full brand intake with application and production details"}</span>
-                <CreditPill credits={CREDIT_COSTS.brandSystemText} />
-              </div>
-            </>
-          )}
         />
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <BrandOnboardingNavigation step={brandStep} onChange={setBrandStep} disabled={isGenerating} />
+
+        <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <section className="space-y-6">
-            <Panel eyebrow="01 · Project Goal" title="What are you creating?" description="Choose one clear starting point. The next questions adapt to the goal, so you only see what this project needs.">
+            {brandStep === 0 && (
+              <Panel eyebrow="Project goal" title="What are you creating?" description="Choose one clear starting point. The next questions adapt to the goal, so you only see what this project needs.">
               <div className="grid gap-3 md:grid-cols-2">
                 {BRAND_PRIMARY_GOALS.map((item) => {
                   const selected = primaryGoal === item.id;
@@ -1093,9 +1120,11 @@ export default function BrandStudioPage() {
                   </div>
                 </div>
               )}
-            </Panel>
+              </Panel>
+            )}
 
-            <Panel eyebrow="02 · Brand Context" title="Tell us about the business" description="A few focused inputs are enough. Heyy Studio turns them into a structured professional brief.">
+            {brandStep === 1 && (
+              <Panel eyebrow="Brand context" title="Tell us about the business" description="A few focused inputs are enough. Heyy Studio turns them into a structured professional brief.">
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Business name">
                   <input value={businessName} onChange={(event) => setBusinessName(event.target.value)} placeholder="Enter the business or project name" className="brand-input" />
@@ -1135,7 +1164,7 @@ export default function BrandStudioPage() {
                 </Field>
               </div>
 
-              {workMode === "professional" && <div className="brand-soft-panel rounded-[20px] border p-4 sm:p-5">
+              {showExtendedBrief && <div className="brand-soft-panel rounded-[20px] border p-4 sm:p-5">
                 <div>
                   <p className="brand-soft-eyebrow text-[8px] font-black uppercase tracking-[0.16em]">Shared application details</p>
                   <p className="brand-soft-copy mt-1 text-xs font-semibold leading-5">Add these once. Heyy Studio will automatically prefill matching Business Card, Letterhead, Envelope and Email Signature fields without overwriting your manual edits.</p>
@@ -1161,10 +1190,13 @@ export default function BrandStudioPage() {
               <Field label="What should the brand achieve?">
                 <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the business goal, what people should understand or feel, important competitors, preferences and anything the creative team should know." className="brand-input min-h-[118px] resize-y" />
               </Field>
-            </Panel>
+              </Panel>
+            )}
 
+            {brandStep === 2 && (
+              <>
             {showCurrentIdentity && (
-              <Panel eyebrow="03 · Current Identity" title="What should happen to the current logo?" description="The logo journey should never be assumed. Choose exactly what Heyy Studio should preserve, refine or create.">
+              <Panel eyebrow="Current identity" title="What should happen to the current logo?" description="The logo journey should never be assumed. Choose exactly what Heyy Studio should preserve, refine or create.">
                 {journey.allowLogoChoice && (
                   <div className="grid gap-3 md:grid-cols-2">
                     {visibleLogoDecisions.map((item) => {
@@ -1223,7 +1255,7 @@ export default function BrandStudioPage() {
               </Panel>
             )}
 
-            <Panel eyebrow={`${scopeStepNumber} · Project Scope`} title="Choose what this project should include" description={singleItem ? "Choose one focused deliverable. You can add more later from the project workspace." : "Select only the modules and applications you need. Expert production remains available for every selected item."}>
+            <Panel eyebrow="Project scope" title="Choose what this project should include" description={singleItem ? "Choose one focused deliverable. You can add more later from the project workspace." : "Select only the modules and applications you need. Expert production remains available for every selected item."}>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleDeliverables.map((item) => {
                   const selected = selectedDeliverables.includes(item.id);
@@ -1288,8 +1320,8 @@ export default function BrandStudioPage() {
               )}
             </Panel>
 
-            {workMode === "professional" && selectedApplications.length > 0 && (
-              <Panel eyebrow={`${applicationStepNumber} · Application Details`} title={selectedApplications.length === 1 ? `Tell us what goes on the ${selectedApplications[0].label}` : "Add the content for each selected application"} description="These details stay attached to the exact item. They do not create a full rebrand or unrelated guideline project.">
+            {showExtendedBrief && selectedApplications.length > 0 && (
+              <Panel eyebrow="Application details" title={selectedApplications.length === 1 ? `Tell us what goes on the ${selectedApplications[0].label}` : "Add the content for each selected application"} description="These details stay attached to the exact item. They do not create a full rebrand or unrelated guideline project.">
                 <div className="grid gap-5">
                   {selectedApplications.map((application) => (
                     <section key={application.id} className="rounded-[22px] border border-[var(--border-strong)] bg-[var(--surface)] p-4 sm:p-5">
@@ -1300,7 +1332,7 @@ export default function BrandStudioPage() {
                       </div>
                       <div className="mt-4 grid gap-4 md:grid-cols-2">
                         {(BRAND_APPLICATION_FIELDS[application.id] || []).map((field) => (
-                          <Field key={field.id} label={`${field.label}${field.required ? " *" : ""}`}>
+                          <Field key={field.id} label={field.label}>
                             {field.multiline ? (
                               <textarea
                                 value={applicationBriefs[application.id]?.[field.id] || ""}
@@ -1325,35 +1357,67 @@ export default function BrandStudioPage() {
               </Panel>
             )}
 
+              </>
+            )}
+
             {error && <div className="rounded-[18px] border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">{error}</div>}
 
+            {brandStep < BRAND_ONBOARDING_STEPS.length - 1 && (
+              <div className="flex items-center justify-between gap-3 rounded-[22px] border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow-card)]">
+                <button
+                  type="button"
+                  onClick={goBackBrandStep}
+                  disabled={brandStep === 0 || isGenerating}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-5 text-sm font-black text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ArrowLeft size={15} /> Back
+                </button>
+                <button
+                  type="button"
+                  onClick={goNextBrandStep}
+                  disabled={isGenerating}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#8b5cf6] px-6 text-sm font-black text-white shadow-[0_12px_28px_rgba(139,92,246,.22)] transition hover:bg-[#7447e8] disabled:cursor-wait disabled:opacity-50"
+                >
+                  Continue <ArrowRight size={15} />
+                </button>
+              </div>
+            )}
+
+            {brandStep === BRAND_ONBOARDING_STEPS.length - 1 && (
             <div className="flex flex-col gap-4 rounded-[26px] border border-violet-200 bg-white p-5 shadow-[0_16px_40px_rgba(70,35,103,.08)] sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-600">Ready</p>
-                <h2 className="mt-1 text-xl font-black text-slate-950">Create only the workspace this project needs</h2>
-                <p className="mt-1 text-sm text-slate-500">{workMode === "guided" ? "Start with the essentials. You can add application details later inside the project." : "Text strategy is created first. Images are generated later only when requested."}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-600">Review & create</p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">Ready to create your Brand workspace?</h2>
+                <p className="mt-1 text-sm text-slate-500">Review the project summary, then create the connected workspace.</p>
               </div>
-              <button type="button" onClick={handleBuildBrand} disabled={isGenerating} className="min-h-12 rounded-full bg-violet-700 px-6 text-sm font-black text-white shadow-lg shadow-violet-700/20 transition hover:-translate-y-0.5 hover:bg-violet-800 disabled:cursor-wait disabled:opacity-50">
-                {isGenerating ? "Creating Workspace…" : `${selectedApplications.length === 1 ? `Create ${selectedApplications[0].label} Workspace` : "Create Brand Workspace"}${shouldGenerateBrandBlueprint(draftJourney) ? ` · ${CREDIT_COSTS.brandSystemText} credits` : ""}`}
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={goBackBrandStep} disabled={isGenerating} className="inline-flex min-h-12 items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-5 text-sm font-black text-[var(--text-primary)] transition hover:bg-[var(--surface-hover)] disabled:opacity-50"><ArrowLeft size={15} /> Back</button>
+                <button type="button" onClick={handleBuildBrand} disabled={isGenerating} className="min-h-12 rounded-full bg-violet-700 px-6 text-sm font-black text-white shadow-lg shadow-violet-700/20 transition hover:-translate-y-0.5 hover:bg-violet-800 disabled:cursor-wait disabled:opacity-50">
+                  {isGenerating ? "Creating Workspace…" : `${selectedApplications.length === 1 ? `Create ${selectedApplications[0].label} Workspace` : "Create Brand Workspace"}${shouldGenerateBrandBlueprint(draftJourney) ? ` · ${CREDIT_COSTS.brandSystemText} credits` : ""}`}
+                </button>
+              </div>
             </div>
+            )}
           </section>
 
           <aside className="xl:sticky xl:top-28 xl:self-start">
             <StudioCreationSummary
               tone="brand"
-              eyebrow="Your selected journey"
-              title={journey.title}
-              subtitle={journey.helper}
+              eyebrow="Project summary"
+              title={businessName.trim() || "Untitled project"}
+              subtitle="Brand project"
+              progress={brandProgress}
               rows={[
-                { label: "Mode", value: workMode === "guided" ? "Guided" : "Professional" },
+                { label: "Project goal", value: journey.title },
+                { label: "Industry", value: finalIndustry || "Not selected" },
+                { label: "Audience", value: finalAudience || "Not selected" },
                 { label: "Creative direction", value: draftJourney.includeCreativeDirections ? "3 text directions first" : "Not included" },
                 { label: "Logo", value: LOGO_DECISIONS.find((item) => item.id === logoAction)?.label || "No logo work" },
                 { label: "Selected items", value: `${dynamicSummary.length} item${dynamicSummary.length === 1 ? "" : "s"}` },
               ]}
               note={{
                 eyebrow: "Transparent workflow",
-                text: "AI creates strategy and concept previews. Final vector, editable and print-ready assets remain available through Heyy Studio Experts.",
+                text: "Heyy creates strategy and concept previews. Final vector, editable and print-ready assets remain available through Heyy Studio Experts.",
               }}
             >
               <p className="text-[.56rem] font-black uppercase tracking-[.16em] text-[var(--text-muted)]">Workspace includes</p>
@@ -1394,6 +1458,64 @@ export default function BrandStudioPage() {
       )}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </StudioAccessGate>
+  );
+}
+
+function BrandOnboardingNavigation({
+  step,
+  onChange,
+  disabled,
+}: {
+  step: number;
+  onChange: (step: number) => void;
+  disabled: boolean;
+}) {
+  const currentLabel = BRAND_ONBOARDING_STEPS[Math.min(step, BRAND_ONBOARDING_STEPS.length - 1)];
+
+  return (
+    <div className="mt-5 rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-3 shadow-[var(--shadow-card)] sm:p-4">
+      <div className="sm:hidden">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-[#8b5cf6]">Step {step + 1} of {BRAND_ONBOARDING_STEPS.length}</p>
+            <p className="mt-1 truncate text-sm font-black text-[var(--text-primary)]">{currentLabel}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5" aria-label="Brand project progress">
+            {BRAND_ONBOARDING_STEPS.map((title, index) => (
+              <button
+                key={`brand-mobile-${title}`}
+                type="button"
+                disabled={disabled || index > step}
+                onClick={() => onChange(index)}
+                className={`h-2.5 rounded-full transition-[width,background-color] ${index === step ? "w-7 bg-[#8b5cf6]" : index < step ? "w-2.5 bg-[#8b5cf6]/55" : "w-2.5 bg-[var(--surface-hover)]"}`}
+                aria-label={title}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden gap-2 sm:grid" style={{ gridTemplateColumns: `repeat(${BRAND_ONBOARDING_STEPS.length}, minmax(0,1fr))` }}>
+        {BRAND_ONBOARDING_STEPS.map((title, index) => {
+          const active = index === step;
+          const complete = index < step;
+          return (
+            <button
+              key={title}
+              type="button"
+              disabled={disabled || index > step}
+              onClick={() => onChange(index)}
+              className={`flex min-h-14 items-center gap-3 rounded-2xl border px-3 text-left transition ${active ? "border-[#8b5cf6]/60 bg-[#8b5cf6]/10 shadow-[0_0_0_3px_rgba(139,92,246,.10)]" : "border-transparent hover:border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/10"} ${index > step ? "cursor-default opacity-55" : ""}`}
+            >
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black ${complete || active ? "bg-[#8b5cf6] text-white" : "bg-[var(--surface-hover)] text-[var(--text-muted)]"}`}>
+                {complete ? "✓" : index + 1}
+              </span>
+              <span className="hidden min-w-0 text-xs font-black lg:block">{title}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

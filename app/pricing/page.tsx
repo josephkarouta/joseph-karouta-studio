@@ -16,10 +16,10 @@ export default function PricingPage() {
         <PageContainer className="relative py-16 sm:py-24">
           <Eyebrow>Plans & credits</Eyebrow>
           <h1 className="mt-5 max-w-5xl text-5xl font-black leading-[.94] tracking-[-.065em] sm:text-7xl">
-            Subscribe monthly or yearly, or simply buy credits.
+            Choose yearly and get two months free, or go monthly.
           </h1>
           <p className="mt-6 max-w-3xl text-base font-semibold leading-8 text-[var(--text-secondary)] sm:text-lg">
-            Use a free account for occasional projects, or subscribe for a fresh monthly credit allowance. Yearly plans are paid upfront and include two months free; credits still refresh every month. Expert production is quoted separately.
+            Yearly plans are shown first and include two months free. Credits still refresh every month, or you can choose monthly billing instead. Expert production is quoted separately.
           </p>
         </PageContainer>
       </section>

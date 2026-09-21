@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { Menu } from "lucide-react";
+import { PanelsTopLeft } from "lucide-react";
 import WorkspaceSidebar from "@/components/workspace/WorkspaceSidebar";
 
 const STORAGE_KEY = "heyy-workspace-sidebar-collapsed";
@@ -14,6 +14,20 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(STORAGE_KEY) === "true");
   }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const bodyOverflow = document.body.style.overflow;
+    const htmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = htmlOverflow;
+    };
+  }, [mobileOpen]);
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -33,23 +47,23 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
-        className="fixed left-4 top-[calc(var(--header-height)+14px)] z-40 grid h-11 w-11 place-items-center rounded-2xl border border-[var(--border)] bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-[var(--shadow-card)] backdrop-blur-xl lg:hidden"
+        className="fixed left-3 top-[calc(var(--header-height)+10px)] z-[55] grid h-9 w-9 place-items-center rounded-full border border-[var(--accent-border)] bg-[color:var(--glass)] text-[var(--accent-strong)] shadow-[0_10px_28px_rgba(35,22,54,.14)] backdrop-blur-2xl transition hover:bg-[var(--accent-soft)] lg:hidden"
         aria-label="Open workspace navigation"
       >
-        <Menu size={19} />
+        <PanelsTopLeft size={16} strokeWidth={2.2} />
       </button>
 
       {mobileOpen && (
         <button
           type="button"
-          className="fixed inset-x-0 bottom-0 top-[var(--header-height)] z-40 bg-black/35 backdrop-blur-sm lg:hidden"
+          className="fixed inset-x-0 bottom-0 top-[var(--header-height)] z-50 bg-black/45 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileOpen(false)}
           aria-label="Close workspace navigation"
         />
       )}
 
       <WorkspaceSidebar
-        collapsed={collapsed}
+        collapsed={mobileOpen ? false : collapsed}
         mobileOpen={mobileOpen}
         onToggleCollapsed={toggleCollapsed}
         onCloseMobile={() => setMobileOpen(false)}

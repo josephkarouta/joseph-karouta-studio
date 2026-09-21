@@ -186,13 +186,19 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
     return (
       <div>
         <div className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
-          <div><p className="text-[.6rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)] sm:text-[.64rem] sm:tracking-[.18em]">Open Expert Network opportunities</p><h2 className="mt-2 text-2xl font-black tracking-[-.05em] sm:mt-3 sm:text-4xl">Choose the Studio that matches your work.</h2></div>
-          <p className="max-w-md text-xs font-semibold leading-5 text-[var(--text-secondary)] sm:text-sm sm:leading-6">Apply to the closest match. Shortlisted experts may later be considered for related project types across the network.</p>
+          <div>
+            <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)] sm:text-[.64rem] sm:tracking-[.18em]">Open opportunities</p>
+            <h2 className="mt-2 text-2xl font-black tracking-[-.05em] sm:mt-3 sm:text-4xl">
+              <span className="sm:hidden">Find your Studio.</span>
+              <span className="hidden sm:inline">Choose the Studio that matches your work.</span>
+            </h2>
+          </div>
+          <p className="hidden max-w-md text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:block">Apply to the closest match. Shortlisted experts may later be considered for related project types across the network.</p>
         </div>
         <div className="mt-5 grid gap-3 sm:mt-8 sm:gap-4 md:grid-cols-2">
           {positions.length ? positions.map((position) => {
             const slug = position.slug || expertRoleSlug(position.title);
-            return <GlassCard key={position.id} interactive className="p-5 sm:p-7"><div className="flex h-full flex-col"><div className="flex flex-wrap gap-2"><StatusPill tone="info">{expertStudioLabel(position)}</StatusPill><StatusPill>{position.employment_type || "Freelance / Project-based"}</StatusPill></div><h3 className="mt-5 text-2xl font-black tracking-[-.045em]">{position.title}</h3><p className="mt-3 flex-1 text-sm font-semibold leading-7 text-[var(--text-secondary)]">{position.summary || "Join Heyy Studio for selected project-based expert work."}</p><p className="mt-5 flex items-center gap-2 text-xs font-bold text-[var(--text-muted)]"><MapPin size={14}/>{position.location || "Remote / Worldwide"}</p><Link href={`/expertsnetwork/${slug}${source !== "direct" ? `?source=${encodeURIComponent(source)}` : ""}`} className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--text-primary)] px-4 py-2.5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white">View & apply <ArrowRight size={14}/></Link></div></GlassCard>;
+            return <GlassCard key={position.id} interactive className="p-4 sm:p-7"><div className="flex h-full flex-col"><div className="flex flex-wrap gap-2"><StatusPill tone="info">{expertStudioLabel(position)}</StatusPill><span className="hidden sm:inline-flex"><StatusPill>{position.employment_type || "Freelance / Project-based"}</StatusPill></span></div><h3 className="mt-4 text-xl font-black tracking-[-.045em] sm:mt-5 sm:text-2xl">{position.title}</h3><p className="mt-3 hidden flex-1 text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:block">{position.summary || "Join Heyy Studio for selected project-based expert work."}</p><p className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] sm:mt-5"><MapPin size={14}/>{position.location || "Remote / Worldwide"}</p><Link href={`/expertsnetwork/${slug}${source !== "direct" ? `?source=${encodeURIComponent(source)}` : ""}`} className="mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--text-primary)] px-4 py-2.5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white sm:mt-6">View & apply <ArrowRight size={14}/></Link></div></GlassCard>;
           }) : <GlassCard className="p-8 text-center md:col-span-2"><h3 className="text-2xl font-black">Applications will open shortly</h3><p className="mt-3 text-sm font-semibold text-[var(--text-secondary)]">The first Expert Network opportunities are being prepared.</p></GlassCard>}
         </div>
       </div>

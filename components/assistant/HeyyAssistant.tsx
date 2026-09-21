@@ -54,7 +54,7 @@ function pageLabel(pathname: string) {
   if (pathname.startsWith("/tools/text-to-image")) return "Text to Image";
   if (pathname.startsWith("/tools/image-to-video")) return "Image to Video";
   if (pathname.startsWith("/tools/digital-adaptations")) return "Digital Adaptations";
-  if (pathname.startsWith("/tools/ai-upscaler")) return "AI Upscaler";
+  if (pathname.startsWith("/tools/ai-upscaler")) return "Image Upscaler";
   if (pathname.startsWith("/tools/powerpoint-generator")) return "PowerPoint Generator";
   if (pathname.startsWith("/tools/pdf-tools")) return "PDF Tools";
   if (pathname.startsWith("/tools/file-converter")) return "File Converter";
@@ -147,7 +147,7 @@ export default function HeyyAssistant() {
       });
 
       const data = (await response.json()) as AssistantReply & { error?: string };
-      if (!response.ok) throw new Error(data.error || "Unable to reach Heyy AI.");
+      if (!response.ok) throw new Error(data.error || "Unable to reach Heyy.");
 
       setMessages((current) => [
         ...current,
@@ -187,19 +187,19 @@ export default function HeyyAssistant() {
         type="button"
         onClick={() => setOpen(true)}
         className={cx(
-          "fixed bottom-5 right-5 z-[70] flex h-14 cursor-pointer items-center gap-2 rounded-full border border-white/20 bg-[#8b5cf6] px-4 font-black text-white shadow-[0_22px_55px_rgba(139,92,246,.30)] transition-[background-color,border-color,box-shadow] hover:border-white/35 hover:bg-[#7447e8] hover:shadow-[0_28px_65px_rgba(116,71,232,.42)] active:bg-[#6840cf]",
+          "fixed bottom-[max(1.1rem,env(safe-area-inset-bottom))] right-3 z-[100] flex h-11 w-auto cursor-pointer items-center justify-center gap-2 rounded-full border border-white/20 bg-[#8b5cf6] px-3.5 font-black text-white shadow-[0_18px_42px_rgba(139,92,246,.30)] transition-[background-color,border-color,box-shadow] hover:border-white/35 hover:bg-[#7447e8] hover:shadow-[0_24px_55px_rgba(116,71,232,.42)] active:bg-[#6840cf] sm:right-5 sm:h-14 sm:px-4",
           open && "pointer-events-none scale-90 opacity-0",
         )}
-        aria-label="Open Heyy AI"
+        aria-label="Open Heyy"
       >
         <Sparkles size={18} />
-        <span className="hidden sm:inline">Ask Heyy AI</span>
+        <span className="text-xs sm:text-sm">Ask Heyy</span>
       </button>
 
       {open && (
         <section
           role="dialog"
-          aria-label="Heyy AI assistant"
+          aria-label="Heyy assistant"
           className="fixed inset-x-3 bottom-3 z-[80] flex max-h-[min(720px,calc(100vh-24px))] flex-col overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-[0_35px_110px_rgba(25,12,45,.32)] backdrop-blur-3xl sm:left-auto sm:right-5 sm:w-[430px]"
         >
           <header className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#2d1152_0%,#8b5cf6_50%,#d83cb8_100%)] p-5 text-white">
@@ -210,7 +210,7 @@ export default function HeyyAssistant() {
                   <Bot size={21} />
                 </span>
                 <div>
-                  <p className="text-sm font-black">Heyy AI</p>
+                  <p className="text-sm font-black">Heyy</p>
                   <p className="mt-0.5 text-xs font-semibold text-white/70">
                     Your Heyy Studio assistant
                   </p>
@@ -331,7 +331,7 @@ export default function HeyyAssistant() {
               </button>
             </div>
             <p className="mt-2 text-center text-[0.62rem] font-semibold text-[var(--text-muted)]">
-              Heyy AI can make mistakes. Review important project and production decisions.
+              Heyy can make mistakes. Review important project and production decisions.
             </p>
           </form>
         </section>
@@ -423,7 +423,7 @@ function localRoute(
   if (/price|plan|credit|billing|subscription|top.?up/.test(text)) {
     return {
       answer:
-        "Heyy credits cover paid AI generation. Subscription credits refresh every month and are used before purchased credits, including on yearly plans; purchased credits do not expire. Expert production is quoted separately.",
+        "Heyy credits cover paid generation. Subscription credits refresh every month and are used before purchased credits, including on yearly plans; purchased credits do not expire. Expert production is quoted separately.",
       actions: [
         { label: "View plans & credits", href: "/pricing", kind: "primary" },
         ...(signedIn
@@ -516,9 +516,9 @@ function localRoute(
 
   if (/upscale|resolution|enhance|blurry/.test(text)) {
     return route(
-      "AI Upscaler",
+      "Image Upscaler",
       "/tools/ai-upscaler",
-      "AI Upscaler is the fastest route for increasing image resolution and recovering detail.",
+      "Image Upscaler is the fastest route for increasing image resolution and recovering detail.",
     );
   }
 
@@ -653,7 +653,7 @@ function localPageHelp(currentPath: string): AssistantReply | null {
   if (currentPath.startsWith("/tools/ai-upscaler")) {
     return {
       answer:
-        "AI Upscaler improves image resolution and detail. Use it when the image is already right but needs a cleaner or larger output.",
+        "Image Upscaler improves image resolution and detail. Use it when the image is already right but needs a cleaner or larger output.",
       suggestions: ["Should I use 2× or 4×?", "How do credits work?", "Find another tool"],
     };
   }
@@ -685,7 +685,7 @@ function localPageHelp(currentPath: string): AssistantReply | null {
   if (currentPath.startsWith("/pricing")) {
     return {
       answer:
-        "This page compares Heyy Studio plans and credit options. AI generation uses Heyy credits, while expert production is quoted separately.",
+        "This page compares Heyy Studio plans and credit options. Generation uses Heyy credits, while expert production is quoted separately.",
       suggestions: ["How do credits work?", "Do purchased credits expire?", "What is included with a plan?"],
     };
   }

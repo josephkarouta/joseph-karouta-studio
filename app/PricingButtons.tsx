@@ -85,7 +85,7 @@ export default function PricingButtons() {
         eyebrow="Most Popular"
         title="Starter"
         price="$35"
-        description="For creators and small businesses building real projects with regular AI generation."
+        description="For creators and small businesses building real projects with regular generation."
         features={[
           "1,500 monthly credits",
           "10 active projects",

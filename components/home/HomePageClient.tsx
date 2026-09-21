@@ -1,10 +1,11 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
+  ArrowUp,
   Layers3,
   Lightbulb,
   PackageCheck,
@@ -30,27 +31,32 @@ const studioContent: Record<
     label: string;
     description: string;
     image: string;
+    video: string;
   }
 > = {
   brand_studio: {
     label: "Brand Studio",
     description: "Logos, identity, guidelines and real-world applications.",
     image: "/home/studios/brand-studio.png",
+    video: "/home/studios/brand-studio.mp4",
   },
   marketing_studio: {
     label: "Marketing Studio",
     description: "Campaigns, content, messaging and creative direction.",
     image: "/home/studios/marketing-studio.png",
+    video: "/home/studios/marketing-studio.mp4",
   },
   architecture_studio: {
     label: "Architecture Studio",
     description: "Concepts, plans, visuals and detailed outputs.",
     image: "/home/studios/architecture-studio.png",
+    video: "/home/studios/architecture-studio.mp4",
   },
   interior_studio: {
     label: "Interior Design Studio",
     description: "Spaces, layouts, materials and polished interior visuals.",
     image: "/home/studios/interior-studio.png",
+    video: "/home/studios/interior-studio.mp4",
   },
 };
 
@@ -76,7 +82,7 @@ const simpleSteps = [
     icon: WandSparkles,
     number: "2",
     title: "Generate",
-    text: "Get strong AI-powered directions and results.",
+    text: "Get strong creative directions and results.",
   },
   {
     icon: Layers3,
@@ -95,6 +101,79 @@ const simpleSteps = [
 export default function HomePageClient() {
   const { user, loading: accountLoading, plan: currentPlan, credits } = useAuth();
   const currentPlanId = String(currentPlan || "free").toLowerCase();
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [playingStudioVideo, setPlayingStudioVideo] = useState<string | null>(null);
+  const hoveredStudioVideo = useRef<string | null>(null);
+  const studioVideoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+
+  const canPlayStudioHoverVideo = () => {
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(min-width: 1024px) and (hover: hover) and (pointer: fine)").matches &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  };
+
+  const startStudioHoverVideo = (studioId: string) => {
+    if (!canPlayStudioHoverVideo()) return;
+
+    const video = studioVideoRefs.current[studioId];
+    if (!video) return;
+
+    hoveredStudioVideo.current = studioId;
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      video.currentTime = 0;
+    }
+
+    void video.play().catch(() => {
+      if (hoveredStudioVideo.current === studioId) {
+        setPlayingStudioVideo(null);
+      }
+    });
+  };
+
+  const stopStudioHoverVideo = (studioId: string) => {
+    if (hoveredStudioVideo.current === studioId) {
+      hoveredStudioVideo.current = null;
+    }
+    if (playingStudioVideo === studioId) {
+      setPlayingStudioVideo(null);
+    }
+
+    const video = studioVideoRefs.current[studioId];
+    if (!video) return;
+
+    video.pause();
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      video.currentTime = 0;
+    }
+  };
+
+  useEffect(() => {
+    const updateBackToTop = () => {
+      if (window.innerWidth >= 768) {
+        setShowBackToTop(false);
+        return;
+      }
+
+      const studiosSection = document.getElementById("create");
+      if (!studiosSection) return;
+
+      const headerHeight = Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--header-height"),
+      ) || 72;
+      setShowBackToTop(studiosSection.getBoundingClientRect().bottom <= headerHeight + 16);
+    };
+
+    updateBackToTop();
+    window.addEventListener("scroll", updateBackToTop, { passive: true });
+    window.addEventListener("resize", updateBackToTop);
+    return () => {
+      window.removeEventListener("scroll", updateBackToTop);
+      window.removeEventListener("resize", updateBackToTop);
+    };
+  }, []);
+
   return (
     <main className="heyy-page home-page overflow-x-clip">
       <SiteHeader heroOverlay />
@@ -119,19 +198,15 @@ export default function HomePageClient() {
         <PageContainer className="absolute inset-x-0 top-0 z-10 flex min-h-[100svh] items-center justify-center pb-12 pt-[calc(var(--header-height)+2rem)] sm:pb-16 sm:pt-[calc(var(--header-height)+2.5rem)]">
           <div className="mx-auto w-full max-w-[760px] text-center">
             <p className="text-[0.66rem] font-black uppercase tracking-[0.22em] text-white/75 sm:text-[0.7rem]">
-              Create with AI. Build with Experts.
+              Create with Heyy. Build with Experts.
             </p>
 
             <h1 className="mt-4 text-[2.55rem] font-black leading-[0.98] tracking-[-0.05em] text-white drop-shadow-[0_8px_28px_rgba(0,0,0,0.34)] sm:mt-5 sm:text-[clamp(3rem,5vw,4.6rem)] sm:leading-[1.01]">
-              <span className="block">Turn your idea</span>
-              <span className="home-spectrum-text block">into finished work.</span>
+              <span className="block">Bring your ideas</span>
+              <span className="home-spectrum-text block">to life.</span>
             </h1>
 
-            <p className="mx-auto mt-4 max-w-[580px] text-[0.95rem] font-semibold leading-6 text-white/78 sm:mt-5 sm:text-base sm:leading-7">
-              Play with ideas, shape what you love, and call in an expert when you are ready to finish it.
-            </p>
-
-            <div className="mt-6 flex flex-wrap justify-center gap-2.5 sm:mt-7">
+            <div className="mt-7 flex flex-wrap justify-center gap-2.5 sm:mt-8">
               <ButtonLink
                 href="#create"
                 size="md"
@@ -156,10 +231,11 @@ export default function HomePageClient() {
         <PageContainer>
           <div className="mx-auto w-full max-w-[1320px]">
             <SectionHeading
-              eyebrow="AI Studios"
+              eyebrow="Creative Studios"
               title="What do you want to create?"
-              description="Each Studio brings together specialised AI tools and workflows for a focused creative journey."
+              description="Each Studio brings together specialised creative tools and workflows for a focused creative journey."
               align="left"
+              nowrapDesktop
             />
 
             <div className="home-studio-showcase relative mt-7 sm:mt-9">
@@ -173,6 +249,8 @@ export default function HomePageClient() {
                         key={studio.id}
                         href={studio.href || "/dashboard"}
                         className={`studio-card group block snap-start ${studioIndex % 2 === 1 ? "lg:translate-y-5" : ""}`}
+                        onMouseEnter={() => startStudioHoverVideo(studio.id)}
+                        onMouseLeave={() => stopStudioHoverVideo(studio.id)}
                       >
                         <article
                           className="studio-card-shell relative min-h-[430px] overflow-hidden rounded-[1.45rem] border border-white/10 bg-[#09070f] shadow-[0_24px_70px_rgba(18,10,35,0.18)] transition-[border-color,box-shadow] duration-300 sm:min-h-[450px] sm:rounded-[1.65rem] lg:min-h-[365px] xl:min-h-[395px]"
@@ -184,8 +262,35 @@ export default function HomePageClient() {
                               alt={`${content.label} preview`}
                               fill
                               priority={studioIndex < 2}
+                              unoptimized
                               sizes="(max-width: 639px) 84vw, (max-width: 1023px) 46vw, 25vw"
                               className="studio-card-art object-cover"
+                            />
+                            <video
+                              ref={(node) => {
+                                studioVideoRefs.current[studio.id] = node;
+                              }}
+                              src={content.video}
+                              muted
+                              loop
+                              playsInline
+                              preload="none"
+                              poster={content.image}
+                              aria-hidden="true"
+                              tabIndex={-1}
+                              onPlaying={() => {
+                                if (hoveredStudioVideo.current === studio.id) {
+                                  setPlayingStudioVideo(studio.id);
+                                }
+                              }}
+                              onError={() => {
+                                if (hoveredStudioVideo.current === studio.id) {
+                                  setPlayingStudioVideo(null);
+                                }
+                              }}
+                              className={`studio-card-video absolute inset-0 hidden h-full w-full object-cover lg:block ${
+                                playingStudioVideo === studio.id ? "is-playing" : ""
+                              }`}
                             />
                             <div className="studio-card-vignette absolute inset-0" />
                             <div className="studio-card-glow absolute inset-x-0 bottom-0 h-[56%]" />
@@ -193,10 +298,10 @@ export default function HomePageClient() {
 
                           <div className="absolute inset-x-0 bottom-0 z-10 flex min-h-[180px] flex-col justify-end p-5 text-white sm:p-6 lg:min-h-[164px] lg:p-5 xl:p-6">
                             <div className="mb-4 h-[2px] w-10 rounded-full bg-[var(--studio-accent)] shadow-[0_0_18px_var(--studio-accent)]" />
-                            <h3 className="text-[1.28rem] font-black tracking-[-0.045em] text-white sm:text-[1.45rem] lg:text-[1.08rem] xl:text-[1.25rem]">
+                            <h3 className="pr-14 text-[1.28rem] font-black tracking-[-0.045em] text-white sm:text-[1.45rem] lg:text-[1.08rem] xl:text-[1.25rem]">
                               {content.label}
                             </h3>
-                            <p className="mt-2 max-w-[19rem] text-[0.78rem] font-semibold leading-5 text-white/75 sm:text-sm sm:leading-6 lg:text-[0.7rem] lg:leading-5 xl:text-xs">
+                            <p className="mt-2 max-w-[19rem] pr-14 text-[0.78rem] font-semibold leading-5 text-white/75 sm:text-sm sm:leading-6 lg:text-[0.7rem] lg:leading-5 xl:text-xs">
                               {content.description}
                             </p>
                             <span
@@ -221,7 +326,7 @@ export default function HomePageClient() {
         <PageContainer>
           <div className="mx-auto w-full max-w-[1320px]">
             <SectionHeading
-              eyebrow="AI tools"
+              eyebrow="Creative tools"
               title="Quick tools. Big results."
               description="Create, enhance and convert without starting a full Studio project."
               align="left"
@@ -250,6 +355,7 @@ export default function HomePageClient() {
                                 src={visual}
                                 alt={`${tool.label} preview`}
                                 fill
+                                unoptimized
                                 sizes="(max-width: 639px) 84vw, (max-width: 1023px) 46vw, 25vw"
                                 className="quick-tool-art object-cover"
                               />
@@ -261,9 +367,6 @@ export default function HomePageClient() {
                               <h3 className="text-sm font-black tracking-[-0.035em] text-[var(--text-primary)] sm:text-base lg:text-[0.92rem] xl:text-base">
                                 {tool.label}
                               </h3>
-                              <p className="mt-1 text-[0.66rem] font-bold text-[var(--text-muted)] sm:text-xs lg:text-[0.64rem] xl:text-[0.7rem]">
-                                {tool.creditLabel}
-                              </p>
                             </div>
                             <span
                               className="quick-tool-arrow grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[filter,transform] duration-300 group-hover:brightness-[0.96] lg:h-9 lg:w-9"
@@ -341,7 +444,7 @@ export default function HomePageClient() {
             <SectionHeading
               eyebrow="Plans & credits"
               title="Start free. Upgrade when you need more."
-              description="Choose monthly or yearly. Subscription credits refresh monthly; top up anytime. Expert work is quoted separately."
+              description="Choose yearly or monthly. Yearly includes two months free; subscription credits still refresh monthly. Top up anytime. Expert work is quoted separately."
               size="compact"
             />
 
@@ -399,6 +502,18 @@ export default function HomePageClient() {
         </PageContainer>
       </section>
       </div>
+
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          aria-label="Back to top"
+          title="Back to top"
+          className="fixed bottom-[5.25rem] right-4 z-[75] grid h-11 w-11 cursor-pointer place-items-center rounded-full border border-[var(--accent-border)] bg-[var(--surface-strong)] text-[var(--accent-strong)] shadow-[0_14px_36px_rgba(24,15,44,.18)] backdrop-blur-xl transition-[background-color,color,border-color,box-shadow] hover:border-[#8b5cf6] hover:bg-[#8b5cf6] hover:text-white hover:shadow-[0_16px_38px_rgba(139,92,246,.26)] md:hidden"
+        >
+          <ArrowUp size={18} strokeWidth={2.4} aria-hidden="true" />
+        </button>
+      )}
 
       <SiteFooter />
 
@@ -511,10 +626,6 @@ export default function HomePageClient() {
         .studio-card-media {
           overflow: hidden;
           border-radius: inherit;
-          transform: translateZ(0);
-          -webkit-transform: translateZ(0);
-          -webkit-backface-visibility: hidden;
-          backface-visibility: hidden;
           -webkit-mask-image: -webkit-radial-gradient(white, black);
         }
 
@@ -548,11 +659,25 @@ export default function HomePageClient() {
         }
 
         .studio-card-art {
-          transform: scale(1.02) translateZ(0);
-          -webkit-transform: scale(1.02) translateZ(0);
-          -webkit-backface-visibility: hidden;
-          backface-visibility: hidden;
           border-radius: inherit;
+          transform: none;
+          -webkit-transform: none;
+          image-rendering: auto;
+        }
+
+        .studio-card-video {
+          z-index: 1;
+          opacity: 0;
+          transform: none;
+          -webkit-transform: none;
+          border-radius: inherit;
+          pointer-events: none;
+          transition: opacity 160ms ease, transform 340ms cubic-bezier(.2,.75,.25,1);
+          will-change: opacity;
+        }
+
+        .studio-card-video.is-playing {
+          opacity: 1;
         }
 
         .studio-card-arrow {
@@ -561,7 +686,6 @@ export default function HomePageClient() {
 
         .studio-card-art {
           transition: transform 340ms cubic-bezier(.2,.75,.25,1);
-          will-change: transform;
         }
 
         @media (hover: hover) {
@@ -575,8 +699,9 @@ export default function HomePageClient() {
             box-shadow: inset 0 0 48px color-mix(in srgb, var(--studio-accent) 14%, transparent);
           }
 
-          .studio-card:hover .studio-card-art {
-            transform: scale(1.062) translate3d(0, -2px, 0);
+          .studio-card:hover .studio-card-art,
+          .studio-card:hover .studio-card-video {
+            transform: none;
           }
 
           .studio-card:hover .studio-card-arrow {
@@ -589,7 +714,8 @@ export default function HomePageClient() {
           }
 
           .quick-tool-card:hover .quick-tool-art {
-            transform: scale(1.06) translate3d(0, -2px, 0);
+            transform: scale(1.04) translate3d(0, -2px, 0);
+            will-change: transform;
           }
 
           .quick-tool-card:hover .quick-tool-arrow {
@@ -600,16 +726,12 @@ export default function HomePageClient() {
 
         .quick-tool-media {
           isolation: isolate;
-          transform: translateZ(0);
-          -webkit-transform: translateZ(0);
-          -webkit-backface-visibility: hidden;
-          backface-visibility: hidden;
         }
 
         .quick-tool-art {
-          transform: scale(1.012) translate3d(0, 0, 0);
+          transform: none;
           transition: transform 320ms cubic-bezier(.2,.75,.25,1);
-          will-change: transform;
+          image-rendering: auto;
         }
 
         .home-featured-tool-sheen {
@@ -1548,6 +1670,7 @@ export default function HomePageClient() {
           .studio-piece,
           .studio-building,
           .studio-card-art,
+          .studio-card-video,
           .quick-tool-art {
             animation: none !important;
             transform: none !important;
@@ -1565,22 +1688,30 @@ function SectionHeading({
   description,
   align = "center",
   size = "default",
+  nowrapDesktop = false,
 }: {
   eyebrow: string;
   title: string;
   description?: string;
   align?: "center" | "left";
   size?: "default" | "compact";
+  nowrapDesktop?: boolean;
 }) {
   const titleClass =
     size === "compact"
       ? "mt-4 text-[1.9rem] font-black leading-[1] tracking-[-0.045em] sm:mt-5 sm:text-[2.8rem] sm:leading-[0.98] lg:text-[3.2rem]"
       : "mt-4 text-[1.95rem] font-black leading-[0.98] tracking-[-0.05em] sm:mt-5 sm:text-6xl sm:leading-[0.95] sm:tracking-[-0.06em] lg:text-[4.15rem]";
 
+  const wrapperClass = align === "center"
+    ? "mx-auto w-full max-w-5xl text-center"
+    : nowrapDesktop
+      ? "w-full max-w-none"
+      : "w-full max-w-3xl";
+
   return (
-    <div className={align === "center" ? "mx-auto w-full max-w-5xl text-center" : "w-full max-w-3xl"}>
+    <div className={wrapperClass}>
       <Eyebrow className={align === "left" ? "ml-[2px] sm:ml-0" : ""}>{eyebrow}</Eyebrow>
-      <h2 className={titleClass}>{title}</h2>
+      <h2 className={`${titleClass} ${nowrapDesktop ? "lg:whitespace-nowrap" : ""}`}>{title}</h2>
       {description && (
         <p className={`mt-3.5 text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:mt-4 sm:text-base sm:leading-7 ${align === "center" ? "mx-auto max-w-3xl" : ""}`}>
           {description}

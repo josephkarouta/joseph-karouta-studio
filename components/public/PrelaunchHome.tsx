@@ -59,11 +59,11 @@ export default function PrelaunchHome() {
         </h1>
 
         <p className={styles.intro}>
-          Heyy Studio is building an AI-powered creative operating system where ideas become
+          Heyy Studio is building a connected creative operating system where ideas become
           brands, experiences and production-ready outcomes.
         </p>
 
-        <p className={styles.tagline}>Create with AI. Build with Experts.</p>
+        <p className={styles.tagline}>Create with Heyy. Build with Experts.</p>
 
         <div className={styles.actions}>
           <Link className={styles.primary} href="/expertsnetwork?source=coming-soon">

@@ -24,7 +24,7 @@ import StudioAccessGate from "@/components/studio-access-gate";
 import { useAuth } from "@/components/auth-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { GuidedStudioConfig, StudioField } from "@/lib/studio/generic-config";
-import { Button, ButtonLink, CreditPill, Eyebrow, GlassCard, PageContainer, StatusPill, cx } from "@/components/ui/heyy";
+import { Button, ButtonLink, Eyebrow, GlassCard, PageContainer, StatusPill, cx } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
 import { generationFetch } from "@/lib/client/generation-request";
 
@@ -177,10 +177,6 @@ function StudioExperience({ config }: { config: GuidedStudioConfig }) {
               <Eyebrow style={{ color: config.accent }}>{config.eyebrow}</Eyebrow>
               <h1 className="mt-4 text-4xl font-black leading-[.94] tracking-[-.06em] sm:text-6xl">{config.title}</h1>
               <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:text-base">{config.description}</p>
-            </div>
-            <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 backdrop-blur-xl">
-              <CreditPill credits={config.creditCost} />
-              <span className="text-xs font-bold text-[var(--text-secondary)]">for the concept plan</span>
             </div>
           </div>
         </section>

@@ -44,6 +44,7 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
   const [awaitingVerification, setAwaitingVerification] = useState(Boolean(requestedVerificationEmail));
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const accountDeleted = searchParams.get("accountDeleted") === "1";
   const [message, setMessage] = useState(
     requestedVerificationEmail
@@ -104,7 +105,13 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
           email: normalizedEmail,
           password,
           options: {
-            data: { full_name: name.trim() },
+            data: {
+              full_name: name.trim(),
+              marketing_consent: marketingConsent,
+              marketing_consent_at: marketingConsent ? new Date().toISOString() : null,
+              marketing_consent_source: "signup_email",
+              marketing_consent_version: "2026-09-21",
+            },
             emailRedirectTo: verificationRedirect(),
           },
         });
@@ -249,7 +256,8 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
         <Link href="/">
           <HeyyLogo
             variant={resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"}
-            height={31}
+            showStudio={false}
+            height={38}
           />
         </Link>
         <div className="flex items-center gap-2">
@@ -271,7 +279,7 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
           </h1>
           <div className="mt-8 grid max-w-xl gap-3">
             {[
-              "Four specialist Studios and seven focused AI tools",
+              "Four specialist Studios and seven focused creative tools",
               "Credits shown before every paid generation",
               "Expert quotes, production, revisions and delivery in one workspace",
             ].map((item) => (
@@ -405,6 +413,21 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
                   }}
                 />
 
+                {signup && (
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3.5 text-left">
+                    <input
+                      type="checkbox"
+                      checked={marketingConsent}
+                      onChange={(event) => setMarketingConsent(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#8b5cf6]"
+                    />
+                    <span className="text-[11px] font-semibold leading-5 text-[var(--text-secondary)]">
+                      I&apos;d like to receive occasional Heyy emails about new features, services, offers and updates. I can unsubscribe at any time.
+                      <span className="ml-1 text-[var(--text-muted)]">Optional · See our <Link href="/privacy" className="underline underline-offset-2 hover:text-[var(--text-primary)]">Privacy Policy</Link>.</span>
+                    </span>
+                  </label>
+                )}
+
                 {authMessage}
 
                 {existingAccountEmail && (
@@ -436,6 +459,7 @@ export default function AuthScreen({ mode }: { mode: "login" | "signup" }) {
                   nextPath={next}
                   disabled={loading}
                   showEmail={false}
+                  marketingConsent={signup ? marketingConsent : false}
                   onStart={() => { setLoading(true); setMessage(""); }}
                   onError={(value) => { setMessage(value); setSuccess(false); setLoading(false); }}
                 />

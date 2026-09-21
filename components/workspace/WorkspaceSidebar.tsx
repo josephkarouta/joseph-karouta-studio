@@ -77,6 +77,7 @@ export default function WorkspaceSidebar({
   const pathname = usePathname();
   const navigationScrollRef = useRef<HTMLDivElement>(null);
   const [currentHash, setCurrentHash] = useState("");
+  const effectiveCollapsed = mobileOpen ? false : collapsed;
 
   useEffect(() => {
     const syncHash = () => setCurrentHash(window.location.hash);
@@ -145,25 +146,25 @@ export default function WorkspaceSidebar({
   return (
     <aside
       className={cx(
-        "fixed bottom-0 top-[var(--header-height)] z-50 flex w-[270px] flex-col border-r border-[var(--border)] bg-[color:var(--glass)] shadow-[14px_0_42px_rgba(32,21,48,.08)] backdrop-blur-3xl transition-[width,transform] duration-300",
-        collapsed && "lg:w-[86px]",
+        "fixed bottom-0 top-[var(--header-height)] z-[60] flex w-[min(86vw,310px)] flex-col lg:w-[270px] border-r border-[var(--border)] bg-[color:var(--glass)] shadow-[14px_0_42px_rgba(32,21,48,.14)] backdrop-blur-3xl transition-[width,transform] duration-300",
+        effectiveCollapsed && "lg:w-[86px]",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
       )}
       aria-label="Workspace navigation"
     >
       <div className={cx(
         "flex h-[70px] items-center justify-between gap-3 border-b border-[var(--border)] px-4",
-        collapsed && "gap-1 px-1.5",
+        effectiveCollapsed && "gap-1 px-1.5",
       )}>
         <Link
           href="/dashboard"
           onClick={onCloseMobile}
-          className={cx("flex min-w-0 items-center gap-3 overflow-hidden", collapsed && "shrink-0")}
+          className={cx("flex min-w-0 items-center gap-3 overflow-hidden", effectiveCollapsed && "shrink-0")}
         >
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(135deg,#8b5cf6,#d83cb8)] text-white shadow-lg">
             <Sparkles size={18} />
           </span>
-          {!collapsed && (
+          {!effectiveCollapsed && (
             <span className="min-w-0">
               <span className="block text-[0.61rem] font-black uppercase tracking-[0.18em] text-[var(--accent-strong)]">
                 Heyy Studio
@@ -186,11 +187,11 @@ export default function WorkspaceSidebar({
           onClick={onToggleCollapsed}
           className={cx(
             "hidden place-items-center border border-[var(--border)] text-[var(--text-secondary)] transition hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-strong)] lg:grid",
-            collapsed ? "h-7 w-7 rounded-lg" : "h-9 w-9 rounded-xl",
+            effectiveCollapsed ? "h-7 w-7 rounded-lg" : "h-9 w-9 rounded-xl",
           )}
-          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+          aria-label={effectiveCollapsed ? "Expand navigation" : "Collapse navigation"}
         >
-          {collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+          {effectiveCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
         </button>
       </div>
 
@@ -202,37 +203,37 @@ export default function WorkspaceSidebar({
         <NavigationGroup
           label="Workspace"
           items={workspaceItems}
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
         <NavigationGroup
           label="Studios"
           items={studioItems}
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
         <NavigationGroup
           label="Tools"
           items={aiToolItems}
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
         <NavigationGroup
           label="Utilities"
           items={utilityItems}
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onNavigateItem={handleNavigationItem}
           isActive={itemIsActive}
         />
       </div>
 
       <div className="space-y-2 border-t border-[var(--border)] p-3">
-        <SidebarLink collapsed={collapsed} href="/account" icon={Settings} label="Account" active={pathname.startsWith("/account")} />
-        <SidebarLink collapsed={collapsed} href="/billing" icon={CreditCard} label="Billing & plan" active={pathname.startsWith("/billing")} />
-        <SidebarLink collapsed={collapsed} href="/help" icon={BadgeHelp} label="Help & support" active={pathname.startsWith("/help")} />
+        <SidebarLink collapsed={effectiveCollapsed} href="/account" icon={Settings} label="Account" active={pathname.startsWith("/account")} />
+        <SidebarLink collapsed={effectiveCollapsed} href="/billing" icon={CreditCard} label="Billing & plan" active={pathname.startsWith("/billing")} />
+        <SidebarLink collapsed={effectiveCollapsed} href="/help" icon={BadgeHelp} label="Help & support" active={pathname.startsWith("/help")} />
       </div>
     </aside>
   );

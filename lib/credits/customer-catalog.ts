@@ -2,7 +2,7 @@ import { CREDIT_COSTS, getPowerPointCreditCost, POWERPOINT_INCLUDED_SLIDES } fro
 
 export type CreditGuideItem = {
   id: string;
-  category: "Brand Studio" | "Marketing Studio" | "Architecture Studio" | "Interior Studio" | "AI Tools" | "Utilities";
+  category: "Brand Studio" | "Marketing Studio" | "Architecture Studio" | "Interior Studio" | "Creative Tools" | "Utilities";
   label: string;
   credits: number;
   unit?: string;
@@ -91,21 +91,21 @@ export const CUSTOMER_CREDIT_GUIDE: CreditGuideItem[] = [
   },
   {
     id: "text-to-image",
-    category: "AI Tools",
+    category: "Creative Tools",
     label: "Image generation",
     credits: CREDIT_COSTS.textToImageHigh,
     detail: "One generated image.",
   },
   {
     id: "image-edit",
-    category: "AI Tools",
+    category: "Creative Tools",
     label: "Image edit",
     credits: CREDIT_COSTS.imageEdit,
     detail: "One AI image edit or variation.",
   },
   {
     id: "digital-adaptation",
-    category: "AI Tools",
+    category: "Creative Tools",
     label: "Digital Adaptation",
     credits: CREDIT_COSTS.digitalAdaptationFamily,
     unit: "per AI composition",
@@ -113,28 +113,28 @@ export const CUSTOMER_CREDIT_GUIDE: CreditGuideItem[] = [
   },
   {
     id: "upscale-2x",
-    category: "AI Tools",
-    label: "AI Upscaler · 2×",
+    category: "Creative Tools",
+    label: "Image Upscaler · 2×",
     credits: CREDIT_COSTS.aiUpscale2x,
     detail: "Enlarge the source to 2× its width and height using the selected enhancement approach.",
   },
   {
     id: "upscale-4x",
-    category: "AI Tools",
-    label: "AI Upscaler · 4×",
+    category: "Creative Tools",
+    label: "Image Upscaler · 4×",
     credits: CREDIT_COSTS.aiUpscale4x,
     detail: "Enlarge the source to 4× its width and height. Large sources remain subject to output-size safety limits.",
   },
   {
     id: "video",
-    category: "AI Tools",
+    category: "Creative Tools",
     label: "Image to Video",
     credits: CREDIT_COSTS.imageToVideoHigh,
     detail: "One 1080p, 8-second generated video with audio.",
   },
   {
     id: "powerpoint",
-    category: "AI Tools",
+    category: "Creative Tools",
     label: `PowerPoint 1–${POWERPOINT_INCLUDED_SLIDES} slides`,
     credits: getPowerPointCreditCost(POWERPOINT_INCLUDED_SLIDES),
     detail: `${CREDIT_COSTS.powerpoint11To15} credits for 11–15 slides and ${CREDIT_COSTS.powerpoint16To20} credits for 16–20 slides.`,

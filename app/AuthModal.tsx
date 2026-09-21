@@ -39,6 +39,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
 
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { resolvedTheme } = useTheme();
@@ -95,7 +96,13 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
           email: normalizedEmail,
           password,
           options: {
-            data: { full_name: name.trim() },
+            data: {
+              full_name: name.trim(),
+              marketing_consent: marketingConsent,
+              marketing_consent_at: marketingConsent ? new Date().toISOString() : null,
+              marketing_consent_source: "signup_email",
+              marketing_consent_version: "2026-09-21",
+            },
             emailRedirectTo: verificationRedirect(),
           },
         });
@@ -251,7 +258,7 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
           </button>
 
           <div className="mx-auto w-full max-w-md">
-            <HeyyLogo variant={resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"} height={26} />
+            <HeyyLogo variant={resolvedTheme === "dark" ? "full-colour-light" : "full-colour-dark"} showStudio={false} height={38} />
 
             <div className="mt-7 flex items-center gap-3 text-[var(--accent-strong)] md:mt-8">
               <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[var(--accent-soft)]">
@@ -298,8 +305,23 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
 
                 {!emailMode ? (
                   <div className="mt-7">
+                    {mode === "signup" && (
+                      <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3.5 text-left">
+                        <input
+                          type="checkbox"
+                          checked={marketingConsent}
+                          onChange={(event) => setMarketingConsent(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-[#8b5cf6]"
+                        />
+                        <span className="text-[11px] font-semibold leading-5 text-[var(--text-secondary)]">
+                          I&apos;d like to receive occasional Heyy emails about new features, services, offers and updates. I can unsubscribe at any time.
+                          <span className="ml-1 text-[var(--text-muted)]">Optional · See our <a href="/privacy" className="underline underline-offset-2 hover:text-[var(--text-primary)]">Privacy Policy</a>.</span>
+                        </span>
+                      </label>
+                    )}
                     <OAuthButtons
                       nextPath={currentNextPath()}
+                      marketingConsent={mode === "signup" ? marketingConsent : false}
                       disabled={busy}
                       onStart={() => { setLoading(true); resetFeedback(); }}
                       onError={(value) => { setMessage(value); setLoading(false); }}
@@ -316,6 +338,20 @@ export default function AuthModal({ onClose, nextPath, initialMode = "signin" }:
                     )}
                     <input className="heyy-input" type="email" placeholder="Email address" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
                     <input className="heyy-input" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void handleEmailSubmit(); }} autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+                    {mode === "signup" && (
+                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3.5 text-left">
+                        <input
+                          type="checkbox"
+                          checked={marketingConsent}
+                          onChange={(event) => setMarketingConsent(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-[#8b5cf6]"
+                        />
+                        <span className="text-[11px] font-semibold leading-5 text-[var(--text-secondary)]">
+                          I&apos;d like to receive occasional Heyy emails about new features, services, offers and updates. I can unsubscribe at any time.
+                          <span className="ml-1 text-[var(--text-muted)]">Optional · See our <a href="/privacy" className="underline underline-offset-2 hover:text-[var(--text-primary)]">Privacy Policy</a>.</span>
+                        </span>
+                      </label>
+                    )}
                     <button type="button" onClick={() => void handleEmailSubmit()} disabled={busy || !email || !password || (mode === "signup" && !name.trim())} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[var(--button-primary)] px-4 text-sm font-black text-[var(--button-primary-text)] shadow-[var(--shadow-button)] transition hover:bg-[var(--button-primary-hover)] disabled:cursor-not-allowed disabled:bg-[var(--surface-strong)] disabled:text-[var(--text-muted)] disabled:opacity-100">
                       {busy && <LoaderCircle size={16} className="animate-spin" />}
                       {navigating

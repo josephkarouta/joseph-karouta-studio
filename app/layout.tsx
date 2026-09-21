@@ -17,14 +17,14 @@ const siteUrl =
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Heyy Studio — Create with AI. Build with Experts.",
+    default: "Heyy Studio — Create with Heyy. Build with Experts.",
     template: "%s | Heyy Studio",
   },
   description:
-    "A connected creative operating system for brand, architecture, interior design, marketing, AI tools and expert production.",
+    "A connected creative operating system for brand, architecture, interior design, marketing, creative tools and expert production.",
   openGraph: {
     title: "Heyy Studio",
-    description: "Create with AI. Build with Experts.",
+    description: "Create with Heyy. Build with Experts.",
     type: "website",
     url: siteUrl,
   },
@@ -70,7 +70,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           {children}
           {!isPrelaunch && <HeyyAssistant />}
           <AuthModalController allowSignup={!isPrelaunch} />
-          <CookieConsent />
+          <CookieConsent offsetForMobileNav={!isPrelaunch} />
         </Providers>
       </body>
     </html>

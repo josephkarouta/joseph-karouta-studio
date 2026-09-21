@@ -12,6 +12,7 @@ type OAuthButtonsProps = {
   onError?: (message: string) => void;
   onEmail?: () => void;
   showEmail?: boolean;
+  marketingConsent?: boolean;
   className?: string;
 };
 
@@ -55,6 +56,7 @@ export default function OAuthButtons({
   onError,
   onEmail,
   showEmail = true,
+  marketingConsent = false,
   className,
 }: OAuthButtonsProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -102,6 +104,7 @@ export default function OAuthButtons({
 
     const callbackUrl = new URL("/auth/callback", window.location.origin);
     callbackUrl.searchParams.set("next", safeNextPath(nextPath));
+    if (marketingConsent) callbackUrl.searchParams.set("marketing_consent", "1");
 
     const options: {
       redirectTo: string;

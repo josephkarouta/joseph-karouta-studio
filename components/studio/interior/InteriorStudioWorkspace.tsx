@@ -41,7 +41,6 @@ import { GUIDED_STUDIOS, type StudioField } from "@/lib/studio/generic-config";
 import { CREDIT_COSTS } from "@/lib/credits/config";
 import {
   Button,
-  CreditPill,
   Eyebrow,
   GlassCard,
   PageContainer,
@@ -49,7 +48,6 @@ import {
   cx,
 } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
-import StudioModeToggle from "@/components/ui/StudioModeToggle";
 import StudioLoader from "@/components/ui/StudioLoader";
 import StudioWorkspaceNavigation from "@/components/studio/common/StudioWorkspaceNavigation";
 import StudioVisualGenerationLoader from "@/components/studio/common/StudioVisualGenerationLoader";
@@ -61,7 +59,7 @@ import { downloadInteriorDesignPack } from "@/lib/interior/design-pack-export";
 import { getInteriorOutputCoverage } from "@/lib/interior/output-coverage";
 
 const config = GUIDED_STUDIOS.interior;
-const INTERIOR_AI_CONCEPT_NOTICE = "AI-generated plans and visuals are for concept exploration and early design direction only. They are not construction-ready or professionally verified. For accurate plans, technical drawings or production-ready design, continue with Heyy Studio expert production. Create with AI. Build with Experts.";
+const INTERIOR_AI_CONCEPT_NOTICE = "AI-generated plans and visuals are for concept exploration and early design direction only. They are not construction-ready or professionally verified. For accurate plans, technical drawings or production-ready design, continue with Heyy Studio expert production. Create with Heyy. Build with Experts.";
 
 type FormState = Record<string, string | string[]>;
 type ResultData = Record<string, unknown> & {
@@ -318,8 +316,11 @@ function InteriorExperience() {
       ? "professional"
       : "guided";
   const activeSteps = useMemo(
-    () => workMode === "professional" && config.professionalSteps?.length ? config.professionalSteps : config.steps,
-    [workMode],
+    () => (config.professionalSteps?.length ? config.professionalSteps : config.steps).map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => ({ ...field, required: false })),
+    })),
+    [],
   );
 
   const studioStyle = {
@@ -333,7 +334,6 @@ function InteriorExperience() {
   } as CSSProperties;
 
   const allFields = useMemo(() => activeSteps.flatMap((item) => item.fields), [activeSteps]);
-  const requiredMissing = activeSteps[step]?.fields.filter((field) => field.required && isEmpty(form[field.id])) || [];
   const completedInputs = allFields.filter((field) => !isEmpty(form[field.id])).length;
   const progress = result
     ? Math.max(75, Math.min(100, Number(project?.progress || 75)))
@@ -392,7 +392,10 @@ function InteriorExperience() {
     const record = data as ProjectRecord;
     const savedForm = { ...initialState(), ...((record.input || {}) as FormState) };
     const savedMode: WorkMode = savedForm.workMode === "professional" ? "professional" : "guided";
-    const savedSteps = savedMode === "professional" && config.professionalSteps?.length ? config.professionalSteps : config.steps;
+    const savedSteps = (config.professionalSteps?.length ? config.professionalSteps : config.steps).map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => ({ ...field, required: false })),
+    }));
     const savedResult = (record.output || null) as ResultData | null;
     setProject(record);
     setForm(savedForm);
@@ -414,13 +417,6 @@ function InteriorExperience() {
 
   function updateField(id: string, value: string | string[]) {
     setForm((current) => ({ ...current, [id]: value }));
-    setError("");
-  }
-
-  function changeWorkMode(nextMode: WorkMode) {
-    if (generatingConcept) return;
-    setForm((current) => ({ ...current, workMode: nextMode }));
-    setStep(0);
     setError("");
   }
 
@@ -497,10 +493,6 @@ function InteriorExperience() {
   }
 
   function nextStep() {
-    if (requiredMissing.length) {
-      setError(`Complete ${requiredMissing.map((field) => field.label.toLowerCase()).join(", ")} before continuing.`);
-      return;
-    }
     if (step === 0 && form.projectStartMode === "architecture" && !String(form.architectureProjectId || "")) {
       setError("Choose the Architecture project this interior should continue from.");
       return;
@@ -844,38 +836,19 @@ function InteriorExperience() {
           <StudioProjectHero
             tone="interior"
             eyebrow="Interior design project"
-            title={String(project?.project_name || form.projectName || "Untitled interior project")}
+            title={String(project?.project_name || form.projectName || "Untitled project")}
             description={[String(form.roomType || form.projectScope || ""), String(form.location || "")].filter(Boolean).join(" · ") || "Interior design project"}
             progress={progress}
             statusLabel="Brief, plans, materials, furniture, lighting and concept visuals stay connected in one workspace."
-            mode={INTERIOR_PROFESSIONAL_MODE_ENABLED ? workMode : undefined}
-            onModeChange={INTERIOR_PROFESSIONAL_MODE_ENABLED
-              ? (mode) => void changeWorkMode(mode)
-              : undefined}
           />
         ) : (
           <StudioHero
             tone="interior"
             eyebrow={config.eyebrow}
             title={config.title}
-            description={config.description}
+            description="Plan the space, finishes, furniture, lighting and visuals in one connected project."
             imageSrc="/studio-heroes/interior-studio-hero.webp"
             imagePosition="center 58%"
-            controls={(
-              <>
-                {INTERIOR_PROFESSIONAL_MODE_ENABLED ? (
-                  <StudioModeToggle value={workMode} onChange={(mode) => void changeWorkMode(mode)} tone="interior" compact />
-                ) : null}
-                <div className="mt-3 flex items-center justify-between gap-3 px-1">
-                  <span className="text-xs font-bold text-[var(--text-secondary)]">
-                    {INTERIOR_PROFESSIONAL_MODE_ENABLED
-                      ? (workMode === "guided" ? "Simple questions and a clear concept" : "Full fit-out, schedules and procurement package")
-                      : "Concept-first guidance from brief to interior design package"}
-                  </span>
-                  <CreditPill credits={workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost} />
-                </div>
-              </>
-            )}
           />
         )}
 
@@ -988,10 +961,35 @@ function OnboardingNavigation({
   onChange: (step: number) => void;
   disabled: boolean;
 }) {
+  const labels = [...steps.map((item) => item.title), "Your concept"];
+  const currentLabel = labels[Math.min(step, labels.length - 1)];
   return (
     <GlassCard className="mt-5 p-3 sm:p-4">
-      <div className={cx("grid gap-2", steps.length <= 2 ? "sm:grid-cols-3" : "sm:grid-cols-5")}>
-        {[...steps.map((item) => item.title), "Your concept"].map((title, index) => {
+      <div className="sm:hidden">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)]">Step {Math.min(step + 1, steps.length)} of {steps.length}</p>
+            <p className="mt-1 truncate text-sm font-black text-[var(--text-primary)]">{currentLabel}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5" aria-label="Interior project progress">
+            {labels.map((title, index) => (
+              <button
+                key={`mobile-${title}-${index}`}
+                type="button"
+                disabled={disabled || index > step || index >= steps.length}
+                onClick={() => onChange(index)}
+                className={cx(
+                  "h-2.5 rounded-full transition-[width,background-color]",
+                  index === step ? "w-7 bg-[var(--accent)]" : index < step ? "w-2.5 bg-[var(--accent)]/55" : "w-2.5 bg-[var(--surface-hover)]",
+                )}
+                aria-label={title}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className={cx("hidden gap-2 sm:grid", steps.length <= 2 ? "sm:grid-cols-3" : "sm:grid-cols-5")}>
+        {labels.map((title, index) => {
           const active = index === step;
           const complete = index < step;
           return (
@@ -1082,17 +1080,30 @@ function OnboardingWorkspace({
   onGenerate: () => void;
 }) {
   const section = steps[step];
-  const allFields = steps.flatMap((item) => item.fields);
-  const conceptCredits = workMode === "professional" ? config.professionalCreditCost || CREDIT_COSTS.interiorProfessionalConcept : config.creditCost;
+  const startMode = String(form.projectStartMode || "new");
+  const startModeLabel = startMode === "existing"
+    ? "Existing design"
+    : startMode === "architecture"
+      ? "Continue from Architecture"
+      : "New design";
+  const styleSummary = Array.isArray(form.styles) && form.styles.length
+    ? form.styles.join(", ")
+    : "Not selected";
+  const summaryRows = [
+    { label: "Starting point", value: startModeLabel },
+    { label: "Space type", value: String(form.roomType || "Not selected") },
+    { label: "Scope", value: String(form.projectScope || "Not selected") },
+    { label: "Location", value: String(form.location || "Not added") },
+    { label: "Style", value: styleSummary },
+    { label: "Investment", value: String(form.budget || "Not selected") },
+  ];
 
   return (
     <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
       <GlassCard className="p-5 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Eyebrow>{INTERIOR_PROFESSIONAL_MODE_ENABLED
-          ? (workMode === "professional" ? "Professional mode" : "Guided mode")
-          : "Interior concept"} · Step {step + 1} of {steps.length}</Eyebrow>
+            <Eyebrow>Interior project · Step {step + 1} of {steps.length}</Eyebrow>
             <h2 className="mt-3 text-3xl font-black tracking-[-.05em]">{section.title}</h2>
             <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">{section.description}</p>
           </div>
@@ -1126,7 +1137,7 @@ function OnboardingWorkspace({
           </Button>
           {step === steps.length - 1 ? (
             <Button type="button" onClick={onGenerate} disabled={generating}>
-              <Sparkles size={15} /> Generate {workMode === "professional" ? "professional package" : "concept"} · {conceptCredits} credits
+              <Sparkles size={15} /> Generate concept · {config.creditCost} credits
             </Button>
           ) : (
             <Button type="button" onClick={onContinue} disabled={generating}>
@@ -1141,15 +1152,9 @@ function OnboardingWorkspace({
           tone="interior"
           eyebrow="Project summary"
           title={String(form.projectName || "Untitled project")}
-          subtitle={workMode === "professional" ? "Professional fit-out package" : String(form.roomType || "Guided interior concept")}
+          subtitle={String(form.roomType || "Interior concept")}
           progress={progress}
-          rows={allFields
-            .filter((field) => !isEmpty(form[field.id]))
-            .slice(0, 8)
-            .map((field) => ({
-              label: field.label,
-              value: Array.isArray(form[field.id]) ? (form[field.id] as string[]).join(", ") : String(form[field.id]),
-            }))}
+          rows={summaryRows}
           note={{ eyebrow: "Verification note", text: config.disclaimer }}
         />
       </aside>
@@ -1554,7 +1559,6 @@ function PlansSection({
             Generate the Furniture & Space Plan, approve it as the project source, then continue to the connected furniture plan, lighting plan and visuals. Larger projects keep the same three plan families but each board automatically covers the representative zones/levels the project needs instead of trying to generate every floor separately.
           </p>
         </div>
-        <CreditPill credits={CREDIT_COSTS.interiorPlan} label="per plan" />
       </div>
 
       <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
@@ -1663,7 +1667,6 @@ function VisualsSection({
             As soon as the Furniture & Space Plan is approved, the connected interior visuals unlock. Heyy Studio keeps the same visual system and automatically adds broader project coverage only when the scope needs it.
           </p>
         </div>
-        <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per visual" />
       </div>
 
       <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-hover)] p-4 text-xs font-semibold leading-5 text-[var(--text-secondary)]">
@@ -1895,7 +1898,6 @@ function ExistingDesignRoomVisualsSection({
               Each room is generated against one selected uploaded floor plan instead of the entire project at once. Approve the room's Main Concept before creating its alternate angle or feature detail.
             </p>
           </div>
-          <CreditPill credits={CREDIT_COSTS.interiorProfessionalFinal} label="per concept view" />
         </div>
         <div className="mt-5 rounded-2xl border border-amber-300/60 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-800 dark:text-amber-200">
           Plan-guided visuals use the mapped room and uploaded plan as the primary spatial reference, but AI interpretation can still vary. {INTERIOR_AI_CONCEPT_NOTICE}
@@ -2150,8 +2152,8 @@ function ProfessionalPackageSection({ value }: { value: unknown }) {
     return (
       <GlassCard className="p-8 text-center">
         <BriefcaseBusiness size={34} className="mx-auto text-[var(--accent-strong)]" />
-        <h2 className="mt-4 text-2xl font-black">Professional package not generated</h2>
-        <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">Switch to Professional Mode and regenerate the project to create schedules, quantities, procurement registers and the delivery plan.</p>
+        <h2 className="mt-4 text-2xl font-black">Extended package not generated</h2>
+        <p className="mt-2 text-sm font-semibold text-[var(--text-secondary)]">Regenerate the project with more detailed inputs to create schedules, quantities, procurement registers and delivery information.</p>
       </GlassCard>
     );
   }

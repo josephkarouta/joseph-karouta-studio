@@ -13,12 +13,12 @@ export async function generateMetadata(): Promise<Metadata> {
     return {
       title: "Heyy Studio — Coming Soon",
       description:
-        "Heyy Studio is building an AI-powered creative operating system. Create with AI. Build with Experts.",
+        "Heyy Studio is building a connected creative operating system. Create with Heyy. Build with Experts.",
       alternates: { canonical: "/" },
       openGraph: {
         title: "Heyy Studio — Coming Soon",
         description:
-          "Creativity is about to feel different. Create with AI. Build with Experts.",
+          "Creativity is about to feel different. Create with Heyy. Build with Experts.",
         url: "/",
         type: "website",
         siteName: "Heyy Studio",
@@ -27,15 +27,15 @@ export async function generateMetadata(): Promise<Metadata> {
         card: "summary_large_image",
         title: "Heyy Studio — Coming Soon",
         description:
-          "Creativity is about to feel different. Create with AI. Build with Experts.",
+          "Creativity is about to feel different. Create with Heyy. Build with Experts.",
       },
     };
   }
 
   return {
-    title: "Heyy Studio — Create with AI. Build with Experts.",
+    title: "Heyy Studio — Create with Heyy. Build with Experts.",
     description:
-      "A connected creative operating system for brand, architecture, interior design, marketing, AI tools and expert production.",
+      "A connected creative operating system for brand, architecture, interior design, marketing, creative tools and expert production.",
     alternates: { canonical: "/" },
   };
 }

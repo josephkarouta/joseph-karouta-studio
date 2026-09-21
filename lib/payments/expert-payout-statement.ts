@@ -89,7 +89,7 @@ export async function buildExpertPayoutStatementPdf(data: ExpertPayoutStatementD
   doc.setTextColor(...muted);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text("Create with AI. Build with Experts.", margin, 87);
+  doc.text("Create with Heyy. Build with Experts.", margin, 87);
 
   doc.setTextColor(...dark);
   doc.setFont("helvetica", "bold");

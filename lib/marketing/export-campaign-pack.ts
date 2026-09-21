@@ -148,7 +148,7 @@ function drawCover(cursor: Cursor, input: CampaignPackExportInput) {
   pdf.setTextColor(255, 255, 255);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(10);
-  pdf.text("Create with AI. Build with Experts.", margin, pageHeight - 88);
+  pdf.text("Create with Heyy. Build with Experts.", margin, pageHeight - 88);
   pdf.setFont("helvetica", "normal");
   pdf.setTextColor(160, 153, 170);
   pdf.text("Strategy / messaging / content / creative / testing / measurement", margin, pageHeight - 68);

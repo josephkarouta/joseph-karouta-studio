@@ -84,6 +84,12 @@ export function baseEmail({
     <title>${escapeHtml(title)}</title>
     <style>
       :root { color-scheme: light dark; supported-color-schemes: light dark; }
+      /* Gmail iOS can force-invert email colors and ignores prefers-color-scheme.
+         Preserve intentionally dark brand surfaces with a gradient and use the
+         Gmail-only blend-mode wrappers below to keep white copy readable. */
+      u + .body .gmail-blend-screen { background:#000 !important; mix-blend-mode:screen !important; }
+      u + .body .gmail-blend-difference { background:#000 !important; mix-blend-mode:difference !important; }
+      .heyy-email-dark-surface { background-color:#17131f !important; background-image:linear-gradient(#17131f,#17131f) !important; }
       .heyy-email-bg { background-color:#f6f4fa !important; }
       .heyy-email-card { background-color:#ffffff !important; }
       .heyy-email-brand { background-color:#17131f !important; }
@@ -107,6 +113,7 @@ export function baseEmail({
         .heyy-email-note { color:#e5dff0 !important; }
         .heyy-email-muted { color:#aaa1b6 !important; }
       }
+      [data-ogsc] .heyy-email-dark-surface { background-color:#17131f !important; background-image:linear-gradient(#17131f,#17131f) !important; }
       [data-ogsc] .heyy-email-bg { background-color:#120819 !important; }
       [data-ogsc] .heyy-email-card { background-color:#211b27 !important; border-color:#3a3043 !important; }
       [data-ogsc] .heyy-email-brand { background-color:#17131f !important; }
@@ -127,7 +134,7 @@ export function baseEmail({
       }
     </style>
   </head>
-  <body class="heyy-email-bg" bgcolor="#f6f4fa" style="margin:0;padding:0;background:#f6f4fa;font-family:Arial,Helvetica,sans-serif;color:#17131f;">
+  <body class="body heyy-email-bg" bgcolor="#f6f4fa" style="margin:0;padding:0;background:#f6f4fa;font-family:Arial,Helvetica,sans-serif;color:#17131f;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;line-height:1px;">
       ${escapeHtml(preheader || intro)}
     </div>
@@ -136,7 +143,7 @@ export function baseEmail({
         <td align="center" class="heyy-email-wrap" style="padding:28px 12px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#ffffff" class="heyy-email-card" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #e5e0ec;border-radius:24px;overflow:hidden;box-shadow:0 18px 55px rgba(39,24,64,.10);">
             <tr>
-              <td bgcolor="#17131f" class="heyy-email-brand heyy-email-pad" style="padding:20px 30px 18px;background:#17131f;border-top:4px solid ${theme.accent};border-bottom:1px solid #33283c;">
+              <td bgcolor="#17131f" class="heyy-email-brand heyy-email-dark-surface heyy-email-pad" style="padding:20px 30px 18px;background:#17131f;background-image:linear-gradient(#17131f,#17131f);border-top:4px solid ${theme.accent};border-bottom:1px solid #33283c;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="vertical-align:middle;">
@@ -151,13 +158,15 @@ export function baseEmail({
             </tr>
 
             <tr>
-              <td bgcolor="#17131f" class="heyy-email-pad" style="padding:30px 30px 32px;background:#17131f;border-bottom:4px solid ${theme.accent};">
-                <div style="display:inline-block;padding:7px 11px;border:1px solid ${theme.accent};border-radius:999px;background:#231a2d;color:#ffffff;font-size:10px;font-weight:900;letter-spacing:1.55px;text-transform:uppercase;">
-                  ${escapeHtml(eyebrow)}
+              <td bgcolor="#17131f" class="heyy-email-dark-surface heyy-email-pad" style="padding:30px 30px 32px;background:#17131f;background-image:linear-gradient(#17131f,#17131f);border-bottom:4px solid ${theme.accent};">
+                <div style="display:inline-block;padding:7px 11px;border:1px solid ${theme.accent};border-radius:999px;background:#231a2d;background-image:linear-gradient(#231a2d,#231a2d);color:#ffffff;font-size:10px;font-weight:900;letter-spacing:1.55px;text-transform:uppercase;">
+                  <div class="gmail-blend-screen"><div class="gmail-blend-difference">${escapeHtml(eyebrow)}</div></div>
                 </div>
-                <h1 class="heyy-email-title" style="margin:16px 0 0;color:#f6f4fa;font-size:34px;line-height:1.08;letter-spacing:-1.05px;font-weight:900;">
-                  ${escapeHtml(title)}
-                </h1>
+                <div class="gmail-blend-screen"><div class="gmail-blend-difference">
+                  <h1 class="heyy-email-title" style="margin:16px 0 0;color:#f6f4fa;font-size:34px;line-height:1.08;letter-spacing:-1.05px;font-weight:900;">
+                    ${escapeHtml(title)}
+                  </h1>
+                </div></div>
               </td>
             </tr>
 
@@ -196,15 +205,17 @@ export function baseEmail({
             </tr>
 
             <tr>
-              <td bgcolor="#17131f" class="heyy-email-pad" style="padding:22px 30px;background:#17131f;">
+              <td bgcolor="#17131f" class="heyy-email-dark-surface heyy-email-pad" style="padding:22px 30px;background:#17131f;background-image:linear-gradient(#17131f,#17131f);">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td class="heyy-email-footer-left" style="color:#ffffff;font-size:12px;font-weight:800;line-height:1.6;">
-                      Create with AI. Build with Experts.
+                      <div class="gmail-blend-screen"><div class="gmail-blend-difference">Create with Heyy. Build with Experts.</div></div>
                     </td>
                     <td align="right" class="heyy-email-footer-right" style="color:#aaa1b6;font-size:11px;line-height:1.6;">
-                      <a href="${escapeAttribute(siteUrl)}" style="color:#ffffff;text-decoration:none;">heyystudio.com</a><br />
-                      hello@heyystudio.com
+                      <div class="gmail-blend-screen"><div class="gmail-blend-difference">
+                        <a href="${escapeAttribute(siteUrl)}" style="color:#ffffff;text-decoration:none;">heyystudio.com</a><br />
+                        hello@heyystudio.com
+                      </div></div>
                     </td>
                   </tr>
                 </table>

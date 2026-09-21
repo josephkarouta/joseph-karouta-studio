@@ -100,7 +100,7 @@ export async function buildHeyyInvoicePdf(data: HeyyInvoiceData) {
   doc.setTextColor(...muted);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text("Create with AI. Build with Experts.", margin, 87);
+  doc.text("Create with Heyy. Build with Experts.", margin, 87);
 
   doc.setTextColor(...dark);
   doc.setFont("helvetica", "bold");

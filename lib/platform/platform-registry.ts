@@ -160,10 +160,10 @@ export const PLATFORM_STUDIOS: PlatformStudio[] = [
   },
   {
     id: "ai_studio",
-    label: "AI Studio",
-    shortLabel: "AI",
+    label: "Creative Workspace",
+    shortLabel: "Creative",
     initials: "AI",
-    description: "Legacy AI-assisted creative workspace.",
+    description: "Legacy creative workspace.",
     availability: "hidden",
     visible: false,
     prompt: "I need help structuring a creative project.",
@@ -221,7 +221,7 @@ export const PLATFORM_TOOLS: PlatformTool[] = [
   },
   {
     id: "ai_upscaler",
-    label: "AI Upscaler",
+    label: "Image Upscaler",
     description: "Increase resolution and recover detail with professional image enhancement.",
     href: "/tools/ai-upscaler",
     availability: "live",
