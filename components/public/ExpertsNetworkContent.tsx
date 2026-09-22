@@ -54,6 +54,27 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   const source = String(initialSource || "direct").trim().toLowerCase();
 
   useEffect(() => {
+    if (!sent) return;
+
+    const scrollToApplicationResult = () => {
+      const target = document.getElementById("expert-application");
+      if (!target) return;
+
+      const headerHeight = Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--header-height"),
+      ) || 88;
+      const top = target.getBoundingClientRect().top + window.scrollY - headerHeight - 16;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    };
+
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToApplicationResult);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [sent]);
+
+  useEffect(() => {
     let cancelled = false;
     void fetch("/api/public/expert-network", { cache: "no-store" })
       .then(async (response) => {
@@ -97,6 +118,15 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
   }, [checkingEmail, emailRegistered, form, resume]);
 
   const canSubmit = missingRequirements.length === 0 && !sending;
+  const showNameError = showMissingRequirements && form.name.trim().length < 2;
+  const showEmailError = showMissingRequirements && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const showLocationError = showMissingRequirements && !form.location.trim();
+  const showAvailabilityError = showMissingRequirements && !form.availability;
+  const showSpecialtiesError = showMissingRequirements && !form.specialties.trim();
+  const showResumeError = showMissingRequirements && !resume;
+  const showMessageError = showMissingRequirements && form.message.trim().length < 30;
+  const showConsentError = showMissingRequirements && !form.consent;
+  const invalidControlStyle = { borderColor: "#ef4444", boxShadow: "0 0 0 4px rgba(239,68,68,.10)" };
 
   function chooseResume(file?: File) {
     if (!file) return;
@@ -141,6 +171,9 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
       setShowMissingRequirements(true);
       setProfileLinkError(!form.portfolioUrl.trim() && !form.linkedinUrl.trim());
       setError("");
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('[data-expert-invalid="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
       return;
     }
 
@@ -169,7 +202,6 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
       }
       if (!response.ok) throw new Error(result.error || "Application could not be sent.");
       setSent(true);
-      window.scrollTo({ top: document.getElementById("expert-application")?.offsetTop || 0, behavior: "smooth" });
     } catch (value) {
       setError(value instanceof Error ? value.message : "Application could not be sent.");
     } finally { setSending(false); }
@@ -244,15 +276,16 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
           {sent ? <div className="py-8 text-center"><CheckCircle2 size={42} className="mx-auto text-emerald-500"/><h3 className="mt-4 text-2xl font-black">Application received</h3><p className="mt-3 text-sm font-semibold leading-6 text-[var(--text-secondary)]">Thanks, {form.name.split(/\s+/)[0] || "there"}. Your application is now in the Heyy Studio Expert Network review queue.</p><p className="mt-3 text-xs font-semibold leading-5 text-[var(--text-muted)]">If you’re shortlisted, Heyy Studio will contact you directly. You do not need to apply again for the same opportunity.</p>{linkedInUrl && <a href={linkedInUrl} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0a66c2] px-4 py-2.5 text-xs font-black text-white">Follow Heyy Studio on LinkedIn <ExternalLink size={13}/></a>}</div> : (
             <form onSubmit={submit} noValidate className="grid gap-4 sm:grid-cols-2">
               <div className="mb-1 sm:col-span-2 sm:mb-2"><p className="text-[.6rem] font-black uppercase tracking-[.16em] text-[var(--accent-strong)] sm:text-[.62rem] sm:tracking-[.17em]">Apply to the Expert Network</p><h3 className="mt-2 text-xl font-black tracking-[-.045em] sm:text-2xl">Your expert profile starts here.</h3><p className="mt-2 text-xs font-semibold leading-5 text-[var(--text-muted)]">Shortlisted candidates are invited separately. This application does not create an Expert Portal account.</p></div>
-              <Field label="Full name *"><input className="heyy-input" required minLength={2} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field>
+              <Field label="Full name *"><input className="heyy-input" required minLength={2} aria-invalid={showNameError} data-expert-invalid={showNameError || undefined} style={showNameError ? invalidControlStyle : undefined} value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></Field>
               <Field label="Email address *">
                 <input
                   className="heyy-input"
                   type="email"
                   required
-                  aria-invalid={emailRegistered}
+                  aria-invalid={emailRegistered || showEmailError}
                   aria-describedby={emailRegistered ? "expert-email-error" : undefined}
-                  style={emailRegistered ? { borderColor: "#ef4444", boxShadow: "0 0 0 4px rgba(239,68,68,.10)" } : undefined}
+                  data-expert-invalid={showEmailError || emailRegistered || undefined}
+                  style={emailRegistered || showEmailError ? invalidControlStyle : undefined}
                   value={form.email}
                   onBlur={() => void checkEmailRegistration()}
                   onChange={(e)=>{
@@ -265,13 +298,13 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
                 {checkingEmail && <span className="mt-1.5 block text-[.62rem] font-semibold text-[var(--text-muted)]">Checking email…</span>}
                 {emailRegistered && <span id="expert-email-error" className="mt-1.5 block text-[.62rem] font-bold text-red-600">This email is already registered with the Heyy Studio Expert Network.</span>}
               </Field>
-              <Field label="Current city & country *"><input className="heyy-input" required placeholder="Melbourne, Australia" value={form.location} onChange={(e)=>setForm({...form,location:e.target.value})}/></Field>
-              <Field label="Current availability *"><HeyySelect value={form.availability} options={AVAILABILITY} placeholder="Select availability" ariaLabel="Current availability" onChange={(value)=>setForm({...form,availability:value})}/></Field>
+              <Field label="Current city & country *"><input className="heyy-input" required aria-invalid={showLocationError} data-expert-invalid={showLocationError || undefined} style={showLocationError ? invalidControlStyle : undefined} placeholder="Melbourne, Australia" value={form.location} onChange={(e)=>setForm({...form,location:e.target.value})}/></Field>
+              <Field label="Current availability *"><div data-expert-invalid={showAvailabilityError || undefined}><HeyySelect value={form.availability} options={AVAILABILITY} placeholder="Select availability" ariaLabel="Current availability" triggerClassName={showAvailabilityError ? "!border-red-500 !shadow-[0_0_0_4px_rgba(239,68,68,.10)]" : undefined} onChange={(value)=>setForm({...form,availability:value})}/></div></Field>
               <div className="sm:col-span-2 -mb-2 flex items-center justify-between gap-2 text-[.61rem] font-black uppercase tracking-[.12em] text-[var(--text-muted)]"><span>Portfolio or LinkedIn *</span><span className="normal-case tracking-normal text-[.58rem] font-semibold">Add at least one</span></div>
-              <Field label="Portfolio"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} style={profileLinkError ? { borderColor: "#ef4444" } : undefined} placeholder="www.yourportfolio.com" value={form.portfolioUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,portfolioUrl:e.target.value});}}/></Field>
-              <Field label="LinkedIn"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} style={profileLinkError ? { borderColor: "#ef4444" } : undefined} placeholder="linkedin.com/in/yourname" value={form.linkedinUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,linkedinUrl:e.target.value});}}/></Field>
+              <Field label="Portfolio"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} data-expert-invalid={profileLinkError || undefined} style={profileLinkError ? invalidControlStyle : undefined} placeholder="www.yourportfolio.com" value={form.portfolioUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,portfolioUrl:e.target.value});}}/></Field>
+              <Field label="LinkedIn"><input className="heyy-input" inputMode="url" aria-invalid={profileLinkError} data-expert-invalid={profileLinkError || undefined} style={profileLinkError ? invalidControlStyle : undefined} placeholder="linkedin.com/in/yourname" value={form.linkedinUrl} onChange={(e)=>{setProfileLinkError(false);setForm({...form,linkedinUrl:e.target.value});}}/></Field>
               {profileLinkError && <p className="-mt-2 text-[.62rem] font-bold text-red-600 sm:col-span-2">Add at least one portfolio or LinkedIn link.</p>}
-              <Field className="sm:col-span-2" label="Specialties *" hint="Separate with commas"><input className="heyy-input" required placeholder={applicationHints.specialties} value={form.specialties} onChange={(e)=>setForm({...form,specialties:e.target.value})}/></Field>
+              <Field className="sm:col-span-2" label="Specialties *" hint="Separate with commas"><input className="heyy-input" required aria-invalid={showSpecialtiesError} data-expert-invalid={showSpecialtiesError || undefined} style={showSpecialtiesError ? invalidControlStyle : undefined} placeholder={applicationHints.specialties} value={form.specialties} onChange={(e)=>setForm({...form,specialties:e.target.value})}/></Field>
 
               <details className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] sm:hidden">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-black">
@@ -294,22 +327,27 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
               </div>
 
               <input ref={resumeRef} type="file" className="hidden" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e)=>chooseResume(e.target.files?.[0])}/>
-              <div className="flex min-h-20 items-center justify-between gap-3 rounded-2xl border border-dashed sm:col-span-2 border-[var(--border-strong)] bg-[var(--surface)] p-4 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">
-                <button type="button" onClick={()=>resumeRef.current?.click()} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+              <div
+                className="flex min-h-20 w-full min-w-0 max-w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border border-dashed sm:col-span-2 border-[var(--border-strong)] bg-[var(--surface)] p-4 transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                data-expert-invalid={showResumeError || undefined}
+                style={showResumeError ? invalidControlStyle : undefined}
+              >
+                <button type="button" onClick={()=>resumeRef.current?.click()} className="flex w-full min-w-0 flex-1 items-center gap-3 overflow-hidden text-left">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">{resume?<FileText size={17}/>:<Upload size={17}/>}</span>
-                  <span className="min-w-0"><span className="block truncate text-xs font-black">{resume?resume.name:"Attach CV / resume *"}</span><span className="mt-1 block text-[.65rem] font-semibold text-[var(--text-muted)]">PDF, DOC or DOCX · max 10 MB</span></span>
+                  <span className="min-w-0 flex-1 overflow-hidden"><span className="block w-full max-w-full truncate text-xs font-black" title={resume?.name}>{resume?resume.name:"Attach CV / resume *"}</span><span className="mt-1 block truncate text-[.65rem] font-semibold text-[var(--text-muted)]">PDF, DOC or DOCX · max 10 MB</span></span>
                 </button>
                 {resume&&<button type="button" onClick={()=>{setResume(null);if(resumeRef.current)resumeRef.current.value="";}} className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[var(--border)]" aria-label="Remove CV"><X size={13}/></button>}
               </div>
 
-              <Field className="sm:col-span-2" label="Tell us about your work *" hint="What kind of projects are you strongest at?"><textarea className="heyy-input min-h-28 w-full resize-y" required minLength={30} value={form.message} onChange={(e)=>setForm({...form,message:e.target.value})}/></Field>
-              <div className="rounded-2xl bg-[var(--surface)] p-3 text-xs sm:col-span-2 font-semibold leading-5 text-[var(--text-secondary)]">
+              <Field className="sm:col-span-2" label="Tell us about your work *" hint="What kind of projects are you strongest at?"><textarea className="heyy-input min-h-28 w-full resize-y" required minLength={30} aria-invalid={showMessageError} data-expert-invalid={showMessageError || undefined} style={showMessageError ? invalidControlStyle : undefined} value={form.message} onChange={(e)=>setForm({...form,message:e.target.value})}/></Field>
+              <div className={`rounded-2xl border p-3 text-xs sm:col-span-2 font-semibold leading-5 text-[var(--text-secondary)] ${showConsentError ? "border-red-500 bg-red-500/[.05] shadow-[0_0_0_4px_rgba(239,68,68,.08)]" : "border-transparent bg-[var(--surface)]"}`} data-expert-invalid={showConsentError || undefined}>
                 <div className="flex items-start gap-3">
                   <input
                     id="expert-network-consent"
                     type="checkbox"
                     required
-                    className="mt-1 cursor-pointer"
+                    className={`mt-1 cursor-pointer ${showConsentError ? "accent-red-500" : ""}`}
+                    aria-invalid={showConsentError}
                     checked={form.consent}
                     onChange={(e)=>setForm({...form,consent:e.target.checked})}
                   />
@@ -324,7 +362,6 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
                   Project invitations are optional. Scope, fee, timeline and payment terms are confirmed with you before each project begins.
                 </p>
               </div>
-              {source !== "direct" && <p className="text-[.62rem] sm:col-span-2 font-bold text-[var(--text-muted)]">Application source: {source}</p>}
               {error&&<p className="rounded-xl bg-red-500/10 sm:col-span-2 px-3 py-2 text-xs font-bold text-red-600">{error}</p>}
               {showMissingRequirements && missingRequirements.length > 0 && (
                 <div className="rounded-2xl border border-red-500/25 bg-red-500/[.07] px-4 py-3 sm:col-span-2" role="alert" aria-live="polite">

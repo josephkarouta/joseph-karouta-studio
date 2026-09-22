@@ -672,8 +672,8 @@ export default function HomePageClient() {
           -webkit-transform: none;
           border-radius: inherit;
           pointer-events: none;
-          transition: opacity 160ms ease, transform 340ms cubic-bezier(.2,.75,.25,1);
-          will-change: opacity;
+          transition: opacity 420ms ease, transform 900ms cubic-bezier(.22,.61,.36,1);
+          will-change: opacity, transform;
         }
 
         .studio-card-video.is-playing {
@@ -685,7 +685,7 @@ export default function HomePageClient() {
         }
 
         .studio-card-art {
-          transition: transform 340ms cubic-bezier(.2,.75,.25,1);
+          transition: transform 900ms cubic-bezier(.22,.61,.36,1);
         }
 
         @media (hover: hover) {
@@ -701,7 +701,7 @@ export default function HomePageClient() {
 
           .studio-card:hover .studio-card-art,
           .studio-card:hover .studio-card-video {
-            transform: none;
+            transform: scale(1.025) translate3d(0, -1px, 0);
           }
 
           .studio-card:hover .studio-card-arrow {

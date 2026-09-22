@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Percent, Sparkles } from "lucide-react";
 import PricingAction from "@/components/account/PricingActions";
 import { useAuth } from "@/components/auth-provider";
@@ -16,16 +16,40 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
   const { plan, user } = useAuth();
   const currentPlan = normalizePlan(plan);
   const [billingInterval, setBillingInterval] = useState<BillingInterval>("year");
+  const [desktopPricing, setDesktopPricing] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+
+    const syncPricingMode = () => {
+      const desktop = media.matches;
+      setDesktopPricing(desktop);
+      setBillingInterval(desktop ? "month" : "year");
+    };
+
+    syncPricingMode();
+    media.addEventListener("change", syncPricingMode);
+    return () => media.removeEventListener("change", syncPricingMode);
+  }, []);
 
   const orderedPlans = [...PLANS].sort((a, b) => {
+    if (desktopPricing) {
+      const desktopRank = { free: 0, starter: 1, pro: 2 } as const;
+      return desktopRank[a.id] - desktopRank[b.id];
+    }
+
     if (user && currentPlan !== "free") {
       if (a.id === currentPlan) return -1;
       if (b.id === currentPlan) return 1;
     }
 
-    const rank = { starter: 0, pro: 1, free: 2 } as const;
-    return rank[a.id] - rank[b.id];
+    const mobileRank = { starter: 0, pro: 1, free: 2 } as const;
+    return mobileRank[a.id] - mobileRank[b.id];
   });
+
+  const billingIntervals: BillingInterval[] = desktopPricing
+    ? ["month", "year"]
+    : ["year", "month"];
 
   return (
     <div>
@@ -37,7 +61,7 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
           <span className="text-[0.62rem] font-black uppercase tracking-[0.12em] text-[var(--accent-strong)]">Save 17% yearly</span>
         </div>
         <div className="inline-grid grid-cols-2 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-strong)_88%,transparent)] p-1 shadow-[0_10px_28px_rgba(54,35,82,0.09)] backdrop-blur-xl">
-          {(["year", "month"] as BillingInterval[]).map((interval) => {
+          {billingIntervals.map((interval) => {
             const active = billingInterval === interval;
             return (
               <button

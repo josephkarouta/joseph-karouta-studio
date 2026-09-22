@@ -71,7 +71,6 @@ export function baseEmail({
     amount ? { label: "Amount", value: amount } : null,
     ...details,
   ].filter((item): item is EmailDetail => Boolean(item?.value !== undefined && item?.value !== null && String(item.value).trim()));
-  const recipientLabel = recipient === "admin" ? "Heyy Studio Admin" : recipient === "expert" ? "Heyy Studio Expert" : theme.label;
 
   return `
 <!doctype html>
@@ -147,10 +146,7 @@ export function baseEmail({
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="vertical-align:middle;">
-                      <img src="${escapeAttribute(emailLogoUrl)}" alt="Heyy Studio" width="148" class="heyy-email-brand-logo" style="display:block;width:148px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;background:#17131f;" />
-                    </td>
-                    <td align="right" class="heyy-email-brand-label" style="color:${theme.accent};font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;vertical-align:middle;">
-                      ${escapeHtml(recipientLabel)}
+                      <img src="${escapeAttribute(emailLogoUrl)}" alt="Heyy Studio" width="148" class="heyy-email-brand-logo" style="display:block;width:148px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />
                     </td>
                   </tr>
                 </table>
@@ -267,7 +263,7 @@ function getEmailLogoUrl(siteUrl: string) {
   const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(siteUrl);
   const useBetaAsset = process.env.NODE_ENV !== "production" || isLocal;
   const assetBase = useBetaAsset ? "https://heyystudiobeta.netlify.app" : siteUrl;
-  return `${assetBase}/brand/heyy/heyy-full-colour-light-export.png?v=20260919-2355`;
+  return `${assetBase}/brand/heyy/heyy-email-wordmark-light.png?v=20260922-1015`;
 }
 
 function normaliseStudio(studio?: string | null) {

@@ -23,7 +23,7 @@ export default async function AdminPlatformShell({ children }: { children: React
           </div>
         </PageContainer>
       </header>
-      <PageContainer className="grid gap-6 py-7 xl:grid-cols-[230px_minmax(0,1fr)]">
+      <PageContainer className="grid gap-6 py-7 xl:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="h-fit rounded-3xl border border-violet-100 bg-white p-3 shadow-sm">
           <AdminPlatformNav role={role} />
         </aside>

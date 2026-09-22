@@ -121,7 +121,7 @@ export default function AdminPlatformNav({ role }: { role: AdminRole }) {
             <span className="min-w-0 flex-1 truncate">{label}</span>
             {badge !== null && (
               <span
-                className={`inline-flex min-w-6 items-center justify-center rounded-full px-2 py-1 text-[10px] font-black leading-none ${
+                className={`inline-flex min-w-6 shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-black leading-none ${
                   pendingApplications
                     ? active
                       ? "bg-white text-[#8B5CF6]"
@@ -134,9 +134,6 @@ export default function AdminPlatformNav({ role }: { role: AdminRole }) {
               >
                 {badge > 99 ? "99+" : badge}
               </span>
-            )}
-            {pendingApplications && !active && (
-              <span className="h-2 w-2 shrink-0 rounded-full bg-[#8B5CF6]" aria-label="New Expert applications awaiting review" />
             )}
           </Link>
         );
