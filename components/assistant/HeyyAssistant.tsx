@@ -108,6 +108,40 @@ export default function HeyyAssistant() {
   }, []);
 
   useEffect(() => {
+    if (!open || typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 639px)").matches) return;
+
+    const body = document.body;
+    const root = document.documentElement;
+    const scrollY = window.scrollY;
+    const previous = {
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+      rootOverflow: root.style.overflow,
+      rootOverscrollBehavior: root.style.overscrollBehavior,
+    };
+
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
+
+    return () => {
+      body.style.overflow = previous.bodyOverflow;
+      body.style.position = previous.bodyPosition;
+      body.style.top = previous.bodyTop;
+      body.style.width = previous.bodyWidth;
+      root.style.overflow = previous.rootOverflow;
+      root.style.overscrollBehavior = previous.rootOverscrollBehavior;
+      window.scrollTo(0, scrollY);
+    };
+  }, [open]);
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading, open]);
 
@@ -197,12 +231,18 @@ export default function HeyyAssistant() {
       </button>
 
       {open && (
-        <section
-          role="dialog"
-          aria-label="Heyy assistant"
-          className="fixed inset-x-3 bottom-3 z-[80] flex max-h-[min(720px,calc(100vh-24px))] flex-col overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-[0_35px_110px_rgba(25,12,45,.32)] backdrop-blur-3xl sm:left-auto sm:right-5 sm:w-[430px]"
-        >
-          <header className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#2d1152_0%,#8b5cf6_50%,#d83cb8_100%)] p-5 text-white">
+        <>
+          <div
+            className="fixed inset-0 z-[79] touch-none overscroll-none sm:hidden"
+            aria-hidden="true"
+          />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Heyy assistant"
+            className="fixed inset-x-3 bottom-[max(.75rem,env(safe-area-inset-bottom))] top-[max(.75rem,env(safe-area-inset-top))] z-[80] flex min-h-0 flex-col overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--surface-strong)] shadow-[0_35px_110px_rgba(25,12,45,.32)] backdrop-blur-3xl sm:left-auto sm:right-5 sm:top-auto sm:max-h-[min(720px,calc(100dvh-24px))] sm:w-[430px]"
+          >
+          <header className="relative z-20 shrink-0 overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,#2d1152_0%,#8b5cf6_50%,#d83cb8_100%)] p-5 text-white">
             <div className="absolute -right-10 -top-14 h-36 w-36 rounded-full border-[22px] border-white/10" />
             <div className="relative flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -227,7 +267,7 @@ export default function HeyyAssistant() {
             </div>
           </header>
 
-          <div ref={scrollRef} className="heyy-scrollbar flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+          <div ref={scrollRef} className="heyy-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
             {messages.map((message) => (
               <div key={message.id} className={cx("flex", message.role === "user" && "justify-end")}>
                 <div className={cx("max-w-[91%]", message.role === "user" && "text-right")}>
@@ -306,7 +346,7 @@ export default function HeyyAssistant() {
             )}
           </div>
 
-          <form onSubmit={submit} className="border-t border-[var(--border)] bg-[var(--surface)] p-3">
+          <form onSubmit={submit} className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-3">
             <div className="flex items-end gap-2 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-strong)] p-2 focus-within:border-[var(--accent)] focus-within:shadow-[0_0_0_4px_var(--focus-ring)]">
               <textarea
                 value={input}
@@ -334,7 +374,8 @@ export default function HeyyAssistant() {
               Heyy can make mistakes. Review important project and production decisions.
             </p>
           </form>
-        </section>
+          </section>
+        </>
       )}
     </>
   );
