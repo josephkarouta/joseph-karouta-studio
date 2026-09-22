@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Percent, Sparkles } from "lucide-react";
 import PricingAction from "@/components/account/PricingActions";
 import { useAuth } from "@/components/auth-provider";
@@ -15,16 +15,15 @@ import {
 export default function PlanCards({ compactMobile = false }: { compactMobile?: boolean }) {
   const { plan, user } = useAuth();
   const currentPlan = normalizePlan(plan);
-  const [billingInterval, setBillingInterval] = useState<BillingInterval>("year");
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("month");
   const [desktopPricing, setDesktopPricing] = useState(false);
+  const plansScrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
 
     const syncPricingMode = () => {
-      const desktop = media.matches;
-      setDesktopPricing(desktop);
-      setBillingInterval(desktop ? "month" : "year");
+      setDesktopPricing(media.matches);
     };
 
     syncPricingMode();
@@ -33,23 +32,33 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
   }, []);
 
   const orderedPlans = [...PLANS].sort((a, b) => {
-    if (desktopPricing) {
-      const desktopRank = { free: 0, starter: 1, pro: 2 } as const;
-      return desktopRank[a.id] - desktopRank[b.id];
-    }
-
-    if (user && currentPlan !== "free") {
-      if (a.id === currentPlan) return -1;
-      if (b.id === currentPlan) return 1;
-    }
-
-    const mobileRank = { starter: 0, pro: 1, free: 2 } as const;
-    return mobileRank[a.id] - mobileRank[b.id];
+    const planRank = { free: 0, starter: 1, pro: 2 } as const;
+    return planRank[a.id] - planRank[b.id];
   });
 
-  const billingIntervals: BillingInterval[] = desktopPricing
-    ? ["month", "year"]
-    : ["year", "month"];
+  const billingIntervals: BillingInterval[] = ["month", "year"];
+
+  useEffect(() => {
+    if (!compactMobile || desktopPricing) return;
+
+    const scroller = plansScrollerRef.current;
+    if (!scroller) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const starterCard = scroller.querySelector<HTMLElement>('[data-plan-id="starter"]');
+      if (!starterCard) return;
+
+      const targetLeft =
+        starterCard.offsetLeft - (scroller.clientWidth - starterCard.offsetWidth) / 2;
+
+      scroller.scrollTo({
+        left: Math.max(0, targetLeft),
+        behavior: "auto",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [compactMobile, desktopPricing]);
 
   return (
     <div>
@@ -90,6 +99,7 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
       </div>
 
       <div
+        ref={plansScrollerRef}
         className={
           compactMobile
             ? "-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-3 [scrollbar-width:none] sm:-mx-6 sm:px-6 md:mx-0 md:grid md:grid-cols-3 md:items-stretch md:gap-4 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden"
@@ -109,6 +119,7 @@ export default function PlanCards({ compactMobile = false }: { compactMobile?: b
         return (
           <GlassCard
             key={item.id}
+            data-plan-id={item.id}
             className={`relative flex flex-col overflow-hidden p-4 sm:p-5 md:min-h-[385px] ${compactMobile ? "w-[calc(100vw-3rem)] shrink-0 snap-center sm:w-[70vw] md:w-auto md:shrink" : ""} ${
               featured
                 ? "border-2 border-[var(--accent)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--accent-soft)_92%,white),var(--surface-strong)_58%)] shadow-[0_24px_70px_color-mix(in_srgb,var(--accent)_22%,transparent)] ring-4 ring-[color-mix(in_srgb,var(--accent)_8%,transparent)]"
