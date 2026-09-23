@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendExpertNetworkApplicationEmails } from "@/lib/communications/careers";
-import { expertRoleSlug } from "@/lib/expert-network/public";
+import { expertRoleSlug, expertStudioLabel, type ExpertNetworkPosition } from "@/lib/expert-network/public";
 
 const RESUME_BUCKET = "career-application-files";
 const MAX_RESUME_BYTES = 10 * 1024 * 1024;
@@ -13,6 +13,23 @@ const RESUME_TYPES = new Set([
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
+
+const EXPERT_STUDIO_ORDER: Record<string, number> = {
+  "Brand Studio": 0,
+  "Marketing Studio": 1,
+  "Architecture Studio": 2,
+  "Interior Studio": 3,
+};
+
+function orderPublicExpertPositions(items: ExpertNetworkPosition[]) {
+  return [...items].sort((a, b) => {
+    const studioDifference =
+      (EXPERT_STUDIO_ORDER[expertStudioLabel(a)] ?? 99) -
+      (EXPERT_STUDIO_ORDER[expertStudioLabel(b)] ?? 99);
+    if (studioDifference !== 0) return studioDifference;
+    return String(a.title || "").localeCompare(String(b.title || ""));
+  });
+}
 
 export async function listExpertNetworkPositions() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -33,9 +50,12 @@ export async function listExpertNetworkPositions() {
     return NextResponse.json({ positions: [], error: "The Expert Network is temporarily unavailable." }, { status: 500 });
   }
 
-  return NextResponse.json({
-    positions: (data || []).map((position) => ({ ...position, slug: expertRoleSlug(position.title) })),
-  });
+  const positions = orderPublicExpertPositions((data || []) as ExpertNetworkPosition[]).map((position) => ({
+    ...position,
+    slug: expertRoleSlug(position.title),
+  }));
+
+  return NextResponse.json({ positions });
 }
 
 

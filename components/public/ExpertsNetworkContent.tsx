@@ -36,9 +36,35 @@ const AVAILABILITY = [
   { value: "unavailable", label: "Not available right now, keep me in the network" },
 ];
 
+const EXPERT_ROLE_SLUG_ALIASES: Record<string, string> = {
+  "freelance-brand-designer": "brand-designer",
+  "freelance-marketing-specialist": "marketing-specialist",
+  "freelance-architect": "architect",
+  "freelance-interior-designer": "interior-designer",
+};
+
+const EXPERT_STUDIO_ORDER: Record<string, number> = {
+  "Brand Studio": 0,
+  "Marketing Studio": 1,
+  "Architecture Studio": 2,
+  "Interior Studio": 3,
+};
+
+let cachedExpertPositions: Position[] | null = null;
+
+function orderExpertPositions(items: Position[]) {
+  return [...items].sort((a, b) => {
+    const studioDifference =
+      (EXPERT_STUDIO_ORDER[expertStudioLabel(a)] ?? 99) -
+      (EXPERT_STUDIO_ORDER[expertStudioLabel(b)] ?? 99);
+    if (studioDifference !== 0) return studioDifference;
+    return String(a.title || "").localeCompare(String(b.title || ""));
+  });
+}
+
 export default function ExpertsNetworkContent({ initialRoleSlug, initialSource = "direct" }: { initialRoleSlug?: string; initialSource?: string }) {
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [positions, setPositions] = useState<Position[]>(() => cachedExpertPositions || []);
+  const [loading, setLoading] = useState(() => !cachedExpertPositions);
   const [loadError, setLoadError] = useState("");
   const [form, setForm] = useState<Application>(empty);
   const [resume, setResume] = useState<File | null>(null);
@@ -84,13 +110,17 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
       })
       .then((data) => {
         if (cancelled) return;
-        setPositions(data.positions || []);
+        const nextPositions = orderExpertPositions(data.positions || []);
+        cachedExpertPositions = nextPositions;
+        setPositions(nextPositions);
         setLoadError("");
       })
       .catch((value) => {
         if (cancelled) return;
-        setPositions([]);
-        setLoadError(value instanceof Error ? value.message : "The Expert Network is temporarily unavailable.");
+        if (!cachedExpertPositions?.length) {
+          setPositions([]);
+          setLoadError(value instanceof Error ? value.message : "The Expert Network is temporarily unavailable.");
+        }
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -98,7 +128,8 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
 
   const selected = useMemo(() => {
     if (!initialRoleSlug) return null;
-    return positions.find((position) => (position.slug || expertRoleSlug(position.title)) === initialRoleSlug) || null;
+    const requestedSlug = EXPERT_ROLE_SLUG_ALIASES[initialRoleSlug] || initialRoleSlug;
+    return positions.find((position) => (position.slug || expertRoleSlug(position.title)) === requestedSlug) || null;
   }, [initialRoleSlug, positions]);
 
   const missingRequirements = useMemo(() => {
@@ -230,7 +261,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
         <div className="mt-5 grid gap-3 sm:mt-8 sm:gap-4 md:grid-cols-2">
           {positions.length ? positions.map((position) => {
             const slug = position.slug || expertRoleSlug(position.title);
-            return <GlassCard key={position.id} interactive className="p-4 sm:p-7"><div className="flex h-full flex-col"><div className="flex flex-wrap gap-2"><StatusPill tone="info">{expertStudioLabel(position)}</StatusPill><span className="hidden sm:inline-flex"><StatusPill>{position.employment_type || "Freelance / Project-based"}</StatusPill></span></div><h3 className="mt-4 text-xl font-black tracking-[-.045em] sm:mt-5 sm:text-2xl">{position.title}</h3><p className="mt-3 hidden flex-1 text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:block">{position.summary || "Join Heyy Studio for selected project-based expert work."}</p><p className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] sm:mt-5"><MapPin size={14}/>{position.location || "Remote / Worldwide"}</p><Link href={`/expertsnetwork/${slug}${source !== "direct" ? `?source=${encodeURIComponent(source)}` : ""}`} className="mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--text-primary)] px-4 py-2.5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white sm:mt-6">View & apply <ArrowRight size={14}/></Link></div></GlassCard>;
+            return <GlassCard key={position.id} interactive className="p-4 sm:p-7"><div className="flex h-full flex-col"><div className="flex flex-wrap gap-2"><StatusPill tone="info">{expertStudioLabel(position)}</StatusPill><span className="hidden sm:inline-flex"><StatusPill>{position.employment_type || "Project-based"}</StatusPill></span></div><h3 className="mt-4 text-xl font-black tracking-[-.045em] sm:mt-5 sm:text-2xl">{position.title}</h3><p className="mt-3 hidden flex-1 text-sm font-semibold leading-7 text-[var(--text-secondary)] sm:block">{position.summary || "Join Heyy Studio for selected project-based expert work."}</p><p className="mt-3 flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] sm:mt-5"><MapPin size={14}/>{position.location || "Remote / Worldwide"}</p><Link href={`/expertsnetwork/${slug}${source !== "direct" ? `?source=${encodeURIComponent(source)}` : ""}`} className="mt-4 inline-flex w-fit items-center gap-2 rounded-full bg-[var(--text-primary)] px-4 py-2.5 text-xs font-black text-[var(--surface-strong)] transition hover:bg-[var(--accent-strong)] hover:text-white sm:mt-6">View & apply <ArrowRight size={14}/></Link></div></GlassCard>;
           }) : <GlassCard className="p-8 text-center md:col-span-2"><h3 className="text-2xl font-black">Applications will open shortly</h3><p className="mt-3 text-sm font-semibold text-[var(--text-secondary)]">The first Expert Network opportunities are being prepared.</p></GlassCard>}
         </div>
       </div>
@@ -249,7 +280,7 @@ export default function ExpertsNetworkContent({ initialRoleSlug, initialSource =
             <div className="bg-[linear-gradient(135deg,#17131f,#8b5cf6_78%,#dc36c8)] p-5 text-white sm:p-9">
               <p className="text-[.58rem] font-black uppercase tracking-[.16em] text-white/70 sm:text-[.62rem] sm:tracking-[.18em]">{expertStudioLabel(selected)} · Expert Network</p>
               <h2 className="mt-3 text-3xl font-black leading-[.98] tracking-[-.055em] sm:mt-4 sm:text-5xl">{selected.title}</h2>
-              <div className="mt-4 flex flex-wrap gap-2 text-[.68rem] font-black sm:mt-5 sm:text-xs"><span className="rounded-full bg-white/12 px-3 py-2">{selected.employment_type || "Freelance / Project-based"}</span><span className="rounded-full bg-white/12 px-3 py-2">{selected.location || "Remote / Worldwide"}</span></div>
+              <div className="mt-4 flex flex-wrap gap-2 text-[.68rem] font-black sm:mt-5 sm:text-xs"><span className="rounded-full bg-white/12 px-3 py-2">{selected.employment_type || "Project-based"}</span><span className="rounded-full bg-white/12 px-3 py-2">{selected.location || "Remote / Worldwide"}</span></div>
             </div>
             <div className="p-5 sm:p-8">
               <p className="text-sm font-semibold leading-6 text-[var(--text-secondary)] sm:text-base sm:leading-8">{selected.summary}</p>

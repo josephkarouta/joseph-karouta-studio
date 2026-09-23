@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, Download, ExternalLink, Eye, FileText, LoaderCircle, Mail, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { Button, GlassCard, StatusPill } from "@/components/ui/heyy";
 import HeyySelect from "@/components/ui/heyy-select";
@@ -108,6 +109,29 @@ export default function ExpertApplicationsManager() {
     const match = items.find((item) => String(item.id || "") === applicationId);
     if (match) setSelected(match);
   }, [items]);
+
+  useEffect(() => {
+    if (!selected || typeof window === "undefined") return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousHtmlOverscroll = html.style.overscrollBehavior;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+
+    html.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      html.style.overscrollBehavior = previousHtmlOverscroll;
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+    };
+  }, [selected]);
 
   async function updateStatus(application: Application, nextStatus: string) {
     setError("");
@@ -267,39 +291,42 @@ export default function ExpertApplicationsManager() {
         )}
       </GlassCard>
 
-      {selected && (
-        <div className="fixed inset-0 z-[125] grid place-items-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
-          <GlassCard className="my-8 w-full max-w-3xl bg-white p-6 sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
+      {selected && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[999] flex h-[100dvh] w-screen items-stretch justify-center overflow-hidden overscroll-none bg-slate-950/45 backdrop-blur-sm sm:items-center sm:p-4">
+          <GlassCard className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden !rounded-none bg-white !p-0 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:!rounded-[var(--radius-card)]">
+            <div className="z-20 flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 bg-white px-4 pb-4 pt-4 sm:px-8 sm:pb-5 sm:pt-7">
+              <div className="min-w-0">
                 <p className="text-[.62rem] font-black uppercase tracking-[.18em] text-violet-600">Expert Network application</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2"><h3 className="text-3xl font-black tracking-[-.05em]">{selected.name || "Applicant"}</h3><StatusPill tone={tone(selected.status)}>{titleCase(selected.status)}</StatusPill></div>
-                <p className="mt-2 text-sm font-black text-violet-600">{selected.position_title || "Role unavailable"}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2"><h3 className="break-words text-3xl font-black tracking-[-.05em]">{selected.name || "Applicant"}</h3><StatusPill tone={tone(selected.status)}>{titleCase(selected.status)}</StatusPill></div>
+                <p className="mt-2 break-words text-sm font-black text-violet-600">{selected.position_title || "Role unavailable"}</p>
               </div>
-              <button onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
+              <button onClick={() => setSelected(null)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white hover:bg-slate-50" aria-label="Close"><X size={17}/></button>
             </div>
 
-            <div className="mt-7 grid gap-3 sm:grid-cols-2">
-              <Detail label="Role" value={selected.position_title}/><Detail label="Studio" value={selected.position_department}/>
-              <Detail label="Applicant" value={selected.name}/><Detail label="Email" value={selected.email}/>
-              <Detail label="Current location" value={selected.location}/><Detail label="Time zone" value={selected.timezone}/>
-              <Detail label="Experience" value={selected.years_experience !== null && selected.years_experience !== undefined ? `${selected.years_experience} years` : "Not added"}/><Detail label="Availability" value={titleCase(selected.availability)}/>
-              <Detail label="Specialties" value={Array.isArray(selected.specialties) ? selected.specialties.join(", ") : selected.specialties}/><Detail label="Software / tools" value={Array.isArray(selected.software_tools) ? selected.software_tools.join(", ") : selected.software_tools}/>
-              <Detail label="Languages" value={Array.isArray(selected.languages) ? selected.languages.join(", ") : selected.languages}/><Detail label="Submitted" value={date(selected.created_at)}/>
-            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-5 touch-pan-y sm:px-8 sm:pb-8 sm:pt-6" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Detail label="Role" value={selected.position_title}/><Detail label="Studio" value={selected.position_department}/>
+                <Detail label="Applicant" value={selected.name}/><Detail label="Email" value={selected.email}/>
+                <Detail label="Current location" value={selected.location}/><Detail label="Time zone" value={selected.timezone}/>
+                <Detail label="Experience" value={selected.years_experience !== null && selected.years_experience !== undefined ? `${selected.years_experience} years` : "Not added"}/><Detail label="Availability" value={titleCase(selected.availability)}/>
+                <Detail label="Specialties" value={Array.isArray(selected.specialties) ? selected.specialties.join(", ") : selected.specialties}/><Detail label="Software / tools" value={Array.isArray(selected.software_tools) ? selected.software_tools.join(", ") : selected.software_tools}/>
+                <Detail label="Languages" value={Array.isArray(selected.languages) ? selected.languages.join(", ") : selected.languages}/><Detail label="Submitted" value={date(selected.created_at)}/>
+              </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4"><p className="text-[.6rem] font-black uppercase tracking-[.14em] text-slate-400">Candidate message</p><p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-700">{selected.message || "No message provided."}</p></div>
+              <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4"><p className="text-[.6rem] font-black uppercase tracking-[.14em] text-slate-400">Candidate message</p><p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-700">{selected.message || "No message provided."}</p></div>
 
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button onClick={() => void approveAndInvite()} disabled={busy}>{busy ? <LoaderCircle size={15} className="animate-spin"/> : <Mail size={15}/>}Approve & invite Expert</Button>
-              {selected.resume_url && <a href={`/api/admin/careers/resume?applicationId=${encodeURIComponent(String(selected.id))}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800"><Download size={14}/>Download CV</a>}
-              {selected.portfolio_url && <a href={String(selected.portfolio_url)} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">Portfolio <ExternalLink size={14}/></a>}
-              {selected.linkedin_url && <a href={String(selected.linkedin_url)} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">LinkedIn <ExternalLink size={14}/></a>}
-              <Button variant="ghost" onClick={() => setSelected(null)}>Close</Button>
-              <button type="button" onClick={() => void deleteApplication(selected)} disabled={deletingId === String(selected.id)} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-red-100 px-4 text-xs font-black text-red-600 hover:bg-red-50 disabled:opacity-50">{deletingId === String(selected.id) ? <LoaderCircle size={14} className="animate-spin"/> : <Trash2 size={14}/>}Delete application</button>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Button onClick={() => void approveAndInvite()} disabled={busy}>{busy ? <LoaderCircle size={15} className="animate-spin"/> : <Mail size={15}/>}Approve & invite Expert</Button>
+                {selected.resume_url && <a href={`/api/admin/careers/resume?applicationId=${encodeURIComponent(String(selected.id))}`} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-xs font-black text-white hover:bg-slate-800"><Download size={14}/>Download CV</a>}
+                {selected.portfolio_url && <a href={String(selected.portfolio_url)} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">Portfolio <ExternalLink size={14}/></a>}
+                {selected.linkedin_url && <a href={String(selected.linkedin_url)} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-100 px-4 text-xs font-black text-violet-600 hover:bg-violet-50">LinkedIn <ExternalLink size={14}/></a>}
+                <Button variant="ghost" onClick={() => setSelected(null)}>Close</Button>
+                <button type="button" onClick={() => void deleteApplication(selected)} disabled={deletingId === String(selected.id)} className="inline-flex min-h-10 items-center gap-2 rounded-full border border-red-100 px-4 text-xs font-black text-red-600 hover:bg-red-50 disabled:opacity-50">{deletingId === String(selected.id) ? <LoaderCircle size={14} className="animate-spin"/> : <Trash2 size={14}/>}Delete application</button>
+              </div>
             </div>
           </GlassCard>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
